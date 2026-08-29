@@ -80,6 +80,16 @@ export interface UpdateInfo {
   available: boolean;
 }
 
+export interface NotificationPayload {
+  title: string;
+  body?: string;
+}
+
+export interface NotificationResult {
+  shown: boolean;
+  native: boolean;
+}
+
 export interface StudioApi {
   versions: {
     node: string;
@@ -100,7 +110,8 @@ export interface StudioApi {
     check: () => Promise<UpdateInfo>;
   };
   notifications: {
-    show: (payload: { title: string; body?: string }) => Promise<void>;
+    show: (payload: NotificationPayload) => Promise<NotificationResult>;
+    onShow: (listener: (payload: NotificationPayload) => void) => () => void;
   };
 }
 

@@ -3,8 +3,17 @@
 const { createDockerService, getStatus } = require("./status");
 const { createImageService } = require("./images");
 
+function notifyImageFailure(payload) {
+  try {
+    require("../notifications").show(payload);
+  } catch {
+    // Tests that load this module should not fail if native notifications cannot run.
+  }
+}
+
 const defaultImages = createImageService({
   getStatus,
+  notify: notifyImageFailure,
 });
 
 async function getImageStatus() {

@@ -33,5 +33,17 @@ contextBridge.exposeInMainWorld("studio", {
   },
   notifications: {
     show: (payload) => ipcRenderer.invoke(CHANNELS.notifications.show, payload),
+    onShow: (listener) => {
+      if (typeof listener !== "function") {
+        return () => {};
+      }
+      const wrapped = (_event, payload) => {
+        listener(payload);
+      };
+      ipcRenderer.on(CHANNELS.notifications.shown, wrapped);
+      return () => {
+        ipcRenderer.removeListener(CHANNELS.notifications.shown, wrapped);
+      };
+    },
   },
 });

@@ -68,4 +68,16 @@
  * @property {boolean} available
  */
 
+/**
+ * @typedef {object} NotificationPayload
+ * @property {string} title
+ * @property {string} [body]
+ */
+
+/**
+ * @typedef {object} NotificationResult
+ * @property {boolean} shown
+ * @property {boolean} native
+ */
+
 module.exports = {};

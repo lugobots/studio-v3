@@ -1,7 +1,7 @@
 # Step 06 — Dialog and notification pattern
 
 **Phase:** Shell UX
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** —
 **Unblocks:** [Step 07](step-07-updater-client.md), [Step 08](step-08-welcome-open-existing.md), [Step 09](step-09-main-page-chrome.md)
 **Plan index:** [README](README.md)
@@ -72,11 +72,11 @@ DEVELOPMENT.md item 4: one dialog format and one notification format for upgrade
 
 ## Acceptance criteria
 
-- [ ] A confirm dialog can be opened from a page and returns the user’s choice to the caller.
-- [ ] An error dialog shows a message and closes on dismiss.
-- [ ] A progress dialog can be shown and closed by the caller.
-- [ ] `window.studio.notifications.show` produces a native notification when supported, and an in-app toast is visible in all cases (or documented OS-only if toast is the renderer path triggered by the same user action).
-- [ ] Dummy pages that still exist do not each invent a different modal.
+- [x] A confirm dialog can be opened from a page and returns the user’s choice to the caller.
+- [x] An error dialog shows a message and closes on dismiss.
+- [x] A progress dialog can be shown and closed by the caller.
+- [x] `window.studio.notifications.show` produces a native notification when supported, and an in-app toast is visible in all cases (or documented OS-only if toast is the renderer path triggered by the same user action).
+- [x] Dummy pages that still exist do not each invent a different modal.
 
 ## Verification
 
@@ -96,3 +96,11 @@ DEVELOPMENT.md item 4: one dialog format and one notification format for upgrade
 - Settings save confirmation (item 7).
 - Debug log upload result (item 9).
 - Image pull cancel UI on `/images`.
+
+## Landed
+
+- Renderer `dialogs.confirm` / `error` / `progress` mounted on the shell (FIFO queue, focus trap, textContent only).
+- `notifications.show` uses Electron `Notification` when supported and always broadcasts an in-app toast (cap 3). Image pull failure notifies once.
+- Tests: `npm run test:dialogs` (67), `npm run test:notifications` (26). Electron click-through was not run.
+- Deviations: `--danger` token added; `<progress>` used to stay within CSP `style-src 'self'`.
+- PR: https://github.com/lugobots/studio-v3/pull/6

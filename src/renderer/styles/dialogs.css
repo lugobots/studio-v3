@@ -1,0 +1,152 @@
+.dialog-host,
+.toast-host {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.dialog-host {
+  inset: 0;
+}
+
+.dialog-host:not(:empty) {
+  pointer-events: auto;
+}
+
+.dialog-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+}
+
+.dialog-card {
+  width: min(440px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 45%);
+}
+
+.dialog-card:focus {
+  outline: none;
+}
+
+.dialog-card.is-error {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+}
+
+.dialog-card.is-error .dialog-title {
+  color: var(--danger);
+}
+
+.dialog-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+}
+
+.dialog-body,
+.dialog-detail {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.dialog-detail:empty {
+  display: none;
+}
+
+.dialog-meter {
+  display: block;
+  width: 100%;
+  height: 8px;
+  margin: 16px 0 0;
+  border: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--border);
+  accent-color: var(--accent);
+}
+
+.dialog-meter::-webkit-progress-bar {
+  background: var(--border);
+  border-radius: 999px;
+}
+
+.dialog-meter::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.dialog-actions:empty {
+  display: none;
+}
+
+.button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.button-primary:hover {
+  border-color: var(--text);
+}
+
+.toast-host {
+  right: 24px;
+  bottom: 24px;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(360px, calc(100vw - 48px));
+}
+
+.toast {
+  pointer-events: none;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+  animation: toast-in 180ms ease-out;
+}
+
+.toast-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.toast-body {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
