@@ -49,3 +49,12 @@ body {
 .button:hover {
   border-color: var(--accent);
 }
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.button:disabled:hover {
+  border-color: var(--border);
+}

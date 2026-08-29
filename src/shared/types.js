@@ -1,8 +1,13 @@
 "use strict";
 
 /**
+ * @typedef {"ok" | "not_installed" | "not_running" | "timeout" | "permission"} DockerStatusReason
+ */
+
+/**
  * @typedef {object} DockerStatus
- * @property {boolean | null} running
+ * @property {boolean | null} running `null` only before a check has finished; `getStatus()` always returns a boolean.
+ * @property {DockerStatusReason} [reason]
  */
 
 /**
