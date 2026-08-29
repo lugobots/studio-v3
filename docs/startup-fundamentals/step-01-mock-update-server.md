@@ -1,7 +1,7 @@
 # Step 01 — Mock update HTTP server
 
 **Phase:** Infrastructure
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** —
 **Unblocks:** [Step 07](step-07-updater-client.md)
 **Plan index:** [README](README.md)
@@ -97,13 +97,13 @@ Error semantics:
 
 ## Acceptance criteria
 
-- [ ] Mock process starts on `127.0.0.1:47821` and `/health` returns success.
-- [ ] Empty `releases/` → check-update with a valid query returns `available: false`.
-- [ ] A correctly named file with version greater than `currentVersion` for that platform → `available: true` and matching `fileName` / `version` / `sizeBytes`.
-- [ ] A file with version less than or equal to `currentVersion` is not advertised.
-- [ ] Download returns the exact bytes of the dropped file.
-- [ ] `GET /api/studio/download/../package.json` (or equivalent traversal) is 404 and does not read outside `releases/`.
-- [ ] Process does not start if the port is taken; it exits with a clear error.
+- [x] Mock process starts on `127.0.0.1:47821` and `/health` returns success.
+- [x] Empty `releases/` → check-update with a valid query returns `available: false`.
+- [x] A correctly named file with version greater than `currentVersion` for that platform → `available: true` and matching `fileName` / `version` / `sizeBytes`.
+- [x] A file with version less than or equal to `currentVersion` is not advertised.
+- [x] Download returns the exact bytes of the dropped file.
+- [x] `GET /api/studio/download/../package.json` (or equivalent traversal) is 404 and does not read outside `releases/`.
+- [x] Process does not start if the port is taken; it exits with a clear error.
 
 ## Verification
 
@@ -123,3 +123,10 @@ Error semantics:
 - Production JSON (or YAML) host on `lugobots.ai` — later packaging/release work.
 - electron-updater compatibility if/when quit-and-install is required.
 - Optional `latest.json` override if scanning filenames becomes painful — not needed now.
+
+## Landed
+
+- `mock-update-server/` Node HTTP process on `127.0.0.1:47821` with `/health`, check-update, and download.
+- Root scripts: `npm run mock-update-server`, `npm run test:mock-update-server` (50 checks).
+- Deviations: added a Node test script; prerelease semver in drop names is accepted; dotfiles under `releases/` are skipped without an unparseable log line.
+- PR: pending (filled in after open).

@@ -70,6 +70,7 @@ Build these before filling in bot-run / VS Code / publish flows. Check an item o
 - Detect whether a newer Studio app version is available.
 - Run this without blocking the navigation gates above (same idea as the image pull: check in the background, surface the result).
 - Stub today: `src/main/services/updater/index.js` (`check()` always returns `{ available: false }`).
+- Dev mock feed: `http://127.0.0.1:47821` via `npm run mock-update-server` (not wired to the updater stub yet).
 
 ### 2. Upgrade process
 
@@ -135,7 +136,7 @@ Fill these in before the matching backlog item is considered done.
 | Studio Docker image name and tag used at Q1 | _TBD_ |
 | Other images/tags managed on `/images` | _TBD_ |
 | V1 settings path and format | _TBD_ |
-| App update feed / provider | _TBD_ |
+| App update feed / provider | Dev mock JSON at `http://127.0.0.1:47821` (`mock-update-server/`). Production host TBD. |
 | Debug log upload endpoint | _TBD_ |
 
 ---
@@ -144,6 +145,7 @@ Fill these in before the matching backlog item is considered done.
 
 | Concern | Location |
 | --- | --- |
+| Mock update HTTP server (dev) | `mock-update-server/` |
 | App lifecycle | `src/main/main.js` |
 | Window | `src/main/windows/app-window.js` |
 | IPC registration | `src/main/ipc/` |

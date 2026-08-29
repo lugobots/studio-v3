@@ -5,7 +5,9 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron ."
+    "dev": "electron .",
+    "mock-update-server": "node mock-update-server/server.js",
+    "test:mock-update-server": "node mock-update-server/test.js"
   },
   "engines": {
     "node": ">=18.0.0"
