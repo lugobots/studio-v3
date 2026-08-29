@@ -93,22 +93,30 @@ Build these before filling in bot-run / VS Code / publish flows. Check an item o
 
 ### 1. Upgrade checks
 
-- Detect whether a newer Studio app version is available.
-- Run this without blocking the navigation gates above (same idea as the image pull: check in the background, surface the result).
-- Stub today: `src/main/services/updater/index.js` (`check()` always returns `{ available: false }`).
-- Dev mock feed: `http://127.0.0.1:47821` via `npm run mock-update-server` (not wired to the updater stub yet).
+- **Done.** Main checks the dev mock JSON feed in the background (once per launch, after the window is ready). It does not block Docker / Q1 / Q2.
+- GET `http://127.0.0.1:47821/api/studio/check-update?currentVersion=&platform=` (`platform` is `process.platform`).
+- Mock down or connection refused: treat as no update, log a warning, do not show an error dialog.
+- Owner: `src/main/services/updater/` (`check()`). IPC: `src/main/ipc/updates.js`. Renderer prompt: `src/renderer/lib/updates.js` (started from `app.js` bootstrap).
+- Tests: `npm run test:updater`.
+
+To test locally, start the mock **before** launching Studio:
+
+```powershell
+npm run mock-update-server
+```
+
+Drop a newer binary into `mock-update-server/releases/` (see that folder’s README), then `npm run dev`. Production feed host remains TBD — packaged builds do not call `https://lugobots.ai`.
 
 ### 2. Upgrade process
 
-- Download and apply the app update once the user accepts it.
-- Define cancel / retry / failure behavior using the dialog and notification format from item 4.
+- **Download: done.** After the user accepts the confirm dialog, main downloads into `{appData}/.LugoStudio/updates/` (create the folder if needed; overwrite the same file name). Progress uses the step-06 progress dialog; Cancel aborts the HTTP request and deletes the partial file. Decline does not download. Failure uses the error dialog. Success closes progress and shows a toast/OS notification with the full destination path.
+- This slice does **not** quit-and-install or run the downloaded file. Apply / `autoUpdater.quitAndInstall()` is a later follow-up.
 - Keep the updater in main (`src/main/services/updater/`). Do not download updates from the renderer.
 
 ### 3. Displaying version on the UI
 
-- Show the running app version in the shell (footer or settings header at minimum).
-- Source of truth is the app package version, not a hardcoded string in the renderer.
-- Preload already exposes Electron/Node/Chrome versions on `window.studio.versions`; add the **Studio** version next to those.
+- **Preload: done.** `window.studio.versions.studio` is `app.getVersion()` (the `package.json` version), next to Electron/Node/Chrome. Step 09 chrome should read that field; do not add a second source.
+- Until that chrome exists, loading and welcome show the version in the page header.
 
 ### 4. Dialog and notification format
 
@@ -165,7 +173,7 @@ Fill these in before the matching backlog item is considered done.
 | Docker daemon check | Fixed `docker info` with a 5s timeout; fail closed to `running: false`. |
 | Other images/tags managed on `/images` | _TBD_ |
 | V1 settings path and format | Always `{app.getPath("appData")}/.LugoStudio/user.json` (not Electron `userData`, not the git working tree). UTF-8 JSON, two-space indent, full V1 `UserData` key set. Details: [V1-compatible settings](#v1-compatible-settings). |
-| App update feed / provider | Dev mock JSON at `http://127.0.0.1:47821` (`mock-update-server/`). Production host TBD. |
+| App update feed / provider | **Dev:** mock JSON at `http://127.0.0.1:47821` (`mock-update-server/`, `npm run mock-update-server`). Packaged production host **TBD** — do not call `https://lugobots.ai` (that URL is electron-updater YAML, not this JSON). |
 | Debug log upload endpoint | _TBD_ |
 
 ---
@@ -229,4 +237,5 @@ On successful load, in-memory `app_version` is set to the running app version. T
 | Continue after Docker | `src/renderer/lib/continue-after-docker.js` — resumes the sequencer (Q1 then Q2) |
 | Dialogs (confirm / error / progress) | `src/renderer/lib/dialogs.js` (shell-mounted; not IPC). Policy tests: `npm run test:dialogs` |
 | Notifications (OS + toast) | `src/main/services/notifications/`, `src/renderer/lib/toasts.js`. Tests: `npm run test:notifications` |
+| Updater (check + download) | `src/main/services/updater/` (dev mock origin `http://127.0.0.1:47821`; download-only into `.LugoStudio/updates/`). Tests: `npm run test:updater` |
 | Pages | `src/renderer/pages/loading`, `docker-check`, `start-project` (welcome CTAs later), `main` (thin placeholder until chrome) |

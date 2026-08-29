@@ -3,6 +3,7 @@ import { studio } from "./lib/api.js";
 import { mountDialogs } from "./lib/dialogs.js";
 import { registerRoute, startRouter } from "./lib/router.js";
 import { mountToasts } from "./lib/toasts.js";
+import { startUpdatePrompt } from "./lib/updates.js";
 import { renderLoading } from "./pages/loading/index.js";
 import { renderDockerCheck } from "./pages/docker-check/index.js";
 import { renderStartProject } from "./pages/start-project/index.js";
@@ -24,4 +25,5 @@ if (studio && studio.notifications && typeof studio.notifications.onShow === "fu
 }
 
 document.body.append(root);
+startUpdatePrompt();
 startRouter(outlet);

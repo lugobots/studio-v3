@@ -12,6 +12,7 @@ export function renderLoading(outlet) {
       eyebrow: "Studio v3",
       title: "Loading",
       lede: "Checking Docker and your project…",
+      version: studio && studio.versions && studio.versions.studio,
     }),
   );
 

@@ -11,8 +11,14 @@ const CHANNELS = {
     get: "config:get",
     set: "config:set",
   },
+  app: {
+    version: "app:version",
+  },
   updates: {
     check: "updates:check",
+    download: "updates:download",
+    cancel: "updates:cancel",
+    progress: "updates:progress",
   },
   notifications: {
     show: "notifications:show",

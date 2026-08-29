@@ -36,6 +36,11 @@ function createAppWindow() {
     return { action: "deny" };
   });
 
+  win.webContents.once("did-finish-load", () => {
+    const updater = require("../services/updater");
+    updater.check().catch(() => {});
+  });
+
   win.loadFile(path.join(__dirname, "../../renderer/index.html"));
   return win;
 }
