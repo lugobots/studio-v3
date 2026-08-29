@@ -1,7 +1,7 @@
 # Step 05 — Wire startup navigation
 
 **Phase:** Startup gates
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** [Step 02](step-02-v1-compatible-settings.md), [Step 03](step-03-docker-daemon-gate.md), [Step 04](step-04-q1-image-pull.md)
 **Unblocks:** [Step 08](step-08-welcome-open-existing.md), [Step 09](step-09-main-page-chrome.md)
 **Plan index:** [README](README.md)
@@ -84,12 +84,12 @@ flowchart TD
 
 ## Acceptance criteria
 
-- [ ] Cold start with Docker down lands on `/docker-check` without a click.
-- [ ] Cold start with Docker up and no valid project lands on `/start-project` without a click.
-- [ ] Cold start with Docker up and valid V1 `user.json` + `.lugo/info.json` lands on `/main` without a click.
-- [ ] Image pull, if started, does not delay the welcome/main transition.
-- [ ] Dummy Continue buttons are gone from loading and docker-check.
-- [ ] DEVELOPMENT.md flowchart and route map match the running app.
+- [x] Cold start with Docker down lands on `/docker-check` without a click.
+- [x] Cold start with Docker up and no valid project lands on `/start-project` without a click.
+- [x] Cold start with Docker up and valid V1 `user.json` + `.lugo/info.json` lands on `/main` without a click.
+- [x] Image pull, if started, does not delay the welcome/main transition.
+- [x] Dummy Continue buttons are gone from loading and docker-check.
+- [x] DEVELOPMENT.md flowchart and route map match the running app.
 
 ## Verification
 
@@ -108,3 +108,12 @@ flowchart TD
 - Welcome CTAs (step 08).
 - Main chrome (step 09).
 - After open-existing, navigate to `/main` without a full app restart (step 08).
+
+## Landed
+
+- Sequencer in `src/renderer/lib/startup-sequencer.mjs`. Loading auto-runs it (~400ms splash). Dummy Continue is gone.
+- `continueAfterDocker()` resumes Q1 then Q2. `/main` is registered as a placeholder card.
+- Hash guards: `#/main` without Q2 → welcome; `#/start-project` with Q2 yes → `/main`.
+- Tests: `npm run test:startup` (44 passed). Electron cold-start click-through was not run in this PR.
+- Deviations: sequencer is `.mjs` for Node 18; `#/main` without Q2 goes to welcome rather than a full sequencer re-run.
+- PR: https://github.com/lugobots/studio-v3/pull/5

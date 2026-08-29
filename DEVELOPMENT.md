@@ -10,7 +10,7 @@ Do not invent extra startup screens. Do not wait on the Studio image pull before
 
 1. Implement backlog items in the order listed under [First things to develop](#first-things-to-develop), unless a later item is a hard dependency of an earlier one.
 2. Wire real logic into the existing Electron split: **main** owns Docker, config, updates, logs, and notifications; **renderer** owns screens; **preload** is the only bridge (`window.studio`).
-3. Replace dummy “Continue” buttons with the gates below. Do not add a second router.
+3. Startup gates belong in `src/renderer/lib/startup-sequencer.mjs`. Do not add dummy “Continue” buttons or a second router.
 4. After adding a route or changing a gate, update the [Route map](#route-map) and the flowchart in this file.
 5. Keep settings compatible with previous Lugo Studio (V1). Do not introduce a new settings file format or location without a migration path.
 
@@ -26,10 +26,8 @@ flowchart TD
   Loading --> DockerStarted{Docker daemon started?}
   DockerStarted -->|No| DockerCheck["/docker-check"]
   DockerCheck -->|User starts or installs Docker| DockerStarted
-  DockerStarted -->|Yes| Q1{Q1: Studio Docker image available locally?}
-  Q1 -->|No| Pull["Start pulling the Studio image in the background"]
-  Pull --> Q2
-  Q1 -->|Yes| Q2{Q2: Bot project created?}
+  DockerStarted -->|Yes| Q1[Q1: ensure Studio image in the background]
+  Q1 --> Q2{Q2: Bot project created?}
   Q2 -->|No| Welcome["/start-project — welcome screen"]
   Q2 -->|Yes| Main["/main — main page"]
 ```
@@ -44,13 +42,23 @@ flowchart TD
 
 The image pull from Q1 may still be running on the welcome or main page. Progress belongs in the shell (status, notifications, and later the images page), not as a blocking startup screen.
 
+Launch always opens `#/loading`. That page runs the sequencer in `src/renderer/lib/startup-sequencer.mjs` after a short splash (about 400ms minimum if checks finish instantly — not a multi-second fake delay). If Docker is already running, `/docker-check` is not shown.
+
+### Back/forward hash
+
+Hash routes are real history entries. Directly opening a later screen does not skip Q2:
+
+- `#/main` when Q2 is no (no valid bot project) is sent to `/start-project`.
+- `#/start-project` when Q2 is yes is sent to `/main`.
+- If startup checks throw, the user stays on `/loading` or `/docker-check` with an error line. They are not sent to `/main` with unknown state.
+
 ### Docker daemon check
 
 Main runs a fixed `docker info` (no user-supplied arguments, no shell). Timeout is **5 seconds** (`DOCKER_INFO_TIMEOUT_MS` in `src/main/services/docker/constants.js`). Exit 0 → `running: true`. Missing binary, non-zero exit, spawn error, or timeout → `running: false` (fail closed). After a check, `running` is always a boolean; it is never `null`. The renderer never spawns Docker — it only calls `window.studio.docker.status`.
 
-`/docker-check` re-checks on **Re-check now** and polls about every 4 seconds while the page is visible. When `running` is `true`, it calls `continueAfterDocker()` in `src/renderer/lib/continue-after-docker.js`. Until step 05 wires loading → Q1 → Q2, that helper navigates to `/start-project` as a **temporary** stand-in. Step 05 should change the helper, not the docker-check page.
+`/docker-check` is only shown when the daemon is not running. It re-checks on **Re-check now** and polls about every 4 seconds while the page is visible. When `running` is `true`, it calls `continueAfterDocker()` in `src/renderer/lib/continue-after-docker.js`, which resumes the **same** sequencer (Q1 then Q2) instead of jumping to a hardcoded route.
 
-Tests: `npm run test:docker`.
+Tests: `npm run test:docker`. Sequencer: `npm run test:startup`.
 
 ### Q1 Studio image
 
@@ -58,7 +66,7 @@ Studio image is **`lugobots/studio:latest`** (`STUDIO_IMAGE_REF` in `src/main/se
 
 Progress is coarse states (`idle`, `pulling`, `ready`, `error`) plus percent/bytes when the CLI output is cheap to parse. Events must not include layer payloads. The image reference is a constant, not renderer-supplied; the renderer never talks to the Docker socket (`window.studio.docker.imageStatus`, `ensureImage`, `onImageProgress`). Notifications are still a stub: pull failures are logged in main and stored as `error` on image status until step 06.
 
-`ensureStudioImage()` is fire-and-forget from the caller’s point of view (it may wait on a short `docker images` lookup, never on pull completion). Step 05 should call it when wiring loading → Q1 → Q2; this slice does not change `continueAfterDocker()` navigation.
+`ensureStudioImage()` is fire-and-forget from the caller’s point of view (it may wait on a short `docker images` lookup, never on pull completion). The startup sequencer calls `studio.docker.ensureImage()` after Docker is up, then continues to Q2 without waiting for the pull.
 
 Tests: `npm run test:docker-images`.
 
@@ -68,10 +76,10 @@ Tests: `npm run test:docker-images`.
 
 | Route | Screen | When it is shown | Status |
 | --- | --- | --- | --- |
-| `/loading` | Loading | Always first after launch. Short splash / bootstrap while the app prepares the next gate. | Dummy page exists |
-| `/docker-check` | Docker check | Docker daemon is not running (or not installed). | Real gate (`docker info` via main) |
-| `/start-project` | Welcome | Q2 is no: no bot project created yet. | Dummy page exists |
-| `/main` | Main page | Q2 is yes: a bot project already exists. | **Not created yet** |
+| `/loading` | Loading | Always first after launch. Short splash, then the sequencer (Docker → Q1 → Q2). | Wired (no dummy Continue) |
+| `/docker-check` | Docker check | Docker daemon is not running (or not installed). Not shown when the daemon is already up. | Real gate (`docker info` via main) |
+| `/start-project` | Welcome | Q2 is no: no bot project created yet. | Dummy page exists (open-existing is later) |
+| `/main` | Main page | Q2 is yes: a bot project already exists. | Route exists; chrome incomplete |
 | `/settings` | Settings / preferences | User opens local settings from the shell. | **Not created yet** |
 | `/images` | Images manager | User manages Studio (and related) image tags and pulls. | **Not created yet** |
 
@@ -213,7 +221,8 @@ On successful load, in-memory `app_version` is set to the running app version. T
 | Preload bridge | `src/preload/preload.js`, `src/preload/api.d.ts` |
 | Channel names | `src/shared/ipc-channels.js` |
 | Router | `src/renderer/lib/router.js` |
+| Startup sequencer | `src/renderer/lib/startup-sequencer.mjs` (loading + docker-check resume + Q2 hash guards). Tests: `npm run test:startup` |
 | Docker daemon check | `src/main/services/docker/status.js` (`docker info`, 5s timeout). Tests: `npm run test:docker` |
 | Q1 Studio image | `src/main/services/docker/images.js` (`lugobots/studio:latest`, background `docker pull`). Tests: `npm run test:docker-images` |
-| Continue after Docker (interim) | `src/renderer/lib/continue-after-docker.js` — currently `#/start-project` until step 05 |
-| Dummy pages | `src/renderer/pages/loading`, `start-project` |
+| Continue after Docker | `src/renderer/lib/continue-after-docker.js` — resumes the sequencer (Q1 then Q2) |
+| Pages | `src/renderer/pages/loading`, `docker-check`, `start-project` (welcome CTAs later), `main` (thin placeholder until chrome) |

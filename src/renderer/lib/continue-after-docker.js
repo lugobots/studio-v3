@@ -1,14 +1,18 @@
+import { studio } from "./api.js";
 import { navigate } from "./router.js";
+import { runStartupSequencer } from "./startup-sequencer.mjs";
 
 /**
  * Called when `/docker-check` sees `running: true`.
+ * Resumes the same sequencer at Q1 (ensure image) then Q2 — not a hardcoded jump to welcome.
  *
- * Until step 05 wires loading → Docker → Q1 → Q2, this navigates to
- * `/start-project` as a temporary stand-in. Step 05 should change this helper
- * (not the docker-check page) so the real next gate wins.
+ * @param {{ isCancelled?: () => boolean }} [options]
  */
-export const INTERIM_AFTER_DOCKER_PATH = "/start-project";
-
-export function continueAfterDocker() {
-  navigate(INTERIM_AFTER_DOCKER_PATH);
+export function continueAfterDocker(options = {}) {
+  return runStartupSequencer({
+    studio,
+    navigate,
+    dockerAlreadyRunning: true,
+    isCancelled: options.isCancelled,
+  });
 }
