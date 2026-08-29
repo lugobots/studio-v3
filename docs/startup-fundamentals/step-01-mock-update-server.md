@@ -129,4 +129,4 @@ Error semantics:
 - `mock-update-server/` Node HTTP process on `127.0.0.1:47821` with `/health`, check-update, and download.
 - Root scripts: `npm run mock-update-server`, `npm run test:mock-update-server` (50 checks).
 - Deviations: added a Node test script; prerelease semver in drop names is accepted; dotfiles under `releases/` are skipped without an unparseable log line.
-- PR: pending (filled in after open).
+- PR: https://github.com/lugobots/studio-v3/pull/1
