@@ -11,6 +11,29 @@
  */
 
 /**
+ * @typedef {"idle" | "pulling" | "ready" | "error"} ImageProgressState
+ */
+
+/**
+ * @typedef {object} DockerImageStatus
+ * @property {boolean} present
+ * @property {boolean} pulling
+ * @property {string | null} error
+ */
+
+/**
+ * @typedef {object} DockerImageProgress
+ * @property {boolean} present
+ * @property {boolean} pulling
+ * @property {string | null} error
+ * @property {ImageProgressState} state
+ * @property {number | null} percent
+ * @property {number | null} currentBytes
+ * @property {number | null} totalBytes
+ * @property {string} status
+ */
+
+/**
  * Stored V1 `user.json` fields. `projectCreated` is derived and never persisted.
  *
  * @typedef {object} StoredUserData

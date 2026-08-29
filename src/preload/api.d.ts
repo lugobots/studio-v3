@@ -11,6 +11,22 @@ export interface DockerStatus {
   reason?: DockerStatusReason;
 }
 
+export type ImageProgressState = "idle" | "pulling" | "ready" | "error";
+
+export interface DockerImageStatus {
+  present: boolean;
+  pulling: boolean;
+  error: string | null;
+}
+
+export interface DockerImageProgress extends DockerImageStatus {
+  state: ImageProgressState;
+  percent: number | null;
+  currentBytes: number | null;
+  totalBytes: number | null;
+  status: string;
+}
+
 export interface StoredUserData {
   install_unique_id: string;
   debug_mode: boolean;
@@ -72,6 +88,9 @@ export interface StudioApi {
   };
   docker: {
     status: () => Promise<DockerStatus>;
+    imageStatus: () => Promise<DockerImageStatus>;
+    ensureImage: () => Promise<DockerImageStatus>;
+    onImageProgress: (listener: (progress: DockerImageProgress) => void) => () => void;
   };
   config: {
     get: () => Promise<AppConfig>;

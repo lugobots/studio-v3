@@ -3,6 +3,9 @@
 const CHANNELS = {
   docker: {
     status: "docker:status",
+    imageStatus: "docker:image-status",
+    imageEnsure: "docker:image-ensure",
+    imageProgress: "docker:image-progress",
   },
   config: {
     get: "config:get",

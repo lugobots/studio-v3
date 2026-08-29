@@ -9,6 +9,20 @@ contextBridge.exposeInMainWorld("studio", {
   },
   docker: {
     status: () => ipcRenderer.invoke(CHANNELS.docker.status),
+    imageStatus: () => ipcRenderer.invoke(CHANNELS.docker.imageStatus),
+    ensureImage: () => ipcRenderer.invoke(CHANNELS.docker.imageEnsure),
+    onImageProgress: (listener) => {
+      if (typeof listener !== "function") {
+        return () => {};
+      }
+      const wrapped = (_event, payload) => {
+        listener(payload);
+      };
+      ipcRenderer.on(CHANNELS.docker.imageProgress, wrapped);
+      return () => {
+        ipcRenderer.removeListener(CHANNELS.docker.imageProgress, wrapped);
+      };
+    },
   },
   config: {
     get: () => ipcRenderer.invoke(CHANNELS.config.get),

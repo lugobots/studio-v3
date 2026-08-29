@@ -52,6 +52,16 @@ Main runs a fixed `docker info` (no user-supplied arguments, no shell). Timeout 
 
 Tests: `npm run test:docker`.
 
+### Q1 Studio image
+
+Studio image is **`lugobots/studio:latest`** (`STUDIO_IMAGE_REF` in `src/main/services/docker/constants.js`). When the daemon is up, main lists local images with a fixed `docker images` command. If that repository and tag are missing, it starts `docker pull lugobots/studio:latest` in the background and returns immediately — navigation must not wait for the pull. If the daemon is down, Q1 does not start a pull.
+
+Progress is coarse states (`idle`, `pulling`, `ready`, `error`) plus percent/bytes when the CLI output is cheap to parse. Events must not include layer payloads. The image reference is a constant, not renderer-supplied; the renderer never talks to the Docker socket (`window.studio.docker.imageStatus`, `ensureImage`, `onImageProgress`). Notifications are still a stub: pull failures are logged in main and stored as `error` on image status until step 06.
+
+`ensureStudioImage()` is fire-and-forget from the caller’s point of view (it may wait on a short `docker images` lookup, never on pull completion). Step 05 should call it when wiring loading → Q1 → Q2; this slice does not change `continueAfterDocker()` navigation.
+
+Tests: `npm run test:docker-images`.
+
 ---
 
 ## Route map
@@ -123,8 +133,8 @@ Build these before filling in bot-run / VS Code / publish flows. Check an item o
 - Route: `/images`.
 - Define the image **name + tag** used in the background (Studio image first; add others only when a feature needs them).
 - List local availability, pull, and show pull progress.
-- Q1 uses this same definition: “available locally” means the configured Studio image tag is present.
-- Record the chosen tags in this file once they are decided (see [Open decisions](#open-decisions)).
+- Q1 uses this same definition: “available locally” means `lugobots/studio:latest` is listed by `docker images`.
+- Record the chosen tags in this file once they are decided (see [Open decisions](#open-decisions)). Q1’s Studio image is decided; other images on this page remain TBD.
 
 ### 9. Debugging control
 
@@ -141,7 +151,7 @@ Fill these in before the matching backlog item is considered done.
 
 | Topic | Decision |
 | --- | --- |
-| Studio Docker image name and tag used at Q1 | _TBD_ |
+| Studio Docker image name and tag used at Q1 | `lugobots/studio:latest` (placeholder; constant `STUDIO_IMAGE_REF` in `src/main/services/docker/constants.js`). |
 | Docker daemon check | Fixed `docker info` with a 5s timeout; fail closed to `running: false`. |
 | Other images/tags managed on `/images` | _TBD_ |
 | V1 settings path and format | Always `{app.getPath("appData")}/.LugoStudio/user.json` (not Electron `userData`, not the git working tree). UTF-8 JSON, two-space indent, full V1 `UserData` key set. Details: [V1-compatible settings](#v1-compatible-settings). |
@@ -203,6 +213,7 @@ On successful load, in-memory `app_version` is set to the running app version. T
 | Preload bridge | `src/preload/preload.js`, `src/preload/api.d.ts` |
 | Channel names | `src/shared/ipc-channels.js` |
 | Router | `src/renderer/lib/router.js` |
-| Docker daemon check | `src/main/services/docker/` (`docker info`, 5s timeout). Tests: `npm run test:docker` |
+| Docker daemon check | `src/main/services/docker/status.js` (`docker info`, 5s timeout). Tests: `npm run test:docker` |
+| Q1 Studio image | `src/main/services/docker/images.js` (`lugobots/studio:latest`, background `docker pull`). Tests: `npm run test:docker-images` |
 | Continue after Docker (interim) | `src/renderer/lib/continue-after-docker.js` — currently `#/start-project` until step 05 |
 | Dummy pages | `src/renderer/pages/loading`, `start-project` |
