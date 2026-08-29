@@ -93,4 +93,4 @@ DEVELOPMENT.md: if the daemon is not started, stay on `/docker-check` and ask th
 - Tests: `npm run test:docker` (42 passed). Live `docker info` on the implementer machine was `running=true`.
 - Deviations: extra `reason` field; `setWindowOpenHandler` so the Get Docker https link opens in the system browser.
 - Electron click-through of the page was not run in this PR; UI behavior is covered by code review plus unit tests.
-- PR: pending.
+- PR: https://github.com/lugobots/studio-v3/pull/3
