@@ -103,4 +103,4 @@ DEVELOPMENT.md item 4: one dialog format and one notification format for upgrade
 - `notifications.show` uses Electron `Notification` when supported and always broadcasts an in-app toast (cap 3). Image pull failure notifies once.
 - Tests: `npm run test:dialogs` (67), `npm run test:notifications` (26). Electron click-through was not run.
 - Deviations: `--danger` token added; `<progress>` used to stay within CSP `style-src 'self'`.
-- PR: pending.
+- PR: https://github.com/lugobots/studio-v3/pull/6
