@@ -66,6 +66,24 @@
 /**
  * @typedef {object} UpdateInfo
  * @property {boolean} available
+ * @property {string | null} [version]
+ * @property {string | null} [fileName]
+ * @property {number | null} [sizeBytes]
+ */
+
+/**
+ * @typedef {object} UpdateDownloadResult
+ * @property {boolean} ok
+ * @property {string} [path]
+ * @property {boolean} [cancelled]
+ * @property {string} [error]
+ */
+
+/**
+ * @typedef {object} UpdateProgress
+ * @property {number} receivedBytes
+ * @property {number | null} totalBytes
+ * @property {string} fileName
  */
 
 /**

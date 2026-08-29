@@ -30,6 +30,12 @@ h1 {
   color: var(--muted);
 }
 
+.page-version {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .page-status {
   margin: 0 0 20px;
   color: var(--text);

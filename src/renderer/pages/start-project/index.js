@@ -36,6 +36,7 @@ export function renderStartProject(outlet) {
         eyebrow: "Setup",
         title: "Start project",
         lede: "Shown when a project has not been created yet.",
+        version: studio && studio.versions && studio.versions.studio,
       }),
     );
   });

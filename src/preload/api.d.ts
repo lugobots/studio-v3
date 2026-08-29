@@ -78,6 +78,22 @@ export type ConfigPatch = Partial<StoredUserData> & {
 
 export interface UpdateInfo {
   available: boolean;
+  version?: string | null;
+  fileName?: string | null;
+  sizeBytes?: number | null;
+}
+
+export interface UpdateDownloadResult {
+  ok: boolean;
+  path?: string;
+  cancelled?: boolean;
+  error?: string;
+}
+
+export interface UpdateProgress {
+  receivedBytes: number;
+  totalBytes: number | null;
+  fileName: string;
 }
 
 export interface NotificationPayload {
@@ -95,6 +111,7 @@ export interface StudioApi {
     node: string;
     chrome: string;
     electron: string;
+    studio: string;
   };
   docker: {
     status: () => Promise<DockerStatus>;
@@ -108,6 +125,9 @@ export interface StudioApi {
   };
   updates: {
     check: () => Promise<UpdateInfo>;
+    download: (info?: UpdateInfo) => Promise<UpdateDownloadResult>;
+    cancel: () => Promise<{ cancelled: boolean }>;
+    onProgress: (listener: (progress: UpdateProgress) => void) => () => void;
   };
   notifications: {
     show: (payload: NotificationPayload) => Promise<NotificationResult>;
