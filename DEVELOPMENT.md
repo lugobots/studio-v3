@@ -40,7 +40,7 @@ flowchart TD
 | --- | --- | --- | --- |
 | Docker started | Is the Docker daemon running? | Stay on `/docker-check` and ask the user to install or start Docker. Re-check until it is running. | Continue to Q1. |
 | Q1 | Is the Studio Docker image available locally? | Start pulling it **in the background**. Do not block navigation. Continue to Q2. | Continue to Q2. |
-| Q2 | Is the bot project created? | Present the welcome screen (`/start-project`). | Go to the main page (`/main`). |
+| Q2 | Is the bot project created? Yes only when `{appData}/.LugoStudio/user.json` exists, `project_path` is an absolute path other than `.`, and `{project_path}/.lugo/info.json` exists. | Present the welcome screen (`/start-project`). | Go to the main page (`/main`). |
 
 The image pull from Q1 may still be running on the welcome or main page. Progress belongs in the shell (status, notifications, and later the images page), not as a blocking startup screen.
 
@@ -99,10 +99,10 @@ Build these before filling in bot-run / VS Code / publish flows. Check an item o
 
 ### 6. Settings persisting system
 
-- Read and write local preferences from main.
-- **Must be compatible with previous Lugo Studio (V1)** — same storage location and schema, or a documented migration that can read V1 settings.
-- Stub today: `src/main/services/config/index.js` returns `{ projectCreated: false }` and does not persist.
-- Before implementing, record in this file: V1 config path, file format, and which keys V3 will keep.
+- **Done.** Main reads and writes V1’s `{appData}/.LugoStudio/user.json` (same path in development and packaged builds). See [V1-compatible settings](#v1-compatible-settings).
+- Owner: `src/main/services/config/` (`get` / `set`). IPC: `src/main/ipc/config.js`. Renderer: `window.studio.config` only — no filesystem access.
+- Q2 `projectCreated` is derived (never stored). `config.set` applies a partial patch to V1 keys and returns `{ error }` if the write fails.
+- Tests: `npm run test:config`.
 
 ### 7. Page to update settings / preferences locally
 
@@ -135,9 +135,50 @@ Fill these in before the matching backlog item is considered done.
 | --- | --- |
 | Studio Docker image name and tag used at Q1 | _TBD_ |
 | Other images/tags managed on `/images` | _TBD_ |
-| V1 settings path and format | _TBD_ |
+| V1 settings path and format | Always `{app.getPath("appData")}/.LugoStudio/user.json` (not Electron `userData`, not the git working tree). UTF-8 JSON, two-space indent, full V1 `UserData` key set. Details: [V1-compatible settings](#v1-compatible-settings). |
 | App update feed / provider | Dev mock JSON at `http://127.0.0.1:47821` (`mock-update-server/`). Production host TBD. |
 | Debug log upload endpoint | _TBD_ |
+
+---
+
+## V1-compatible settings
+
+V3 always uses the **production** V1 path, in both development and packaged builds. It does **not** use V1’s development-mode override that stored `.LugoStudio` next to the git working tree.
+
+| OS | Folder |
+| --- | --- |
+| Windows | `%APPDATA%\.LugoStudio\` |
+| macOS | `~/Library/Application Support/.LugoStudio/` |
+| Linux | `$XDG_CONFIG_HOME/.LugoStudio/` or `~/.config/.LugoStudio/` |
+
+File: `user.json`, UTF-8, pretty-printed JSON (two-space indent, same as V1).
+
+`install_unique_id` on first create uses `node-machine-id` `machineIdSync(true)`, matching V1. Existing V1 files keep their id. If that library fails, a generated UUID is used instead (that first-create id would not match V1).
+
+`projectCreated` is derived for IPC (`config.get()` / `config.set()` return it plus `projectPath`). It is never a JSON key. `projectPath` is the stored `project_path` when Q2 is yes, otherwise `null`. Renderer-friendly patch names (`projectPath`, `debugMode`, …) map to snake_case storage. Unknown extra keys are preserved. Write failures return `{ error }` on `config.set` (for step 08 dialogs) and do not throw.
+
+Round-trip these keys (types and V1 defaults):
+
+| Key | Role | Default when creating a new file |
+| --- | --- | --- |
+| `install_unique_id` | Stable install id | `node-machine-id` `machineIdSync(true)` |
+| `debug_mode` | Verbose / debug | `false` |
+| `project_path` | Absolute bot root | `"."` until a project is opened |
+| `team_side` | `home` or `away` | `home` |
+| `opponent_team` | Opponent id | `level-0` |
+| `game_speed` | 1 / 2 / 3 | `1` |
+| `saved_positions` | Array of saved formations | `[]` |
+| `compose_file` | Absolute compose path | `""` |
+| `game_server_image` | Image name | `lugobots/server` |
+| `game_server_version` | Tag | `v2` |
+| `bot_level_0_image` | | `lugobots/level-0` |
+| `bot_level_0_version` | | `v2` |
+| `bot_level_1_image` | | `lugobots/level-1` |
+| `bot_level_1_version` | | `v4` |
+| `app_path` | Electron app path at last write | `"."` until opened |
+| `app_version` | Last-seen Studio version | Current `app.getVersion()` on load/save |
+
+On successful load, in-memory `app_version` is set to the running app version. That refresh is persisted on the next save, not on every launch.
 
 ---
 

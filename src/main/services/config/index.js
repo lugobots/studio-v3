@@ -1,13 +1,27 @@
 "use strict";
 
+const { createConfigService } = require("./store");
+
+let service = null;
+
+function getElectronService() {
+  if (!service) {
+    const { app } = require("electron");
+    service = createConfigService({
+      getAppDataPath: () => app.getPath("appData"),
+      getAppVersion: () => app.getVersion(),
+      log: (message) => console.error(message),
+    });
+  }
+  return service;
+}
+
 async function get() {
-  // TODO: read user config from app.getPath("userData")
-  return { projectCreated: false };
+  return getElectronService().get();
 }
 
-async function set(_patch) {
-  // TODO: persist user config
-  return { projectCreated: false };
+async function set(patch) {
+  return getElectronService().set(patch);
 }
 
-module.exports = { get, set };
+module.exports = { get, set, createConfigService };
