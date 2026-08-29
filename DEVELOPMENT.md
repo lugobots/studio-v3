@@ -87,7 +87,7 @@ Tests: `npm run test:docker-images`.
 | `/loading` | Loading | Always first after launch. Short splash, then the sequencer (Docker → Q1 → Q2). | Wired (no dummy Continue) |
 | `/docker-check` | Docker check | Docker daemon is not running (or not installed). Not shown when the daemon is already up. | Real gate (`docker info` via main) |
 | `/start-project` | Welcome | Q2 is no: no bot project created yet. Open an existing bot; create-new-bot is later. | Welcome (open existing) |
-| `/main` | Main page | Q2 is yes: a bot project already exists. | Route exists; chrome incomplete |
+| `/main` | Main page | Q2 is yes: a bot project already exists. | Chrome (sidebar, header, status); placeholder body |
 | `/settings` | Settings / preferences | User opens local settings from the shell. | **Not created yet** |
 | `/images` | Images manager | User manages Studio (and related) image tags and pulls. | **Not created yet** |
 
@@ -123,8 +123,8 @@ Drop a newer binary into `mock-update-server/releases/` (see that folder’s REA
 
 ### 3. Displaying version on the UI
 
-- **Preload: done.** `window.studio.versions.studio` is `app.getVersion()` (the `package.json` version), next to Electron/Node/Chrome. Step 09 chrome should read that field; do not add a second source.
-- Until that chrome exists, loading and welcome show the version in the page header.
+- **Preload: done.** `window.studio.versions.studio` is `app.getVersion()` (the `package.json` version), next to Electron/Node/Chrome. The `/main` status line reads that field; do not add a second source.
+- Loading and welcome still show the version in the page header.
 
 ### 4. Dialog and notification format
 
@@ -136,10 +136,10 @@ Drop a newer binary into `mock-update-server/releases/` (see that folder’s REA
 
 ### 5. Main layout and colors
 
-- Replace the centered card shell with the real app chrome used after startup (sidebar/header/status as needed).
-- Loading, Docker check, and welcome may stay simpler, but they must use the same color tokens.
-- Tokens live in `src/renderer/styles/base.css`. Layout shell lives in `src/renderer/layout/shell.js`.
-- Main page (`/main`) is the first screen that must use the full layout.
+- **Done.** `/main` uses the post-startup chrome (sidebar, header, status). Loading, Docker check, and welcome stay on the centered-card shell (`shell-simple`) with the same color tokens.
+- Tokens live in `src/renderer/styles/base.css`. Layout shell lives in `src/renderer/layout/shell.js`; route → `shell-main` vs `shell-simple` is `src/renderer/layout/shell-mode.mjs`. Styles: `src/renderer/styles/shell.css` (linked from `index.html`). The router still has a single `#outlet`.
+- Settings and Images appear in the sidebar as non-navigating “soon” items. Those routes are not registered.
+- Tests: `npm run test:shell`.
 
 ### 6. Settings persisting system
 
@@ -249,4 +249,5 @@ On successful load, in-memory `app_version` is set to the running app version. T
 | Notifications (OS + toast) | `src/main/services/notifications/`, `src/renderer/lib/toasts.js`. Tests: `npm run test:notifications` |
 | Updater (check + download) | `src/main/services/updater/` (dev mock origin `http://127.0.0.1:47821`; download-only into `.LugoStudio/updates/`). Tests: `npm run test:updater` |
 | Open existing bot | `src/main/services/project/` (`isBotValid` from config helpers). IPC: `src/main/ipc/project.js`. Preload: `window.studio.project.openExisting`. Tests: `npm run test:project` |
-| Pages | `src/renderer/pages/loading`, `docker-check`, `start-project` (welcome, open existing), `main` (thin placeholder until chrome) |
+| Shell chrome | `src/renderer/layout/shell.js` (`shell-main` / `shell-simple` by route). Helpers: `src/renderer/layout/shell-mode.mjs`. Tests: `npm run test:shell` |
+| Pages | `src/renderer/pages/loading`, `docker-check`, `start-project` (welcome, open existing), `main` (chrome + placeholder; no game run) |

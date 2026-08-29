@@ -1,7 +1,7 @@
 # Step 09 — Main page chrome and placeholder
 
 **Phase:** Shell UX
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** [Step 05](step-05-startup-navigation.md), [Step 06](step-06-dialog-notification.md)
 **Unblocks:** —
 **Plan index:** [README](README.md)
@@ -65,12 +65,12 @@ DEVELOPMENT.md item 5: replace the centered-card-only shell for the main experie
 
 ## Acceptance criteria
 
-- [ ] `/main` is visually distinct from the centered-card startup pages (sidebar + header + status present).
-- [ ] Open project path matches `user.json` `project_path`.
-- [ ] Studio version is visible (once step 07 preload field exists; if 07 is later, show a clear “version pending” only during partial merges — prefer landing 07’s version field first or in the same PR as chrome).
-- [ ] Placeholder body has no game controls.
-- [ ] Startup pages still use the same tokens (no unstyled white flash).
-- [ ] DEVELOPMENT.md route map: `/main` status updated.
+- [x] `/main` is visually distinct from the centered-card startup pages (sidebar + header + status present).
+- [x] Open project path matches `user.json` `project_path`.
+- [x] Studio version is visible (once step 07 preload field exists; if 07 is later, show a clear “version pending” only during partial merges — prefer landing 07’s version field first or in the same PR as chrome).
+- [x] Placeholder body has no game controls.
+- [x] Startup pages still use the same tokens (no unstyled white flash).
+- [x] DEVELOPMENT.md route map: `/main` status updated.
 
 ## Verification
 
@@ -90,3 +90,12 @@ DEVELOPMENT.md item 5: replace the centered-card-only shell for the main experie
 - Wire sidebar to `/settings` and `/images` when those pages exist.
 - Game area and run controls (V1 Home).
 - Open-in-explorer / VS Code from the header (V1 `OpenProjectPath`).
+
+## Landed
+
+- `/main` uses `shell-main` chrome (sidebar, header, status) on the existing shell; startup routes stay `shell-simple` cards.
+- Header shows truncated project path (full path in tooltip). Status shows Studio version, Docker yes/no, image idle/pulling/ready/error.
+- Settings and Images are labeled “(soon)” and do not register stub routes.
+- Tests: `npm run test:shell` (52 passed). Electron layout/resize was not verified in a real window.
+- Deviations: chrome lives in `.shell-frame` so dialog/toast hosts are not grid children of the chrome; still one `#outlet`.
+- PR: https://github.com/lugobots/studio-v3/pull/9
