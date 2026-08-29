@@ -104,4 +104,4 @@ Renderer never talks to the Docker socket.
 - IPC: `docker.imageStatus`, `docker.ensureImage`, `docker.onImageProgress`. Image name is not renderer-supplied.
 - Tests: `npm run test:docker-images` (56 passed). Live lookup on the implementer machine already had the image locally (no live pull in this PR).
 - Deviations: navigation still uses the step 03 interim hook; step 05 must call `ensureImage` fire-and-forget. Progress percent is the current CLI line, not a sum of layers. No muted pull line on loading/welcome (step 09).
-- PR: pending.
+- PR: https://github.com/lugobots/studio-v3/pull/4
