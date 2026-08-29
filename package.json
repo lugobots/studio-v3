@@ -9,6 +9,7 @@
     "mock-update-server": "node mock-update-server/server.js",
     "test:mock-update-server": "node mock-update-server/test.js",
     "test:config": "node src/main/services/config/test.js",
+    "test:project": "node src/main/services/project/test.js",
     "test:docker": "node src/main/services/docker/test.js",
     "test:docker-images": "node src/main/services/docker/images-test.js",
     "test:startup": "node src/renderer/lib/startup-sequencer-test.mjs",

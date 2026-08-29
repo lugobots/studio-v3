@@ -55,6 +55,15 @@ export interface AppConfig extends StoredUserData {
   [extra: string]: unknown;
 }
 
+export type OpenExistingReason = "empty" | "invalid" | "write";
+
+export interface OpenExistingResult {
+  ok?: boolean;
+  cancelled?: boolean;
+  error?: string;
+  reason?: OpenExistingReason;
+}
+
 export type ConfigPatch = Partial<StoredUserData> & {
   projectPath?: string | null;
   debugMode?: boolean;
@@ -122,6 +131,10 @@ export interface StudioApi {
   config: {
     get: () => Promise<AppConfig>;
     set: (patch: ConfigPatch) => Promise<AppConfig>;
+  };
+  project: {
+    /** OS folder picker in main, then validate + save. No renderer path argument. */
+    openExisting: () => Promise<OpenExistingResult>;
   };
   updates: {
     check: () => Promise<UpdateInfo>;

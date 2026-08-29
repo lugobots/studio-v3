@@ -1,7 +1,7 @@
 # Step 08 — Welcome screen: open existing bot
 
 **Phase:** First-run
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** [Step 02](step-02-v1-compatible-settings.md), [Step 05](step-05-startup-navigation.md), [Step 06](step-06-dialog-notification.md)
 **Unblocks:** —
 **Plan index:** [README](README.md)
@@ -70,12 +70,12 @@ Renderer: button → pick → open → `navigate("/main")` on success.
 
 ## Acceptance criteria
 
-- [ ] Q2-no user sees welcome with an Open existing bot action (no dummy-only page).
-- [ ] Choosing a valid V1 bot folder writes `user.json` and shows `/main`.
-- [ ] Subsequent launch (Docker up) goes to `/main` via Q2 (step 05).
-- [ ] Choosing a folder without `.lugo/info.json` shows an error and does not write a misleading `project_path`.
-- [ ] Cancelling the picker leaves the user on welcome with no error dialog.
-- [ ] Existing V1 keys (e.g. `game_speed`, image tags) survive if `user.json` already existed.
+- [x] Q2-no user sees welcome with an Open existing bot action (no dummy-only page).
+- [x] Choosing a valid V1 bot folder writes `user.json` and shows `/main`.
+- [x] Subsequent launch (Docker up) goes to `/main` via Q2 (step 05).
+- [x] Choosing a folder without `.lugo/info.json` shows an error and does not write a misleading `project_path`.
+- [x] Cancelling the picker leaves the user on welcome with no error dialog.
+- [x] Existing V1 keys (e.g. `game_speed`, image tags) survive if `user.json` already existed.
 
 ## Verification
 
@@ -95,3 +95,11 @@ Renderer: button → pick → open → `navigate("/main")` on success.
 - Create new bot (V1 `START_WITH_NEW_BOT`).
 - Legacy compose clone for `studio.major/minor` &lt; 1.1.
 - Terms acceptance if legal requires it.
+
+## Landed
+
+- Welcome CTA **Open existing bot** via `studio.project.openExisting()`. Directory-only OS picker in main; validity reuses `isBotValid`.
+- Success merges `project_path`, `compose_file` (`{folder}/docker-compose.yml`), `app_path`, `app_version`, then navigates to `/main`.
+- Tests: `npm run test:project` (59 passed). Electron picker click-through was not run.
+- Deviations: pick + open are one IPC (path never leaves main). No extra V1 “folder is empty” readdir check.
+- PR: pending.

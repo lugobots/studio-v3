@@ -65,3 +65,12 @@ body {
 .button:disabled:hover {
   border-color: var(--border);
 }
+
+.button-primary {
+  background: color-mix(in srgb, var(--accent) 22%, #12141a);
+  border-color: var(--accent);
+}
+
+.button-primary:disabled:hover {
+  border-color: var(--accent);
+}
