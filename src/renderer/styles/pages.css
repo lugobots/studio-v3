@@ -29,3 +29,50 @@ h1 {
   margin: 0;
   color: var(--muted);
 }
+
+.page-version {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.page-status {
+  margin: 0 0 20px;
+  color: var(--text);
+}
+
+.page-status.is-waiting {
+  color: var(--muted);
+}
+
+.page-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.page-link {
+  color: var(--accent);
+  text-underline-offset: 3px;
+}
+
+.page-link:hover {
+  color: var(--text);
+}
+
+.page-main {
+  width: min(40rem, 100%);
+}
+
+.page-main-title {
+  margin: 0 0 8px;
+  font-size: 28px;
+  letter-spacing: -0.03em;
+}
+
+.page-main-path {
+  margin: 16px 0 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}

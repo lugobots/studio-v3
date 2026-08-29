@@ -3,16 +3,29 @@
 const CHANNELS = {
   docker: {
     status: "docker:status",
+    imageStatus: "docker:image-status",
+    imageEnsure: "docker:image-ensure",
+    imageProgress: "docker:image-progress",
   },
   config: {
     get: "config:get",
     set: "config:set",
   },
+  project: {
+    openExisting: "project:open-existing",
+  },
+  app: {
+    version: "app:version",
+  },
   updates: {
     check: "updates:check",
+    download: "updates:download",
+    cancel: "updates:cancel",
+    progress: "updates:progress",
   },
   notifications: {
     show: "notifications:show",
+    shown: "notifications:shown",
   },
 };
 

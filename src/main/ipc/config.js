@@ -1,3 +1,5 @@
+"use strict";
+
 const { ipcMain } = require("electron");
 const { CHANNELS } = require("../../shared/ipc-channels");
 const config = require("../services/config");

@@ -1,4 +1,4 @@
-export function createPageHeader({ eyebrow, title, lede }) {
+export function createPageHeader({ eyebrow, title, lede, version }) {
   const header = document.createElement("header");
   header.className = "page-header";
 
@@ -16,6 +16,14 @@ export function createPageHeader({ eyebrow, title, lede }) {
     ledeEl.className = "lede";
     ledeEl.textContent = lede;
     header.append(ledeEl);
+  }
+
+  const versionText = typeof version === "string" ? version.trim() : "";
+  if (versionText) {
+    const versionEl = document.createElement("p");
+    versionEl.className = "page-version";
+    versionEl.textContent = `Version ${versionText}`;
+    header.append(versionEl);
   }
 
   return header;

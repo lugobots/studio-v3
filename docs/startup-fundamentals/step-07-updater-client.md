@@ -1,7 +1,7 @@
 # Step 07 — App version display, update check, and download
 
 **Phase:** Updates
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** [Step 01](step-01-mock-update-server.md), [Step 06](step-06-dialog-notification.md)
 **Unblocks:** —
 **Plan index:** [README](README.md)
@@ -77,13 +77,13 @@ DEVELOPMENT.md items 1–3: upgrade check, upgrade process, version on the UI. T
 
 ## Acceptance criteria
 
-- [ ] UI can show the same version string as `package.json`.
-- [ ] Mock not running → app still reaches welcome/main; no blocking error.
-- [ ] Mock running with a newer named binary → confirm dialog appears without blocking Docker/Q2.
-- [ ] Accept → file appears in `{appData}/.LugoStudio/updates/` with matching size.
-- [ ] Cancel during download → no complete file left (partial removed).
-- [ ] Decline confirm → no download.
-- [ ] `DEVELOPMENT.md` update-feed decision notes the mock JSON origin for dev and TBD for production.
+- [x] UI can show the same version string as `package.json`.
+- [x] Mock not running → app still reaches welcome/main; no blocking error.
+- [x] Mock running with a newer named binary → confirm dialog appears without blocking Docker/Q2.
+- [x] Accept → file appears in `{appData}/.LugoStudio/updates/` with matching size.
+- [x] Cancel during download → no complete file left (partial removed).
+- [x] Decline confirm → no download.
+- [x] `DEVELOPMENT.md` update-feed decision notes the mock JSON origin for dev and TBD for production.
 
 ## Verification
 
@@ -104,3 +104,11 @@ DEVELOPMENT.md items 1–3: upgrade check, upgrade process, version on the UI. T
 - Align production API with this JSON or adopt electron-updater YAML.
 - Checksum / code signing verification.
 - Settings “Check for updates” button (V1 Settings page).
+
+## Landed
+
+- `window.studio.versions.studio` from `app.getVersion()`. Background check against `http://127.0.0.1:47821` in development; packaged origin is empty TBD (does not hit lugobots.ai).
+- Download-only into `{appData}/.LugoStudio/updates/`. Confirm / progress / error dialogs. Cancel deletes the partial file. Same-origin download URLs only.
+- Tests: `npm run test:updater` (45 passed). Electron dialog walkthrough was not run.
+- Deviations: no muted “update server unreachable” status (warning log only). Version also shown on loading/welcome headers until step 09 chrome.
+- PR: https://github.com/lugobots/studio-v3/pull/7

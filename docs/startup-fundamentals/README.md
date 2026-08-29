@@ -8,21 +8,21 @@ Stand up the first usable slice of Lugo Studio V3: a local mock update server, V
 
 | Step | Title | Status | Owner | Depends on | Notes |
 |------|-------|--------|-------|------------|-------|
-| [01](step-01-mock-update-server.md) | Mock update HTTP server | `pending` | — | — | Custom JSON; drop folder for binaries |
-| [02](step-02-v1-compatible-settings.md) | V1-compatible settings + Q2 detection | `pending` | — | — | Same `user.json` path and schema |
-| [03](step-03-docker-daemon-gate.md) | Docker daemon gate | `pending` | — | — | Replaces dummy `/docker-check` |
-| [04](step-04-q1-image-pull.md) | Q1 image check + background pull | `pending` | — | 03 | Placeholder `lugobots/studio:latest` |
-| [05](step-05-startup-navigation.md) | Wire startup navigation | `pending` | — | 02, 03, 04 | Replace dummy Continue buttons |
-| [06](step-06-dialog-notification.md) | Dialog + notification pattern | `pending` | — | — | Shared by updates and open-bot errors |
-| [07](step-07-updater-client.md) | Version UI + check + download | `pending` | — | 01, 06 | Download only; no quit-and-install |
-| [08](step-08-welcome-open-existing.md) | Welcome — open existing bot | `pending` | — | 02, 05, 06 | Create-new-bot deferred |
-| [09](step-09-main-page-chrome.md) | Main page chrome + placeholder | `pending` | — | 05, 06 | Full layout; no game run |
+| [01](step-01-mock-update-server.md) | Mock update HTTP server | `done` | — | — | Custom JSON; drop folder for binaries. [#1](https://github.com/lugobots/studio-v3/pull/1) |
+| [02](step-02-v1-compatible-settings.md) | V1-compatible settings + Q2 detection | `done` | — | — | Same `user.json` path and schema. [#2](https://github.com/lugobots/studio-v3/pull/2) |
+| [03](step-03-docker-daemon-gate.md) | Docker daemon gate | `done` | — | — | Replaces dummy `/docker-check`. [#3](https://github.com/lugobots/studio-v3/pull/3) |
+| [04](step-04-q1-image-pull.md) | Q1 image check + background pull | `done` | — | 03 | Placeholder `lugobots/studio:latest`. [#4](https://github.com/lugobots/studio-v3/pull/4) |
+| [05](step-05-startup-navigation.md) | Wire startup navigation | `done` | — | 02, 03, 04 | Replace dummy Continue buttons. [#5](https://github.com/lugobots/studio-v3/pull/5) |
+| [06](step-06-dialog-notification.md) | Dialog + notification pattern | `done` | — | — | Shared by updates and open-bot errors. [#6](https://github.com/lugobots/studio-v3/pull/6) |
+| [07](step-07-updater-client.md) | Version UI + check + download | `done` | — | 01, 06 | Download only; no quit-and-install. [#7](https://github.com/lugobots/studio-v3/pull/7) |
+| [08](step-08-welcome-open-existing.md) | Welcome — open existing bot | `done` | — | 02, 05, 06 | Create-new-bot deferred. [#8](https://github.com/lugobots/studio-v3/pull/8) |
+| [09](step-09-main-page-chrome.md) | Main page chrome + placeholder | `done` | — | 05, 06 | Full layout; no game run. [#9](https://github.com/lugobots/studio-v3/pull/9) |
 
 Valid statuses: `pending` | `in-progress` | `done` | `blocked` | `deferred` | `cancelled`
 
 ## Current focus
 
-Step 01 — pending. Steps 01, 02, 03, and 06 can start in parallel; 04 waits on 03; 05 waits on 02–04.
+All steps done. Wrap-up PR from `feat/startup-fundamentals` to `main`.
 
 ## Dependency graph
 

@@ -1,7 +1,7 @@
 # Step 04 — Q1 image check and background pull
 
 **Phase:** Startup gates
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** [Step 03](step-03-docker-daemon-gate.md)
 **Unblocks:** [Step 05](step-05-startup-navigation.md)
 **Plan index:** [README](README.md)
@@ -74,11 +74,11 @@ Renderer never talks to the Docker socket.
 
 ## Acceptance criteria
 
-- [ ] `DEVELOPMENT.md` lists Studio image `lugobots/studio:latest` as the Q1 definition.
-- [ ] With daemon up and image absent, navigation to Q2 is not delayed for the pull to finish.
-- [ ] Docker lists the image after a successful pull (or shows a visible error if the tag does not exist on the registry).
-- [ ] With image already local, no extra pull is started.
-- [ ] With daemon down, no pull is attempted.
+- [x] `DEVELOPMENT.md` lists Studio image `lugobots/studio:latest` as the Q1 definition.
+- [x] With daemon up and image absent, navigation to Q2 is not delayed for the pull to finish.
+- [x] Docker lists the image after a successful pull (or shows a visible error if the tag does not exist on the registry).
+- [x] With image already local, no extra pull is started.
+- [x] With daemon down, no pull is attempted.
 
 ## Verification
 
@@ -97,3 +97,11 @@ Renderer never talks to the Docker socket.
 - `/images` manager (DEVELOPMENT.md item 8).
 - Additional images when game run needs them.
 - Cancel pull.
+
+## Landed
+
+- Constant `lugobots/studio:latest`. `ensureStudioImage()` starts a background `docker pull` when the daemon is up and the tag is missing, and returns without waiting for the pull.
+- IPC: `docker.imageStatus`, `docker.ensureImage`, `docker.onImageProgress`. Image name is not renderer-supplied.
+- Tests: `npm run test:docker-images` (56 passed). Live lookup on the implementer machine already had the image locally (no live pull in this PR).
+- Deviations: navigation still uses the step 03 interim hook; step 05 must call `ensureImage` fire-and-forget. Progress percent is the current CLI line, not a sum of layers. No muted pull line on loading/welcome (step 09).
+- PR: https://github.com/lugobots/studio-v3/pull/4

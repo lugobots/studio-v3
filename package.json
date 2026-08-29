@@ -5,13 +5,27 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron ."
+    "dev": "electron .",
+    "mock-update-server": "node mock-update-server/server.js",
+    "test:mock-update-server": "node mock-update-server/test.js",
+    "test:config": "node src/main/services/config/test.js",
+    "test:project": "node src/main/services/project/test.js",
+    "test:docker": "node src/main/services/docker/test.js",
+    "test:docker-images": "node src/main/services/docker/images-test.js",
+    "test:startup": "node src/renderer/lib/startup-sequencer-test.mjs",
+    "test:shell": "node src/renderer/layout/shell-mode-test.mjs",
+    "test:dialogs": "node src/renderer/lib/dialog-policy-test.mjs",
+    "test:notifications": "node src/main/services/notifications/test.js",
+    "test:updater": "node src/main/services/updater/test.js"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "node-machine-id": "^1.1.12"
+  },
   "devDependencies": {
     "electron": "^41.7.1"
   }

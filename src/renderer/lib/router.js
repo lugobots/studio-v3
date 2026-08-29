@@ -28,12 +28,18 @@ export function renderRoute(outlet) {
   render(outlet);
 }
 
-export function startRouter(outlet) {
+export function startRouter(outlet, options) {
   if (!window.location.hash) {
     window.location.hash = "#/loading";
   }
 
-  const onChange = () => renderRoute(outlet);
+  const onChange = () => {
+    const path = getPath();
+    if (options && typeof options.onRoute === "function") {
+      options.onRoute(path);
+    }
+    renderRoute(outlet);
+  };
   window.addEventListener("hashchange", onChange);
   onChange();
 }

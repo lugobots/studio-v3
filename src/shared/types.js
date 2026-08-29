@@ -1,18 +1,116 @@
 "use strict";
 
 /**
- * @typedef {object} DockerStatus
- * @property {boolean | null} running
+ * @typedef {"ok" | "not_installed" | "not_running" | "timeout" | "permission"} DockerStatusReason
  */
 
 /**
- * @typedef {object} AppConfig
- * @property {boolean} projectCreated
+ * @typedef {object} DockerStatus
+ * @property {boolean | null} running `null` only before a check has finished; `getStatus()` always returns a boolean.
+ * @property {DockerStatusReason} [reason]
+ */
+
+/**
+ * @typedef {"idle" | "pulling" | "ready" | "error"} ImageProgressState
+ */
+
+/**
+ * @typedef {object} DockerImageStatus
+ * @property {boolean} present
+ * @property {boolean} pulling
+ * @property {string | null} error
+ */
+
+/**
+ * @typedef {object} DockerImageProgress
+ * @property {boolean} present
+ * @property {boolean} pulling
+ * @property {string | null} error
+ * @property {ImageProgressState} state
+ * @property {number | null} percent
+ * @property {number | null} currentBytes
+ * @property {number | null} totalBytes
+ * @property {string} status
+ */
+
+/**
+ * Stored V1 `user.json` fields. `projectCreated` is derived and never persisted.
+ *
+ * @typedef {object} StoredUserData
+ * @property {string} install_unique_id
+ * @property {boolean} debug_mode
+ * @property {string} project_path
+ * @property {"home" | "away"} team_side
+ * @property {string} opponent_team
+ * @property {number} game_speed
+ * @property {object[]} saved_positions
+ * @property {string} compose_file
+ * @property {string} game_server_image
+ * @property {string} game_server_version
+ * @property {string} bot_level_0_image
+ * @property {string} bot_level_0_version
+ * @property {string} bot_level_1_image
+ * @property {string} bot_level_1_version
+ * @property {string} app_path
+ * @property {string} app_version
+ */
+
+/**
+ * @typedef {StoredUserData & {
+ *   projectCreated: boolean,
+ *   projectPath: string | null,
+ *   error?: string
+ * }} AppConfig
+ */
+
+/**
+ * @typedef {"empty" | "invalid" | "write"} OpenExistingReason
+ */
+
+/**
+ * Result of `studio.project.openExisting()`. Cancelled picker has `cancelled: true`
+ * and no error. Failures have `ok` not true plus an `error` string.
+ *
+ * @typedef {object} OpenExistingResult
+ * @property {boolean} [ok]
+ * @property {boolean} [cancelled]
+ * @property {string} [error]
+ * @property {OpenExistingReason} [reason]
  */
 
 /**
  * @typedef {object} UpdateInfo
  * @property {boolean} available
+ * @property {string | null} [version]
+ * @property {string | null} [fileName]
+ * @property {number | null} [sizeBytes]
+ */
+
+/**
+ * @typedef {object} UpdateDownloadResult
+ * @property {boolean} ok
+ * @property {string} [path]
+ * @property {boolean} [cancelled]
+ * @property {string} [error]
+ */
+
+/**
+ * @typedef {object} UpdateProgress
+ * @property {number} receivedBytes
+ * @property {number | null} totalBytes
+ * @property {string} fileName
+ */
+
+/**
+ * @typedef {object} NotificationPayload
+ * @property {string} title
+ * @property {string} [body]
+ */
+
+/**
+ * @typedef {object} NotificationResult
+ * @property {boolean} shown
+ * @property {boolean} native
  */
 
 module.exports = {};
