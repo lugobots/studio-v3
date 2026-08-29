@@ -60,3 +60,19 @@ h1 {
 .page-link:hover {
   color: var(--text);
 }
+
+.page-main {
+  width: min(40rem, 100%);
+}
+
+.page-main-title {
+  margin: 0 0 8px;
+  font-size: 28px;
+  letter-spacing: -0.03em;
+}
+
+.page-main-path {
+  margin: 16px 0 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}

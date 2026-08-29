@@ -23,25 +23,6 @@ body {
   color: var(--text);
 }
 
-.shell {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-}
-
-.shell-outlet,
-.dialog-host,
-.toast-host {
-  grid-area: 1 / 1;
-}
-
-.shell-outlet {
-  width: 100%;
-  display: grid;
-  place-items: center;
-}
-
 .button {
   appearance: none;
   border: 1px solid var(--border);

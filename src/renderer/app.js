@@ -14,7 +14,7 @@ registerRoute("/docker-check", renderDockerCheck);
 registerRoute("/start-project", renderStartProject);
 registerRoute("/main", renderMain);
 
-const { root, outlet, overlayHost, toastHost } = createShell();
+const { root, outlet, overlayHost, toastHost, applyRoute } = createShell();
 mountDialogs(overlayHost);
 const toasts = mountToasts(toastHost);
 
@@ -26,4 +26,4 @@ if (studio && studio.notifications && typeof studio.notifications.onShow === "fu
 
 document.body.append(root);
 startUpdatePrompt();
-startRouter(outlet);
+startRouter(outlet, { onRoute: applyRoute });

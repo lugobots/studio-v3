@@ -16,13 +16,13 @@ Stand up the first usable slice of Lugo Studio V3: a local mock update server, V
 | [06](step-06-dialog-notification.md) | Dialog + notification pattern | `done` | — | — | Shared by updates and open-bot errors. [#6](https://github.com/lugobots/studio-v3/pull/6) |
 | [07](step-07-updater-client.md) | Version UI + check + download | `done` | — | 01, 06 | Download only; no quit-and-install. [#7](https://github.com/lugobots/studio-v3/pull/7) |
 | [08](step-08-welcome-open-existing.md) | Welcome — open existing bot | `done` | — | 02, 05, 06 | Create-new-bot deferred. [#8](https://github.com/lugobots/studio-v3/pull/8) |
-| [09](step-09-main-page-chrome.md) | Main page chrome + placeholder | `pending` | — | 05, 06 | Full layout; no game run |
+| [09](step-09-main-page-chrome.md) | Main page chrome + placeholder | `done` | — | 05, 06 | Full layout; no game run. PR pending. |
 
 Valid statuses: `pending` | `in-progress` | `done` | `blocked` | `deferred` | `cancelled`
 
 ## Current focus
 
-Step 09 — pending.
+All steps done. Wrap-up PR from `feat/startup-fundamentals` to `main`.
 
 ## Dependency graph
 
