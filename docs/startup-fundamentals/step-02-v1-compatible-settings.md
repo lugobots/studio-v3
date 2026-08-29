@@ -136,4 +136,4 @@ Otherwise `projectCreated` is **false**. Do not delete `user.json` automatically
 - `install_unique_id` uses `node-machine-id` `machineIdSync(true)` on first create.
 - Tests: `npm run test:config` (46 passed).
 - Deviations: `config.get()` also returns stored V1 keys (not only `projectCreated` / `projectPath`); write failures return `{ error }` instead of throwing.
-- PR: pending.
+- PR: https://github.com/lugobots/studio-v3/pull/2
