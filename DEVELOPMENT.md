@@ -64,7 +64,7 @@ Tests: `npm run test:docker`. Sequencer: `npm run test:startup`.
 
 Studio image is **`lugobots/studio:latest`** (`STUDIO_IMAGE_REF` in `src/main/services/docker/constants.js`). When the daemon is up, main lists local images with a fixed `docker images` command. If that repository and tag are missing, it starts `docker pull lugobots/studio:latest` in the background and returns immediately — navigation must not wait for the pull. If the daemon is down, Q1 does not start a pull.
 
-Progress is coarse states (`idle`, `pulling`, `ready`, `error`) plus percent/bytes when the CLI output is cheap to parse. Events must not include layer payloads. The image reference is a constant, not renderer-supplied; the renderer never talks to the Docker socket (`window.studio.docker.imageStatus`, `ensureImage`, `onImageProgress`). Notifications are still a stub: pull failures are logged in main and stored as `error` on image status until step 06.
+Progress is coarse states (`idle`, `pulling`, `ready`, `error`) plus percent/bytes when the CLI output is cheap to parse. Events must not include layer payloads. The image reference is a constant, not renderer-supplied; the renderer never talks to the Docker socket (`window.studio.docker.imageStatus`, `ensureImage`, `onImageProgress`). Pull failures are logged in main, stored as `error` on image status, and shown once via `notifications.show` (OS notification when supported, plus in-app toast). Progress ticks are not notifications.
 
 `ensureStudioImage()` is fire-and-forget from the caller’s point of view (it may wait on a short `docker images` lookup, never on pull completion). The startup sequencer calls `studio.docker.ensureImage()` after Docker is up, then continues to Q2 without waiting for the pull.
 
@@ -112,9 +112,11 @@ Build these before filling in bot-run / VS Code / publish flows. Check an item o
 
 ### 4. Dialog and notification format
 
-- One in-app dialog pattern (confirm, error, progress) and one notification pattern (OS and/or in-app toast).
-- Use the same components for upgrades, Docker, image pulls, settings save, and debug log upload.
-- Stub today: `src/main/services/notifications/index.js` and renderer has no dialog system yet.
+- **Done.** One in-app dialog pattern (confirm, error, progress) mounted on the shell, and one notification path (OS `Notification` when supported, plus in-app toast). Use the same APIs for upgrades, Docker/image failures, welcome open-folder errors, settings save, and debug log upload.
+- Dialogs: `src/renderer/lib/dialogs.js` (pages import `{ dialogs }`; renderer-only, no IPC). Host lives in `src/renderer/layout/shell.js` so they survive page unmount. Queue confirmations so an update prompt is not lost behind a folder error.
+- Notifications: `src/main/services/notifications/` shows a native notification when `Notification.isSupported()`, then broadcasts to the renderer (`window.studio.notifications.show` / `onShow`) so a toast appears even if main called `show` itself (image pull failure).
+- Tokens: `src/renderer/styles/base.css` (`--danger` is used by error dialogs). Styles: `src/renderer/styles/dialogs.css`.
+- Tests: `npm run test:dialogs`, `npm run test:notifications`.
 
 ### 5. Main layout and colors
 
@@ -225,4 +227,6 @@ On successful load, in-memory `app_version` is set to the running app version. T
 | Docker daemon check | `src/main/services/docker/status.js` (`docker info`, 5s timeout). Tests: `npm run test:docker` |
 | Q1 Studio image | `src/main/services/docker/images.js` (`lugobots/studio:latest`, background `docker pull`). Tests: `npm run test:docker-images` |
 | Continue after Docker | `src/renderer/lib/continue-after-docker.js` — resumes the sequencer (Q1 then Q2) |
+| Dialogs (confirm / error / progress) | `src/renderer/lib/dialogs.js` (shell-mounted; not IPC). Policy tests: `npm run test:dialogs` |
+| Notifications (OS + toast) | `src/main/services/notifications/`, `src/renderer/lib/toasts.js`. Tests: `npm run test:notifications` |
 | Pages | `src/renderer/pages/loading`, `docker-check`, `start-project` (welcome CTAs later), `main` (thin placeholder until chrome) |

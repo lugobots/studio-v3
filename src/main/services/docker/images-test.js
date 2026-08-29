@@ -143,6 +143,7 @@ async function runTests() {
   let absentPulls = 0;
   const recordedPullArgs = [];
   const progressEvents = [];
+  const notices = [];
   const absentService = createImageService({
     getStatus: async () => ({ running: true, reason: "ok" }),
     runCommand: async ({ args }) => {
@@ -156,6 +157,9 @@ async function runTests() {
     },
     onProgress: (payload) => {
       progressEvents.push(payload);
+    },
+    notify: (payload) => {
+      notices.push(payload);
     },
     log: () => {},
   });
@@ -179,6 +183,7 @@ async function runTests() {
     progressEvents.every((event) => event.layers == null && event.stdout == null && event.stderr == null),
     "progress events omit layer payloads and raw docker output"
   );
+  assert(notices.length === 0, "progress ticks do not send notifications");
 
   console.log("\n== second ensure while pulling is a no-op ==");
   const secondEnsure = await absentService.ensureStudioImage();
@@ -197,6 +202,9 @@ async function runTests() {
     progressEvents.some((event) => event.state === IMAGE_PROGRESS_STATE.ERROR),
     "progress event state is error after failure"
   );
+  assert(notices.length === 1, "pull failure notifies once (not per progress tick)");
+  assert(notices[0].title === "Studio image pull failed", "pull failure notification has a fixed title");
+  assert(/manifest unknown/i.test(notices[0].body), "pull failure notification includes the Docker error");
 
   console.log("\n== daemon down → no pull ==");
   let downPulls = 0;

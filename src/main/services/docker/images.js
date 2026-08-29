@@ -64,6 +64,7 @@ function createImageService(options = {}) {
   const spawnPull = options.spawnPull || defaultSpawnPull;
   const log = options.log || ((message) => console.error(message));
   let progressListener = typeof options.onProgress === "function" ? options.onProgress : null;
+  const notify = typeof options.notify === "function" ? options.notify : null;
 
   const state = {
     present: false,
@@ -201,6 +202,16 @@ function createImageService(options = {}) {
     state.statusText = STATUS_TEXT.error;
     emitProgress(true);
     log(`[docker] Studio image pull failed for ${STUDIO_IMAGE_REF}: ${state.error}`);
+    if (typeof notify === "function") {
+      try {
+        notify({
+          title: "Studio image pull failed",
+          body: state.error,
+        });
+      } catch {
+        // ignore notifier errors
+      }
+    }
   }
 
   function beginPull() {

@@ -16,6 +16,7 @@ const CHANNELS = {
   },
   notifications: {
     show: "notifications:show",
+    shown: "notifications:shown",
   },
 };
 

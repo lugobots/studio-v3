@@ -13,7 +13,7 @@ Stand up the first usable slice of Lugo Studio V3: a local mock update server, V
 | [03](step-03-docker-daemon-gate.md) | Docker daemon gate | `done` | — | — | Replaces dummy `/docker-check`. [#3](https://github.com/lugobots/studio-v3/pull/3) |
 | [04](step-04-q1-image-pull.md) | Q1 image check + background pull | `done` | — | 03 | Placeholder `lugobots/studio:latest`. [#4](https://github.com/lugobots/studio-v3/pull/4) |
 | [05](step-05-startup-navigation.md) | Wire startup navigation | `done` | — | 02, 03, 04 | Replace dummy Continue buttons. [#5](https://github.com/lugobots/studio-v3/pull/5) |
-| [06](step-06-dialog-notification.md) | Dialog + notification pattern | `pending` | — | — | Shared by updates and open-bot errors |
+| [06](step-06-dialog-notification.md) | Dialog + notification pattern | `done` | — | — | Shared by updates and open-bot errors. PR pending. |
 | [07](step-07-updater-client.md) | Version UI + check + download | `pending` | — | 01, 06 | Download only; no quit-and-install |
 | [08](step-08-welcome-open-existing.md) | Welcome — open existing bot | `pending` | — | 02, 05, 06 | Create-new-bot deferred |
 | [09](step-09-main-page-chrome.md) | Main page chrome + placeholder | `pending` | — | 05, 06 | Full layout; no game run |
@@ -22,7 +22,7 @@ Valid statuses: `pending` | `in-progress` | `done` | `blocked` | `deferred` | `c
 
 ## Current focus
 
-Step 06 — pending. Then 07 (needs 01+06), 08 (needs 02+05+06), 09 (needs 05+06).
+Step 07 — pending. Then 08 and 09.
 
 ## Dependency graph
 

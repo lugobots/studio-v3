@@ -5,6 +5,7 @@
   --text: #f4f5f7;
   --muted: #9aa1ad;
   --accent: #7c8cff;
+  --danger: #e85d75;
   --border: #2a2e37;
   font-family: "Segoe UI", system-ui, sans-serif;
 }
@@ -27,6 +28,12 @@ body {
   display: grid;
   place-items: center;
   padding: 24px;
+}
+
+.shell-outlet,
+.dialog-host,
+.toast-host {
+  grid-area: 1 / 1;
 }
 
 .shell-outlet {
