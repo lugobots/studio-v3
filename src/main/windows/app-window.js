@@ -1,4 +1,4 @@
-const { BrowserWindow } = require("electron");
+const { BrowserWindow, shell } = require("electron");
 const path = require("node:path");
 
 const iconPath = path.join(__dirname, "../../../resources/favicon.png");
@@ -22,6 +22,18 @@ function createAppWindow() {
   win.once("ready-to-show", () => {
     win.maximize();
     win.show();
+  });
+
+  win.webContents.setWindowOpenHandler((details) => {
+    try {
+      const parsed = new URL(details.url);
+      if (parsed.protocol === "https:") {
+        shell.openExternal(details.url).catch(() => {});
+      }
+    } catch {
+      // Ignore invalid URLs; never open a new Electron window.
+    }
+    return { action: "deny" };
   });
 
   win.loadFile(path.join(__dirname, "../../renderer/index.html"));

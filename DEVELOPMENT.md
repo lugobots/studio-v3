@@ -44,6 +44,14 @@ flowchart TD
 
 The image pull from Q1 may still be running on the welcome or main page. Progress belongs in the shell (status, notifications, and later the images page), not as a blocking startup screen.
 
+### Docker daemon check
+
+Main runs a fixed `docker info` (no user-supplied arguments, no shell). Timeout is **5 seconds** (`DOCKER_INFO_TIMEOUT_MS` in `src/main/services/docker/constants.js`). Exit 0 → `running: true`. Missing binary, non-zero exit, spawn error, or timeout → `running: false` (fail closed). After a check, `running` is always a boolean; it is never `null`. The renderer never spawns Docker — it only calls `window.studio.docker.status`.
+
+`/docker-check` re-checks on **Re-check now** and polls about every 4 seconds while the page is visible. When `running` is `true`, it calls `continueAfterDocker()` in `src/renderer/lib/continue-after-docker.js`. Until step 05 wires loading → Q1 → Q2, that helper navigates to `/start-project` as a **temporary** stand-in. Step 05 should change the helper, not the docker-check page.
+
+Tests: `npm run test:docker`.
+
 ---
 
 ## Route map
@@ -51,7 +59,7 @@ The image pull from Q1 may still be running on the welcome or main page. Progres
 | Route | Screen | When it is shown | Status |
 | --- | --- | --- | --- |
 | `/loading` | Loading | Always first after launch. Short splash / bootstrap while the app prepares the next gate. | Dummy page exists |
-| `/docker-check` | Docker check | Docker daemon is not running (or not installed). | Dummy page exists |
+| `/docker-check` | Docker check | Docker daemon is not running (or not installed). | Real gate (`docker info` via main) |
 | `/start-project` | Welcome | Q2 is no: no bot project created yet. | Dummy page exists |
 | `/main` | Main page | Q2 is yes: a bot project already exists. | **Not created yet** |
 | `/settings` | Settings / preferences | User opens local settings from the shell. | **Not created yet** |
@@ -134,6 +142,7 @@ Fill these in before the matching backlog item is considered done.
 | Topic | Decision |
 | --- | --- |
 | Studio Docker image name and tag used at Q1 | _TBD_ |
+| Docker daemon check | Fixed `docker info` with a 5s timeout; fail closed to `running: false`. |
 | Other images/tags managed on `/images` | _TBD_ |
 | V1 settings path and format | Always `{app.getPath("appData")}/.LugoStudio/user.json` (not Electron `userData`, not the git working tree). UTF-8 JSON, two-space indent, full V1 `UserData` key set. Details: [V1-compatible settings](#v1-compatible-settings). |
 | App update feed / provider | Dev mock JSON at `http://127.0.0.1:47821` (`mock-update-server/`). Production host TBD. |
@@ -194,4 +203,6 @@ On successful load, in-memory `app_version` is set to the running app version. T
 | Preload bridge | `src/preload/preload.js`, `src/preload/api.d.ts` |
 | Channel names | `src/shared/ipc-channels.js` |
 | Router | `src/renderer/lib/router.js` |
-| Dummy pages | `src/renderer/pages/loading`, `docker-check`, `start-project` |
+| Docker daemon check | `src/main/services/docker/` (`docker info`, 5s timeout). Tests: `npm run test:docker` |
+| Continue after Docker (interim) | `src/renderer/lib/continue-after-docker.js` — currently `#/start-project` until step 05 |
+| Dummy pages | `src/renderer/pages/loading`, `start-project` |

@@ -1,5 +1,14 @@
+export type DockerStatusReason =
+  | "ok"
+  | "not_installed"
+  | "not_running"
+  | "timeout"
+  | "permission";
+
 export interface DockerStatus {
+  /** `null` only before a check has finished; `getStatus()` always returns a boolean. */
   running: boolean | null;
+  reason?: DockerStatusReason;
 }
 
 export interface StoredUserData {

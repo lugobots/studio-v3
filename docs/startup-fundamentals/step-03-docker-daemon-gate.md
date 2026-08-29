@@ -1,7 +1,7 @@
 # Step 03 — Docker daemon gate
 
 **Phase:** Startup gates
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** —
 **Unblocks:** [Step 04](step-04-q1-image-pull.md), [Step 05](step-05-startup-navigation.md)
 **Plan index:** [README](README.md)
@@ -63,11 +63,11 @@ DEVELOPMENT.md: if the daemon is not started, stay on `/docker-check` and ask th
 
 ## Acceptance criteria
 
-- [ ] Docker Desktop/engine running → status `running: true`.
-- [ ] Docker stopped or missing → `running: false` and the docker-check page remains with a clear message.
-- [ ] User starts Docker, clicks re-check → page observes `true` without restarting the whole Electron app.
-- [ ] Dummy “Continue (dummy)” control is gone from this page.
-- [ ] Renderer never spawns `docker` itself.
+- [x] Docker Desktop/engine running → status `running: true`.
+- [x] Docker stopped or missing → `running: false` and the docker-check page remains with a clear message.
+- [x] User starts Docker, clicks re-check → page observes `true` without restarting the whole Electron app.
+- [x] Dummy “Continue (dummy)” control is gone from this page.
+- [x] Renderer never spawns `docker` itself.
 
 ## Verification
 
@@ -85,3 +85,12 @@ DEVELOPMENT.md: if the daemon is not started, stay on `/docker-check` and ask th
 
 - Q1 image availability and pull (step 04).
 - Status chip on main chrome (step 09) reusing the same `getStatus`.
+
+## Landed
+
+- Main runs a fixed `docker info` with a 5s timeout and fail-closed `running: false`. Optional `reason` for page copy (`ok` / `not_installed` / `not_running` / `timeout` / `permission`).
+- `/docker-check` uses Re-check now + ~4s poll. Dummy Continue is gone. Success calls `continueAfterDocker()` (interim `#/start-project` until step 05).
+- Tests: `npm run test:docker` (42 passed). Live `docker info` on the implementer machine was `running=true`.
+- Deviations: extra `reason` field; `setWindowOpenHandler` so the Get Docker https link opens in the system browser.
+- Electron click-through of the page was not run in this PR; UI behavior is covered by code review plus unit tests.
+- PR: pending.
