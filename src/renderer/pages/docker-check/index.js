@@ -111,9 +111,22 @@ export function renderDockerCheck(outlet) {
         return;
       }
       if (status && status.running === true) {
-        disposed = true;
         stopPolling();
-        continueAfterDocker();
+        statusEl.textContent = "Docker is running. Continuing…";
+        const result = await continueAfterDocker({
+          isCancelled: () => disposed || !page.isConnected,
+        });
+        if (disposed || !page.isConnected) {
+          return;
+        }
+        if (result && result.ok) {
+          disposed = true;
+          stopPolling();
+          return;
+        }
+        statusEl.classList.remove("is-waiting");
+        statusEl.textContent =
+          (result && result.error) || "Docker is running, but Studio could not continue.";
         return;
       }
       statusEl.textContent = messageForStatus(status && typeof status.running === "boolean" ? status : { running: false, reason: "not_running" });
