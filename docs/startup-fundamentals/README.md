@@ -11,7 +11,7 @@ Stand up the first usable slice of Lugo Studio V3: a local mock update server, V
 | [01](step-01-mock-update-server.md) | Mock update HTTP server | `done` | — | — | Custom JSON; drop folder for binaries. [#1](https://github.com/lugobots/studio-v3/pull/1) |
 | [02](step-02-v1-compatible-settings.md) | V1-compatible settings + Q2 detection | `done` | — | — | Same `user.json` path and schema. [#2](https://github.com/lugobots/studio-v3/pull/2) |
 | [03](step-03-docker-daemon-gate.md) | Docker daemon gate | `done` | — | — | Replaces dummy `/docker-check`. [#3](https://github.com/lugobots/studio-v3/pull/3) |
-| [04](step-04-q1-image-pull.md) | Q1 image check + background pull | `pending` | — | 03 | Placeholder `lugobots/studio:latest` |
+| [04](step-04-q1-image-pull.md) | Q1 image check + background pull | `done` | — | 03 | Placeholder `lugobots/studio:latest`. [#4](https://github.com/lugobots/studio-v3/pull/4) |
 | [05](step-05-startup-navigation.md) | Wire startup navigation | `pending` | — | 02, 03, 04 | Replace dummy Continue buttons |
 | [06](step-06-dialog-notification.md) | Dialog + notification pattern | `pending` | — | — | Shared by updates and open-bot errors |
 | [07](step-07-updater-client.md) | Version UI + check + download | `pending` | — | 01, 06 | Download only; no quit-and-install |
@@ -22,7 +22,7 @@ Valid statuses: `pending` | `in-progress` | `done` | `blocked` | `deferred` | `c
 
 ## Current focus
 
-Step 04 — pending. Step 06 can still start in parallel; 05 waits on 04.
+Step 05 — pending. Step 06 can still start in parallel; 05 now has 02–04.
 
 ## Dependency graph
 
