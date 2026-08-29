@@ -116,4 +116,4 @@ flowchart TD
 - Hash guards: `#/main` without Q2 → welcome; `#/start-project` with Q2 yes → `/main`.
 - Tests: `npm run test:startup` (44 passed). Electron cold-start click-through was not run in this PR.
 - Deviations: sequencer is `.mjs` for Node 18; `#/main` without Q2 goes to welcome rather than a full sequencer re-run.
-- PR: pending.
+- PR: https://github.com/lugobots/studio-v3/pull/5
