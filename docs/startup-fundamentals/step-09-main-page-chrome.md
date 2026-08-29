@@ -98,4 +98,4 @@ DEVELOPMENT.md item 5: replace the centered-card-only shell for the main experie
 - Settings and Images are labeled “(soon)” and do not register stub routes.
 - Tests: `npm run test:shell` (52 passed). Electron layout/resize was not verified in a real window.
 - Deviations: chrome lives in `.shell-frame` so dialog/toast hosts are not grid children of the chrome; still one `#outlet`.
-- PR: pending.
+- PR: https://github.com/lugobots/studio-v3/pull/9
