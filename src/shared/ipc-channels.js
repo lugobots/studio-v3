@@ -11,6 +11,9 @@ const CHANNELS = {
     get: "config:get",
     set: "config:set",
   },
+  project: {
+    openExisting: "project:open-existing",
+  },
   app: {
     version: "app:version",
   },

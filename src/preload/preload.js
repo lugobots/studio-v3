@@ -38,6 +38,9 @@ contextBridge.exposeInMainWorld("studio", {
     get: () => ipcRenderer.invoke(CHANNELS.config.get),
     set: (patch) => ipcRenderer.invoke(CHANNELS.config.set, patch),
   },
+  project: {
+    openExisting: () => ipcRenderer.invoke(CHANNELS.project.openExisting),
+  },
   updates: {
     check: () => ipcRenderer.invoke(CHANNELS.updates.check),
     download: (info) => ipcRenderer.invoke(CHANNELS.updates.download, info),

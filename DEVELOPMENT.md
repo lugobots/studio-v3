@@ -60,6 +60,14 @@ Main runs a fixed `docker info` (no user-supplied arguments, no shell). Timeout 
 
 Tests: `npm run test:docker`. Sequencer: `npm run test:startup`.
 
+### Welcome (open existing bot)
+
+**Done.** `/start-project` is the Q2-no welcome screen. The primary action is **Open existing bot**. Main shows a directory-only OS folder picker (`dialog.showOpenDialog` with `['openDirectory']`), then validates with the same `isBotValid` helper as Q2 (`.lugo` plus `.lugo/info.json`). On success it merges into `user.json` (keep every existing key; set `project_path`, `compose_file` to `{folder}/docker-compose.yml` even if that file is missing, `app_path` from `app.getAppPath()`, `app_version` from `app.getVersion()`). If `user.json` did not exist, defaults are created first (`install_unique_id` only then). The renderer navigates to `/main` without restarting Electron. Create-new-bot is not in this slice.
+
+The folder path never comes from a typed renderer field — only from the OS picker. Cancelled picker: stay on welcome, no error dialog. Empty selection, not-a-bot folder, and write failure use the step-06 error dialog. The page is disabled while pick/validate/save runs. Direct `#/start-project` when Q2 is already yes still redirects to `/main`.
+
+Owner: `src/main/services/project/` (`openExisting`). IPC: `src/main/ipc/project.js`. Renderer: `window.studio.project.openExisting` from `src/renderer/pages/start-project/`. Tests: `npm run test:project`.
+
 ### Q1 Studio image
 
 Studio image is **`lugobots/studio:latest`** (`STUDIO_IMAGE_REF` in `src/main/services/docker/constants.js`). When the daemon is up, main lists local images with a fixed `docker images` command. If that repository and tag are missing, it starts `docker pull lugobots/studio:latest` in the background and returns immediately — navigation must not wait for the pull. If the daemon is down, Q1 does not start a pull.
@@ -78,7 +86,7 @@ Tests: `npm run test:docker-images`.
 | --- | --- | --- | --- |
 | `/loading` | Loading | Always first after launch. Short splash, then the sequencer (Docker → Q1 → Q2). | Wired (no dummy Continue) |
 | `/docker-check` | Docker check | Docker daemon is not running (or not installed). Not shown when the daemon is already up. | Real gate (`docker info` via main) |
-| `/start-project` | Welcome | Q2 is no: no bot project created yet. | Dummy page exists (open-existing is later) |
+| `/start-project` | Welcome | Q2 is no: no bot project created yet. Open an existing bot; create-new-bot is later. | Welcome (open existing) |
 | `/main` | Main page | Q2 is yes: a bot project already exists. | Route exists; chrome incomplete |
 | `/settings` | Settings / preferences | User opens local settings from the shell. | **Not created yet** |
 | `/images` | Images manager | User manages Studio (and related) image tags and pulls. | **Not created yet** |
@@ -192,7 +200,9 @@ File: `user.json`, UTF-8, pretty-printed JSON (two-space indent, same as V1).
 
 `install_unique_id` on first create uses `node-machine-id` `machineIdSync(true)`, matching V1. Existing V1 files keep their id. If that library fails, a generated UUID is used instead (that first-create id would not match V1).
 
-`projectCreated` is derived for IPC (`config.get()` / `config.set()` return it plus `projectPath`). It is never a JSON key. `projectPath` is the stored `project_path` when Q2 is yes, otherwise `null`. Renderer-friendly patch names (`projectPath`, `debugMode`, …) map to snake_case storage. Unknown extra keys are preserved. Write failures return `{ error }` on `config.set` (for step 08 dialogs) and do not throw.
+`projectCreated` is derived for IPC (`config.get()` / `config.set()` return it plus `projectPath`). It is never a JSON key. `projectPath` is the stored `project_path` when Q2 is yes, otherwise `null`. Renderer-friendly patch names (`projectPath`, `debugMode`, …) map to snake_case storage. Unknown extra keys are preserved. Write failures return `{ error }` on `config.set` (for welcome open-folder dialogs) and do not throw.
+
+Opening an existing bot (welcome) uses `config.set` with `project_path`, `compose_file`, and `app_path`. Extra keys survive. `install_unique_id` is generated only when creating a new file. This slice does not write `.studio.env`, does not rewrite `.lugo/info.json`, and does not copy compose files into `.studio/`.
 
 Round-trip these keys (types and V1 defaults):
 
@@ -227,7 +237,7 @@ On successful load, in-memory `app_version` is set to the running app version. T
 | App lifecycle | `src/main/main.js` |
 | Window | `src/main/windows/app-window.js` |
 | IPC registration | `src/main/ipc/` |
-| Docker / config / updater / notifications / media | `src/main/services/` |
+| Docker / config / project / updater / notifications / media | `src/main/services/` |
 | Preload bridge | `src/preload/preload.js`, `src/preload/api.d.ts` |
 | Channel names | `src/shared/ipc-channels.js` |
 | Router | `src/renderer/lib/router.js` |
@@ -238,4 +248,5 @@ On successful load, in-memory `app_version` is set to the running app version. T
 | Dialogs (confirm / error / progress) | `src/renderer/lib/dialogs.js` (shell-mounted; not IPC). Policy tests: `npm run test:dialogs` |
 | Notifications (OS + toast) | `src/main/services/notifications/`, `src/renderer/lib/toasts.js`. Tests: `npm run test:notifications` |
 | Updater (check + download) | `src/main/services/updater/` (dev mock origin `http://127.0.0.1:47821`; download-only into `.LugoStudio/updates/`). Tests: `npm run test:updater` |
-| Pages | `src/renderer/pages/loading`, `docker-check`, `start-project` (welcome CTAs later), `main` (thin placeholder until chrome) |
+| Open existing bot | `src/main/services/project/` (`isBotValid` from config helpers). IPC: `src/main/ipc/project.js`. Preload: `window.studio.project.openExisting`. Tests: `npm run test:project` |
+| Pages | `src/renderer/pages/loading`, `docker-check`, `start-project` (welcome, open existing), `main` (thin placeholder until chrome) |

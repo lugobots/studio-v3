@@ -64,6 +64,21 @@
  */
 
 /**
+ * @typedef {"empty" | "invalid" | "write"} OpenExistingReason
+ */
+
+/**
+ * Result of `studio.project.openExisting()`. Cancelled picker has `cancelled: true`
+ * and no error. Failures have `ok` not true plus an `error` string.
+ *
+ * @typedef {object} OpenExistingResult
+ * @property {boolean} [ok]
+ * @property {boolean} [cancelled]
+ * @property {string} [error]
+ * @property {OpenExistingReason} [reason]
+ */
+
+/**
  * @typedef {object} UpdateInfo
  * @property {boolean} available
  * @property {string | null} [version]
