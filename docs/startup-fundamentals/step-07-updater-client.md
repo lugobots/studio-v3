@@ -111,4 +111,4 @@ DEVELOPMENT.md items 1–3: upgrade check, upgrade process, version on the UI. T
 - Download-only into `{appData}/.LugoStudio/updates/`. Confirm / progress / error dialogs. Cancel deletes the partial file. Same-origin download URLs only.
 - Tests: `npm run test:updater` (45 passed). Electron dialog walkthrough was not run.
 - Deviations: no muted “update server unreachable” status (warning log only). Version also shown on loading/welcome headers until step 09 chrome.
-- PR: pending.
+- PR: https://github.com/lugobots/studio-v3/pull/7
