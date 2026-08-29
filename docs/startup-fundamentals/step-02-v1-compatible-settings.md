@@ -1,7 +1,7 @@
 # Step 02 — V1-compatible settings and Q2 detection
 
 **Phase:** Persistence
-**Status:** `pending`
+**Status:** `done`
 **Depends on:** —
 **Unblocks:** [Step 05](step-05-startup-navigation.md), [Step 08](step-08-welcome-open-existing.md)
 **Plan index:** [README](README.md)
@@ -103,12 +103,12 @@ Otherwise `projectCreated` is **false**. Do not delete `user.json` automatically
 
 ## Acceptance criteria
 
-- [ ] With no `user.json`, `config.get()` reports `projectCreated: false`.
-- [ ] Copying a real V1 `user.json` whose `project_path` still has `.lugo/info.json` → `projectCreated: true` and `projectPath` matches.
-- [ ] Same file but `project_path` deleted or missing `.lugo/info.json` → `projectCreated: false`; file left intact.
-- [ ] `config.set` of a partial patch (e.g. `debug_mode`) does not drop other V1 keys.
-- [ ] Path is under OS appData `.LugoStudio`, not Electron `userData` and not the git working tree (unless the developer’s appData happens to coincide).
-- [ ] `DEVELOPMENT.md` open decision for V1 settings path/format is filled in.
+- [x] With no `user.json`, `config.get()` reports `projectCreated: false`.
+- [x] Copying a real V1 `user.json` whose `project_path` still has `.lugo/info.json` → `projectCreated: true` and `projectPath` matches.
+- [x] Same file but `project_path` deleted or missing `.lugo/info.json` → `projectCreated: false`; file left intact.
+- [x] `config.set` of a partial patch (e.g. `debug_mode`) does not drop other V1 keys.
+- [x] Path is under OS appData `.LugoStudio`, not Electron `userData` and not the git working tree (unless the developer’s appData happens to coincide).
+- [x] `DEVELOPMENT.md` open decision for V1 settings path/format is filled in.
 
 ## Verification
 
@@ -129,3 +129,11 @@ Otherwise `projectCreated` is **false**. Do not delete `user.json` automatically
 - Settings page to edit image tags, debug flag, etc. (DEVELOPMENT.md item 7).
 - `.studio.env` generation when game run exists.
 - Reset-settings (V1 deleted the whole `.LugoStudio` folder) — not in this slice.
+
+## Landed
+
+- `src/main/services/config/` reads and writes `{appData}/.LugoStudio/user.json` with the full V1 key set. Q2 is derived from an absolute `project_path` plus `.lugo/info.json`.
+- `install_unique_id` uses `node-machine-id` `machineIdSync(true)` on first create.
+- Tests: `npm run test:config` (46 passed).
+- Deviations: `config.get()` also returns stored V1 keys (not only `projectCreated` / `projectPath`); write failures return `{ error }` instead of throwing.
+- PR: https://github.com/lugobots/studio-v3/pull/2

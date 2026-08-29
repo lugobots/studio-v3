@@ -9,7 +9,7 @@ Stand up the first usable slice of Lugo Studio V3: a local mock update server, V
 | Step | Title | Status | Owner | Depends on | Notes |
 |------|-------|--------|-------|------------|-------|
 | [01](step-01-mock-update-server.md) | Mock update HTTP server | `done` | — | — | Custom JSON; drop folder for binaries. [#1](https://github.com/lugobots/studio-v3/pull/1) |
-| [02](step-02-v1-compatible-settings.md) | V1-compatible settings + Q2 detection | `pending` | — | — | Same `user.json` path and schema |
+| [02](step-02-v1-compatible-settings.md) | V1-compatible settings + Q2 detection | `done` | — | — | Same `user.json` path and schema. [#2](https://github.com/lugobots/studio-v3/pull/2) |
 | [03](step-03-docker-daemon-gate.md) | Docker daemon gate | `pending` | — | — | Replaces dummy `/docker-check` |
 | [04](step-04-q1-image-pull.md) | Q1 image check + background pull | `pending` | — | 03 | Placeholder `lugobots/studio:latest` |
 | [05](step-05-startup-navigation.md) | Wire startup navigation | `pending` | — | 02, 03, 04 | Replace dummy Continue buttons |
@@ -22,7 +22,7 @@ Valid statuses: `pending` | `in-progress` | `done` | `blocked` | `deferred` | `c
 
 ## Current focus
 
-Step 02 — pending. Steps 02, 03, and 06 can start in parallel; 04 waits on 03; 05 waits on 02–04.
+Step 03 — pending. Steps 03 and 06 can start in parallel; 04 waits on 03; 05 waits on 03–04.
 
 ## Dependency graph
 

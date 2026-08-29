@@ -7,13 +7,17 @@
     "start": "electron .",
     "dev": "electron .",
     "mock-update-server": "node mock-update-server/server.js",
-    "test:mock-update-server": "node mock-update-server/test.js"
+    "test:mock-update-server": "node mock-update-server/test.js",
+    "test:config": "node src/main/services/config/test.js"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "node-machine-id": "^1.1.12"
+  },
   "devDependencies": {
     "electron": "^41.7.1"
   }
