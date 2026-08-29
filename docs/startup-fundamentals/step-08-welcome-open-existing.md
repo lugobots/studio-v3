@@ -102,4 +102,4 @@ Renderer: button → pick → open → `navigate("/main")` on success.
 - Success merges `project_path`, `compose_file` (`{folder}/docker-compose.yml`), `app_path`, `app_version`, then navigates to `/main`.
 - Tests: `npm run test:project` (59 passed). Electron picker click-through was not run.
 - Deviations: pick + open are one IPC (path never leaves main). No extra V1 “folder is empty” readdir check.
-- PR: pending.
+- PR: https://github.com/lugobots/studio-v3/pull/8
