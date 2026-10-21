@@ -5,7 +5,32 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron ."
+    "dev": "electron .",
+    "test": "node --test",
+    "pack:win": "electron-builder --win portable --x64"
+  },
+  "build": {
+    "appId": "ai.lugobots.studio",
+    "productName": "Lugo Studio",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "resources/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "artifactName": "Lugo-Studio-Windows-${version}.${ext}"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -13,6 +38,7 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^41.7.1"
+    "electron": "^41.7.1",
+    "electron-builder": "^26.15.3"
   }
 }

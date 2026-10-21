@@ -1,7 +1,15 @@
 "use strict";
 
-function show(_payload) {
-  // TODO: show a native OS notification
+const { CHANNELS } = require("../../../shared/ipc-channels");
+
+let webContents = null;
+
+function attach(contents) {
+  webContents = contents;
 }
 
-module.exports = { show };
+function show(payload) {
+  webContents?.send(CHANNELS.notifications.event, payload);
+}
+
+module.exports = { attach, show };
