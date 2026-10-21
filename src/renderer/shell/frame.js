@@ -6,10 +6,6 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   const frame = document.createElement("div");
   frame.className = "app-frame";
 
-  const tabs = document.createElement("header");
-  tabs.className = "tab-bar";
-  tabs.setAttribute("role", "tablist");
-
   const menu = document.createElement("aside");
   menu.className = "side-menu";
   const actions = document.createElement("nav");
@@ -18,10 +14,17 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   pinned.className = "side-menu-pinned";
   menu.append(actions, pinned);
 
+  const workspace = document.createElement("div");
+  workspace.className = "workspace";
+  const tabs = document.createElement("div");
+  tabs.className = "tab-bar";
+  tabs.setAttribute("role", "tablist");
   const windowPane = document.createElement("main");
   windowPane.className = "app-window";
+  windowPane.setAttribute("role", "tabpanel");
+  workspace.append(tabs, windowPane);
 
-  frame.append(tabs, menu, windowPane);
+  frame.append(menu, workspace);
   outlet.append(frame);
 
   const state = { tab: "workspace", view: "tab", config: null };
@@ -44,7 +47,12 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       button.type = "button";
       button.className = "tab";
       button.setAttribute("role", "tab");
-      button.setAttribute("aria-selected", String(state.tab === tab.id && state.view === "tab"));
+      const selected = state.tab === tab.id;
+      button.setAttribute("aria-selected", String(selected));
+      button.id = `tab-${tab.id}`;
+      if (selected) {
+        windowPane.setAttribute("aria-labelledby", button.id);
+      }
       button.textContent = tab.label;
       button.addEventListener("click", () => {
         state.tab = tab.id;
