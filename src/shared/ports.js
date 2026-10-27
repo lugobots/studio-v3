@@ -2,7 +2,9 @@
 
 const DEFAULTS = {
   image: "lugobots/studio:latest",
+  editorImage: "lugobots/vs-code-for-lugo:latest",
   containerName: "lugo-studio-v3",
+  editorContainerName: "lugo-studio-v3-editor",
   mountTarget: "/home/coder/project",
   apiPort: "8081",
   gameServerPort: "5000",
@@ -23,4 +25,8 @@ function imageFrom(env = process.env) {
   return env.LUGO_STUDIO_IMAGE || DEFAULTS.image;
 }
 
-module.exports = { DEFAULTS, portsFrom, imageFrom };
+function editorImageFrom(env = process.env) {
+  return env.LUGO_VS_CODE_IMAGE || DEFAULTS.editorImage;
+}
+
+module.exports = { DEFAULTS, portsFrom, imageFrom, editorImageFrom };

@@ -4,6 +4,7 @@ const session = require("../services/session");
 
 function register() {
   ipcMain.handle(CHANNELS.startup.next, () => session.next());
+  ipcMain.handle(CHANNELS.startup.retry, () => session.retry());
   ipcMain.handle(CHANNELS.project.pickFolder, () => session.pickFolder());
   ipcMain.handle(CHANNELS.project.open, (_event, folder) => session.open(folder));
   ipcMain.handle(CHANNELS.project.create, (_event, payload) => session.create(payload));

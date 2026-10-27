@@ -3,7 +3,7 @@
 const { execFile, spawn } = require("node:child_process");
 const { CHANNELS } = require("../../../shared/ipc-channels");
 const { DEFAULTS, imageFrom } = require("../../../shared/ports");
-const { runArgs } = require("./args");
+const { editorRunArgs, runArgs } = require("./args");
 
 let webContents = null;
 let pullState = { status: "idle", message: "" };
@@ -82,24 +82,87 @@ async function ensureImage() {
   return { ok: true, imagePresent: status.imagePresent, pull: pullState };
 }
 
-async function ensureContainer(projectPath) {
-  const running = await exec("docker", ["inspect", "-f", "{{.State.Running}}", DEFAULTS.containerName]);
-  if (running.ok && running.stdout.trim() === "true") {
+async function containerIsRunning(name = DEFAULTS.containerName) {
+  const running = await exec("docker", ["inspect", "-f", "{{.State.Running}}", name]);
+  return running.ok && running.stdout.trim() === "true";
+}
+
+async function ensureNamedContainer(name, args) {
+  if (await containerIsRunning(name)) {
+    return { ok: true, name };
+  }
+  const inspected = await exec("docker", ["inspect", name]);
+  if (inspected.ok) {
+    await exec("docker", ["rm", "-f", name], 20000);
+  }
+  const started = await exec("docker", args, 120000);
+  if (!started.ok) {
+    return { ok: false, error: (started.stderr || started.stdout || `Could not start ${name}`).trim() };
+  }
+  return { ok: true, name };
+}
+
+async function runningHostPath(name = DEFAULTS.containerName) {
+  if (!(await containerIsRunning(name))) {
+    return { running: false, hostPath: "" };
+  }
+  const inspected = await exec("docker", [
+    "inspect",
+    "-f",
+    "{{range .Config.Env}}{{println .}}{{end}}",
+    name,
+  ]);
+  if (!inspected.ok) {
+    return { running: true, hostPath: null };
+  }
+  const prefix = "LUGO_HOST_PROJECT_PATH=";
+  const line = inspected.stdout.split("\n").find((item) => item.startsWith(prefix));
+  return { running: true, hostPath: line ? line.slice(prefix.length) : "" };
+}
+
+async function ensureContainer(projectPath, hostProjectPath = "") {
+  const current = await runningHostPath();
+  if (current.running && current.hostPath === hostProjectPath) {
     return { ok: true, name: DEFAULTS.containerName };
   }
-  if (running.ok) {
-    await exec("docker", ["rm", "-f", DEFAULTS.containerName], 20000);
+  if (current.running) {
+    await stopContainer();
   }
-  const started = await exec("docker", runArgs(projectPath), 120000);
+  return ensureNamedContainer(
+    DEFAULTS.containerName,
+    runArgs(projectPath, process.env, hostProjectPath),
+  );
+}
+
+async function stopEditor() {
+  const editor = await exec("docker", ["rm", "-f", DEFAULTS.editorContainerName], 20000);
+  const editorMissing = /No such container/i.test(editor.stderr || "");
+  return { ok: editor.ok || editorMissing };
+}
+
+async function recentLogs(name = DEFAULTS.containerName) {
+  const result = await exec("docker", ["logs", "--tail", "5", name], 5000);
+  const text = `${result.stdout}\n${result.stderr}`.trim();
+  if (!text) {
+    return "";
+  }
+  const line = text.split("\n").filter(Boolean).pop();
+  return line.slice(0, 300);
+}
+
+async function ensureEditor(projectPath) {
+  const started = await ensureNamedContainer(DEFAULTS.editorContainerName, editorRunArgs(projectPath));
   if (!started.ok) {
-    return { ok: false, error: started.stderr || "Could not start the Studio image" };
+    notify({ mode: "notify", title: "Editor", body: started.error });
   }
-  return { ok: true, name: DEFAULTS.containerName };
+  return started;
 }
 
 async function stopContainer() {
-  const stopped = await exec("docker", ["rm", "-f", DEFAULTS.containerName], 20000);
-  return { ok: stopped.ok };
+  const editor = await exec("docker", ["rm", "-f", DEFAULTS.editorContainerName], 20000);
+  const studio = await exec("docker", ["rm", "-f", DEFAULTS.containerName], 20000);
+  const editorMissing = /No such container/i.test(editor.stderr || "");
+  return { ok: studio.ok && (editor.ok || editorMissing) };
 }
 
 module.exports = {
@@ -107,6 +170,10 @@ module.exports = {
   getStatus,
   startPull,
   ensureImage,
+  containerIsRunning,
   ensureContainer,
+  ensureEditor,
   stopContainer,
+  stopEditor,
+  recentLogs,
 };

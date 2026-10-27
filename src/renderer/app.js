@@ -6,10 +6,15 @@ import { renderLoading } from "./pages/loading/index.js";
 import { renderDockerCheck } from "./pages/docker-check/index.js";
 import { renderStartProject } from "./pages/start-project/index.js";
 import { renderMain } from "./pages/main/index.js";
+import { renderApiLoading } from "./pages/api-loading/index.js";
+import { renderApiError } from "./pages/api-error/index.js";
+import { setGateMessage } from "./lib/gate-message.js";
 
 registerRoute("/loading", renderLoading);
 registerRoute("/docker-check", renderDockerCheck);
 registerRoute("/start-project", renderStartProject);
+registerRoute("/api-loading", renderApiLoading);
+registerRoute("/api-error", renderApiError);
 registerRoute("/main", renderMain);
 
 const outlet = document.createElement("div");
@@ -65,7 +70,15 @@ host.notifications.onEvent((payload) => {
 startRouter(outlet);
 syncShell();
 
+if (host.startup.onRoute) {
+  host.startup.onRoute((payload) => {
+    setGateMessage(payload.message);
+    navigate(payload.route);
+  });
+}
+
 host.startup.next().then(async (next) => {
+  setGateMessage(next.message);
   navigate(next.route || "/loading");
   const config = await host.config.get();
   applyTelemetry(document, config);

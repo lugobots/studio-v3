@@ -3,6 +3,7 @@ const { createAppWindow } = require("./windows/app-window");
 const { registerIpc } = require("./ipc/register");
 const notifications = require("./services/notifications");
 const docker = require("./services/docker");
+const session = require("./services/session");
 const updater = require("./services/updater");
 
 app.whenReady().then(() => {
@@ -11,6 +12,7 @@ app.whenReady().then(() => {
   const win = createAppWindow();
   notifications.attach(win.webContents);
   docker.attach(win.webContents);
+  session.attach(win.webContents);
   updater.watch(win);
 
   app.on("activate", () => {
@@ -18,6 +20,7 @@ app.whenReady().then(() => {
       const next = createAppWindow();
       notifications.attach(next.webContents);
       docker.attach(next.webContents);
+      session.attach(next.webContents);
       updater.watch(next);
     }
   });

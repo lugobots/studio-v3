@@ -20,6 +20,8 @@ const CHANNELS = {
   },
   startup: {
     next: "startup:next",
+    retry: "startup:retry",
+    route: "startup:route",
   },
   project: {
     pickFolder: "project:pick-folder",

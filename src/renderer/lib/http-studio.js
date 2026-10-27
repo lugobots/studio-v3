@@ -26,6 +26,17 @@ export function createHttpStudio({
     return body;
   }
 
+  function actionResult(body) {
+    if (body && body.implemented === false) {
+      return {
+        ok: false,
+        error: "This action is not available in this Studio version yet.",
+        body,
+      };
+    }
+    return { ok: true, body };
+  }
+
   function telemetryEnabled() {
     if (!storage) {
       return true;
@@ -74,11 +85,21 @@ export function createHttpStudio({
     startup: {
       async next() {
         try {
+          await request("/health");
           const body = await request("/studio/status");
           return { route: body.project_status === "ready" ? "/main" : "/start-project" };
-        } catch {
-          return { route: "/main" };
+        } catch (error) {
+          return {
+            route: "/api-error",
+            message: error.message || "The Studio API is not available.",
+          };
         }
+      },
+      async retry() {
+        return this.next();
+      },
+      onRoute() {
+        return () => {};
       },
     },
     project: {
@@ -88,8 +109,11 @@ export function createHttpStudio({
     },
     match: {
       async start() {
-        const body = await request("/game/start", { method: "POST" });
-        return { ok: true, body };
+        try {
+          return actionResult(await request("/game/start", { method: "POST" }));
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
       },
       async status() {
         const body = await request("/studio/status");
@@ -99,12 +123,15 @@ export function createHttpStudio({
     publish: {
       async bot({ botUri, tag }) {
         const body = new URLSearchParams({ bot_uri: botUri, tag });
-        const result = await request("/bot/publish", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body,
-        });
-        return { ok: true, body: result };
+        try {
+          return actionResult(await request("/bot/publish", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body,
+          }));
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
       },
     },
   };

@@ -171,6 +171,37 @@ h1 {
   color: #111;
 }
 
+.api-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: 1rem;
+  background: rgb(144, 204, 199);
+  text-align: center;
+}
+
+.api-gate-text {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.api-gate img {
+  width: 300px;
+  margin: 12px 0 20px;
+}
+
+.api-gate-retry {
+  background: #ffffff;
+  color: #374151;
+}
+
 input,
 select {
   font: inherit;
