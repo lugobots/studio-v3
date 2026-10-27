@@ -1,8 +1,8 @@
 "use strict";
 
-const { DEFAULTS, imageFrom, portsFrom } = require("../../../shared/ports");
+const { DEFAULTS, editorImageFrom, imageFrom, portsFrom } = require("../../../shared/ports");
 
-function runArgs(projectPath, env = process.env) {
+function runArgs(projectPath, env = process.env, hostProjectPath = "") {
   const ports = portsFrom(env);
   const image = imageFrom(env);
   return [
@@ -18,8 +18,6 @@ function runArgs(projectPath, env = process.env) {
     `${ports.gameServer}:${ports.gameServer}`,
     "-p",
     `${ports.gameFrontend}:${ports.gameFrontend}`,
-    "-p",
-    `${ports.vsCode}:${ports.vsCode}`,
     "-e",
     `LUGO_STUDIO_API_PORT=${ports.api}`,
     "-e",
@@ -27,11 +25,32 @@ function runArgs(projectPath, env = process.env) {
     "-e",
     `LUGO_STUDIO_GAME_FRONTEND_PORT=${ports.gameFrontend}`,
     "-e",
-    `LUGO_VS_CODE_PORT=${ports.vsCode}`,
+    `LUGO_HOST_PROJECT_PATH=${hostProjectPath}`,
     "-e",
     `BOT_SOURCE_PATH=${DEFAULTS.mountTarget}`,
+    image,
+    "api",
+  ];
+}
+
+function editorRunArgs(projectPath, env = process.env) {
+  const ports = portsFrom(env);
+  const image = editorImageFrom(env);
+  return [
+    "run",
+    "-d",
+    "--name",
+    DEFAULTS.editorContainerName,
+    "-v",
+    `${projectPath}:${DEFAULTS.mountTarget}`,
+    "-p",
+    `${ports.vsCode}:${ports.vsCode}`,
+    "-e",
+    `PORT=${ports.vsCode}`,
+    "-e",
+    `LUGO_VS_CODE_PORT=${ports.vsCode}`,
     image,
   ];
 }
 
-module.exports = { runArgs };
+module.exports = { runArgs, editorRunArgs };

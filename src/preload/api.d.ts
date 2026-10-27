@@ -42,7 +42,9 @@ export interface StudioApi {
     onEvent: (callback: (payload: { mode?: string; title: string; body?: string; action?: string }) => void) => () => void;
   };
   startup: {
-    next: () => Promise<{ route: string }>;
+    next: () => Promise<{ route: string; message?: string }>;
+    retry: () => Promise<{ route: string; message?: string }>;
+    onRoute: (callback: (payload: { route: string; message?: string }) => void) => () => void;
   };
   project: {
     pickFolder: () => Promise<{ ok: boolean; folder?: string; cancelled?: boolean; error?: string }>;

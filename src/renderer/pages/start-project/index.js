@@ -32,7 +32,7 @@ export function renderStartProject(outlet) {
       await reportResult(dialogs, opened);
       return;
     }
-    navigate("/main");
+    navigate(opened.route || "/api-loading");
   });
 
   const form = document.createElement("form");
@@ -69,7 +69,7 @@ export function renderStartProject(outlet) {
       await reportResult(dialogs, created);
       return;
     }
-    navigate("/main");
+    navigate(created.route || "/api-loading");
   });
 
   page.append(open, form);

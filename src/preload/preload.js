@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld("studio", {
   },
   startup: {
     next: () => ipcRenderer.invoke(CHANNELS.startup.next),
+    retry: () => ipcRenderer.invoke(CHANNELS.startup.retry),
+    onRoute: (callback) => subscribe(CHANNELS.startup.route, callback),
   },
   project: {
     pickFolder: () => ipcRenderer.invoke(CHANNELS.project.pickFolder),

@@ -17,7 +17,9 @@ function createAppWindow() {
       preload: path.join(__dirname, "../../preload/preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      // The preload imports the shared channel list. The sandboxed resolver
+      // cannot load that module, which leaves the page without window.studio.
+      sandbox: false,
     },
   });
 

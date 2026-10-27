@@ -34,6 +34,15 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function healthy(fetchImpl) {
+  try {
+    const body = await request("/health", { method: "GET" }, fetchImpl);
+    return Boolean(body && body.status === "OK");
+  } catch {
+    return false;
+  }
+}
+
 async function waitUntilReady(fetchImpl, attempts = 20) {
   let last = "Studio API is not ready";
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -74,4 +83,4 @@ async function publishBot({ botUri, tag }, fetchImpl) {
   );
 }
 
-module.exports = { apiBase, request, waitUntilReady, status, startMatch, setupBot, publishBot };
+module.exports = { apiBase, request, healthy, waitUntilReady, status, startMatch, setupBot, publishBot };
