@@ -4,7 +4,7 @@ const { app, dialog } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { CHANNELS } = require("../../../shared/ipc-channels");
-const { openBot } = require("../bots/actions");
+const { createBot, inspectDirectory, openBot } = require("../bots/actions");
 const { checkBotCompatibility } = require("../bots/compatibility");
 const config = require("../config");
 const docker = require("../docker");
@@ -166,41 +166,38 @@ async function open(folder) {
   });
 }
 
-async function create({ folder, language }) {
-  if (!folder || !language) {
-    return { ok: false, error: "Choose a language and a folder." };
-  }
-  const image = await docker.ensureImage();
-  if (!image.ok) {
-    return image;
-  }
-  watchGeneration += 1;
-  const container = await docker.ensureContainer(folder, folder);
-  if (!container.ok) {
-    return container;
-  }
-  const ready = await studioApi.waitUntilReady(undefined, HEALTH_DEADLINE_MS / HEALTH_INTERVAL_MS);
-  if (!ready.ok) {
-    startWatch(folder);
-    return ready;
-  }
-  try {
-    const body = await studioApi.setupBot(language);
-    const result = actionResult(body);
-    if (!result.ok) {
-      startWatch(folder);
-      return result;
-    }
-  } catch (error) {
-    startWatch(folder);
-    return { ok: false, error: error.message };
-  }
-  const saved = await config.set({
-    project_path: folder,
-    compose_file: path.join(folder, "docker-compose.yml"),
+async function create({ folder, language, overwrite }) {
+  return createBot({
+    folder,
+    language,
+    overwrite: Boolean(overwrite),
+    check: checkBotCompatibility,
+    listEntries: inspectDirectory,
+    remember: (dir) => config.rememberBot(dir),
+    stop: () => docker.stopContainer(),
+    start: async (dir) => {
+      const image = await docker.ensureImage();
+      if (!image.ok) {
+        return image;
+      }
+      const container = await docker.ensureContainer(dir, dir);
+      if (!container.ok) {
+        return container;
+      }
+      return studioApi.waitUntilReady(undefined, HEALTH_DEADLINE_MS / HEALTH_INTERVAL_MS);
+    },
+    setup: async (lang) => {
+      try {
+        return actionResult(await studioApi.setupBot(lang));
+      } catch (error) {
+        return { ok: false, error: error.message };
+      }
+    },
+    watch: (dir, route) => {
+      watchGeneration += 1;
+      startWatch(dir, route);
+    },
   });
-  startWatch(folder);
-  return { ok: true, config: saved, route: "/api-loading" };
 }
 
 async function startMatch() {
