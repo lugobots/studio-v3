@@ -24,6 +24,28 @@ test("round-trip keeps unknown keys and defaults telemetry on", () => {
   assert.equal(store.telemetryEnabled(saved), false);
 });
 
+test("a missing bot list is seeded from project_path", () => {
+  assert.deepEqual(store.botPaths({ project_path: "/bots/demo" }), ["/bots/demo"]);
+  assert.deepEqual(store.botPaths({ project_path: "" }), []);
+  assert.deepEqual(store.botPaths({ bot_paths: [], project_path: "/bots/demo" }), []);
+});
+
+test("adding a listed path does not duplicate it and still writes project_path", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-config-"));
+  const file = store.settingsFile(dir, "linux");
+  store.write(file, { custom_flag: true, project_path: "/bots/demo" });
+  const seeded = store.rememberBot(store.read(file).data, "/bots/demo");
+  assert.deepEqual(seeded.bot_paths, ["/bots/demo"]);
+  assert.equal(seeded.project_path, "/bots/demo");
+  const added = store.rememberBot(seeded, "/bots/other");
+  assert.deepEqual(added.bot_paths, ["/bots/demo", "/bots/other"]);
+  store.write(file, added);
+  const saved = store.read(file).data;
+  assert.equal(saved.custom_flag, true);
+  assert.equal(saved.project_path, "/bots/other");
+  assert.deepEqual(store.rememberBot(saved, "/bots/other").bot_paths, ["/bots/demo", "/bots/other"]);
+});
+
 test("project readiness requires info.json", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-bot-"));
   assert.equal(store.projectReady({ project_path: dir }, fs.existsSync), false);

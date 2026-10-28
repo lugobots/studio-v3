@@ -15,6 +15,7 @@ function view(record) {
   const data = record.data;
   return {
     ...data,
+    bot_paths: store.botPaths(data),
     projectCreated: store.projectReady(data, fs.existsSync),
     telemetryEnabled: store.telemetryEnabled(data),
     measurementId: process.env.STUDIO_GA_MEASUREMENT_ID || "",
