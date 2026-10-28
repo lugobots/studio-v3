@@ -122,15 +122,11 @@ async function startApi(saved) {
 
 async function next() {
   const status = await docker.getStatus();
-  const decision = decideStartup({ dockerRunning: status.running });
-  if (!decision.watch) {
-    return decision;
-  }
-  if (!status.imagePresent) {
-    docker.startPull();
-  }
   const saved = await config.get();
-  return startApi(saved);
+  return decideStartup({
+    dockerRunning: status.running,
+    botPaths: saved.bot_paths,
+  });
 }
 
 async function retry() {
