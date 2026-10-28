@@ -4,6 +4,8 @@ const { app, dialog } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { CHANNELS } = require("../../../shared/ipc-channels");
+const { openBot } = require("../bots/actions");
+const { checkBotCompatibility } = require("../bots/compatibility");
 const config = require("../config");
 const docker = require("../docker");
 const { openRuntime } = require("../docker/runtime");
@@ -42,7 +44,7 @@ function launchPaths(saved) {
   return { host, mount: host || emptyProjectDir() };
 }
 
-function startWatch(projectPath) {
+function startWatch(projectPath, forcedRoute = "") {
   const token = ++watchGeneration;
   const startedAt = Date.now();
   let seenHealthy = false;
@@ -55,15 +57,17 @@ function startWatch(projectPath) {
     }
     let running = false;
     let healthy = false;
-    let readyRoute = "/start-project";
+    let readyRoute = forcedRoute || "/start-project";
     try {
       running = await docker.containerIsRunning();
       if (running) {
         healthy = await studioApi.healthy();
       }
       if (healthy) {
-        const body = await studioApi.status();
-        readyRoute = routeForStatus(body);
+        if (!forcedRoute) {
+          const body = await studioApi.status();
+          readyRoute = routeForStatus(body);
+        }
         if (readyRoute === "/main" && projectPath && !editorStarted) {
           editorStarted = true;
           await openRuntime({
@@ -149,20 +153,17 @@ async function pickFolder() {
 }
 
 async function open(folder) {
-  if (!config.projectFileReady(folder)) {
-    return { ok: false, error: "That folder is not a Lugo bot (.lugo/info.json is missing)." };
-  }
-  watchGeneration += 1;
-  const saved = await config.set({
-    project_path: folder,
-    compose_file: path.join(folder, "docker-compose.yml"),
+  return openBot({
+    folder,
+    check: checkBotCompatibility,
+    remember: (dir) => config.rememberBot(dir),
+    stop: () => docker.stopContainer(),
+    start: (dir) => docker.ensureContainer(dir, dir),
+    watch: (dir, route) => {
+      watchGeneration += 1;
+      startWatch(dir, route);
+    },
   });
-  const started = await docker.ensureContainer(folder, folder);
-  if (!started.ok) {
-    return { ok: false, error: started.error };
-  }
-  startWatch(folder);
-  return { ok: true, config: saved, route: "/api-loading" };
 }
 
 async function create({ folder, language }) {
