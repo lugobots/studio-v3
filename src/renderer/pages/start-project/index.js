@@ -41,8 +41,8 @@ export function renderStartProject(outlet) {
   language.setAttribute("aria-label", "Bot language");
   for (const [value, label] of [
     ["python", "Python"],
-    ["typescript", "TypeScript"],
     ["go", "Go"],
+    ["typescript", "JavaScript"],
   ]) {
     const option = document.createElement("option");
     option.value = value;
