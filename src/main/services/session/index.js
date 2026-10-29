@@ -4,6 +4,8 @@ const { app, dialog } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { CHANNELS } = require("../../../shared/ipc-channels");
+const { createBot, inspectDirectory, openBot } = require("../bots/actions");
+const { checkBotCompatibility } = require("../bots/compatibility");
 const config = require("../config");
 const docker = require("../docker");
 const { openRuntime } = require("../docker/runtime");
@@ -16,9 +18,15 @@ const {
   decideStartup,
   routeForStatus,
 } = require("./gate");
+const { describeStartup } = require("../../../shared/startup-progress");
 
 let webContents = null;
 let watchGeneration = 0;
+let lastProgress = describeStartup({
+  phase: "docker",
+  detail: "Checking Docker and your bot.",
+});
+let lastProgressKey = "";
 
 function attach(contents) {
   webContents = contents;
@@ -29,6 +37,22 @@ function emitRoute(decision) {
     route: decision.route,
     message: decision.message || "",
   });
+}
+
+function emitProgress(input) {
+  const progress = describeStartup(input);
+  const key = JSON.stringify(progress);
+  if (key === lastProgressKey) {
+    return progress;
+  }
+  lastProgressKey = key;
+  lastProgress = progress;
+  webContents?.send(CHANNELS.startup.progress, progress);
+  return progress;
+}
+
+function currentProgress() {
+  return lastProgress;
 }
 
 function emptyProjectDir() {
@@ -42,12 +66,19 @@ function launchPaths(saved) {
   return { host, mount: host || emptyProjectDir() };
 }
 
-function startWatch(projectPath) {
+function startWatch(projectPath, forcedRoute = "", flow = "startup") {
   const token = ++watchGeneration;
   const startedAt = Date.now();
   let seenHealthy = false;
   let editorStarted = false;
   let lastKey = "";
+  emitProgress({
+    flow,
+    phase: "health",
+    detail: "Waiting for the API to respond.",
+    elapsedMs: 0,
+    deadlineMs: HEALTH_DEADLINE_MS,
+  });
 
   const tick = async () => {
     if (token !== watchGeneration) {
@@ -55,15 +86,17 @@ function startWatch(projectPath) {
     }
     let running = false;
     let healthy = false;
-    let readyRoute = "/start-project";
+    let readyRoute = forcedRoute || "/start-project";
     try {
       running = await docker.containerIsRunning();
       if (running) {
         healthy = await studioApi.healthy();
       }
       if (healthy) {
-        const body = await studioApi.status();
-        readyRoute = routeForStatus(body);
+        if (!forcedRoute) {
+          const body = await studioApi.status();
+          readyRoute = routeForStatus(body);
+        }
         if (readyRoute === "/main" && projectPath && !editorStarted) {
           editorStarted = true;
           await openRuntime({
@@ -87,6 +120,19 @@ function startWatch(projectPath) {
       readyRoute,
     });
     seenHealthy = decision.seenHealthy;
+    if (decision.route === "/api-loading") {
+      const elapsedMs = Date.now() - startedAt;
+      const seconds = Math.round(elapsedMs / 1000);
+      emitProgress({
+        flow,
+        phase: "health",
+        detail: seconds < 1 ? "Waiting for the API to respond." : `${seconds}s elapsed`,
+        elapsedMs,
+        deadlineMs: HEALTH_DEADLINE_MS,
+      });
+    } else if (decision.route === "/main" || decision.route === "/start-project") {
+      emitProgress({ flow, phase: "ready", detail: "Opening Studio." });
+    }
     if (!running && decision.route === "/api-error") {
       const logs = await docker.recentLogs();
       if (logs) {
@@ -121,16 +167,13 @@ async function startApi(saved) {
 }
 
 async function next() {
+  emitProgress({ phase: "docker", detail: "Checking that Docker is running." });
   const status = await docker.getStatus();
-  const decision = decideStartup({ dockerRunning: status.running });
-  if (!decision.watch) {
-    return decision;
-  }
-  if (!status.imagePresent) {
-    docker.startPull();
-  }
   const saved = await config.get();
-  return startApi(saved);
+  return decideStartup({
+    dockerRunning: status.running,
+    botPaths: saved.bot_paths,
+  });
 }
 
 async function retry() {
@@ -153,57 +196,130 @@ async function pickFolder() {
 }
 
 async function open(folder) {
-  if (!config.projectFileReady(folder)) {
-    return { ok: false, error: "That folder is not a Lugo bot (.lugo/info.json is missing)." };
-  }
-  watchGeneration += 1;
-  const saved = await config.set({
-    project_path: folder,
-    compose_file: path.join(folder, "docker-compose.yml"),
+  return openBot({
+    folder,
+    check: checkBotCompatibility,
+    remember: (dir) => config.rememberBot(dir),
+    stop: () => docker.stopContainer(),
+    start: (dir) => docker.ensureContainer(dir, dir),
+    watch: (dir, route) => {
+      watchGeneration += 1;
+      startWatch(dir, route);
+    },
   });
-  const started = await docker.ensureContainer(folder, folder);
-  if (!started.ok) {
-    return { ok: false, error: started.error };
-  }
-  startWatch(folder);
-  return { ok: true, config: saved, route: "/api-loading" };
 }
 
-async function create({ folder, language }) {
-  if (!folder || !language) {
-    return { ok: false, error: "Choose a language and a folder." };
-  }
-  const image = await docker.ensureImage();
-  if (!image.ok) {
-    return image;
-  }
-  watchGeneration += 1;
-  const container = await docker.ensureContainer(folder, folder);
-  if (!container.ok) {
-    return container;
-  }
-  const ready = await studioApi.waitUntilReady(undefined, HEALTH_DEADLINE_MS / HEALTH_INTERVAL_MS);
-  if (!ready.ok) {
-    startWatch(folder);
-    return ready;
-  }
-  try {
-    const body = await studioApi.setupBot(language);
-    const result = actionResult(body);
-    if (!result.ok) {
-      startWatch(folder);
-      return result;
-    }
-  } catch (error) {
-    startWatch(folder);
-    return { ok: false, error: error.message };
-  }
-  const saved = await config.set({
-    project_path: folder,
-    compose_file: path.join(folder, "docker-compose.yml"),
+const LANGUAGE_LABEL = {
+  python: "Python",
+  go: "Go",
+  typescript: "JavaScript",
+};
+
+async function create({ folder, language, overwrite }) {
+  let creating = false;
+  return createBot({
+    folder,
+    language,
+    overwrite: Boolean(overwrite),
+    check: checkBotCompatibility,
+    listEntries: inspectDirectory,
+    remember: (dir) => config.rememberBot(dir),
+    onWork: (kind) => {
+      creating = kind === "create";
+      if (creating) {
+        emitProgress({
+          flow: "create",
+          phase: "docker",
+          detail: "Checking the folder you chose.",
+        });
+        return;
+      }
+      emitProgress({ phase: "container", detail: "Opening this bot." });
+    },
+    stop: () => docker.stopContainer(),
+    start: async (dir) => {
+      const flow = creating ? "create" : "startup";
+      emitProgress({ flow, phase: "image", detail: "Preparing the Studio image." });
+      const image = await docker.ensureImage();
+      if (!image.ok) {
+        return image;
+      }
+      emitProgress({
+        flow,
+        phase: "container",
+        detail: creating ? "Starting the API that will create the bot." : "Starting the Studio API.",
+      });
+      const container = await docker.ensureContainer(dir, dir);
+      if (!container.ok) {
+        return container;
+      }
+      if (!creating) {
+        return studioApi.waitUntilReady(undefined, HEALTH_DEADLINE_MS / HEALTH_INTERVAL_MS);
+      }
+      const startedAt = Date.now();
+      const reportWait = () => {
+        const elapsedMs = Date.now() - startedAt;
+        const seconds = Math.round(elapsedMs / 1000);
+        emitProgress({
+          flow,
+          phase: "container",
+          detail:
+            seconds < 2
+              ? "Waiting until the API can set up the bot."
+              : `Waiting until the API can set up the bot. ${seconds}s elapsed.`,
+          elapsedMs,
+          deadlineMs: HEALTH_DEADLINE_MS,
+        });
+      };
+      reportWait();
+      const timer = setInterval(reportWait, 1000);
+      try {
+        return await studioApi.waitUntilReady(undefined, HEALTH_DEADLINE_MS / HEALTH_INTERVAL_MS);
+      } finally {
+        clearInterval(timer);
+      }
+    },
+    setup: async (lang) => {
+      const startedAt = Date.now();
+      const template = LANGUAGE_LABEL[lang] || "bot";
+      const deadlineMs = 120000;
+      const reportSetup = () => {
+        const elapsedMs = Date.now() - startedAt;
+        const seconds = Math.round(elapsedMs / 1000);
+        emitProgress({
+          flow: "create",
+          phase: "setup",
+          detail:
+            seconds < 2
+              ? `Downloading the ${template} bot template. This can take a minute.`
+              : `Downloading the ${template} bot template. ${seconds}s elapsed.`,
+          elapsedMs,
+          deadlineMs,
+        });
+      };
+      reportSetup();
+      const timer = setInterval(reportSetup, 1000);
+      try {
+        return actionResult(await studioApi.setupBot(lang));
+      } catch (error) {
+        return { ok: false, error: error.message };
+      } finally {
+        clearInterval(timer);
+      }
+    },
+    watch: (dir, route) => {
+      watchGeneration += 1;
+      startWatch(dir, route, creating ? "create" : "startup");
+    },
   });
-  startWatch(folder);
-  return { ok: true, config: saved, route: "/api-loading" };
+}
+
+async function remove(folder) {
+  if (!folder) {
+    return { ok: false, error: "Choose a bot to remove." };
+  }
+  const saved = await config.forgetBot(folder);
+  return { ok: true, config: saved };
 }
 
 async function startMatch() {
@@ -243,4 +359,31 @@ async function projectStatus() {
   }
 }
 
-module.exports = { attach, next, retry, pickFolder, open, create, startMatch, publish, projectStatus };
+docker.setPullListener((pull) => {
+  const phase = lastProgress.phase;
+  const flow = lastProgress.flow;
+  if (phase !== "docker" && phase !== "image") {
+    return;
+  }
+  if (pull.status === "pulling") {
+    emitProgress({ flow, phase: "image", detail: pull.message || "Downloading the Studio image." });
+    return;
+  }
+  if (pull.status === "present") {
+    emitProgress({ flow, phase: "container", detail: "Starting the container." });
+  }
+});
+
+module.exports = {
+  attach,
+  next,
+  retry,
+  current: currentProgress,
+  pickFolder,
+  open,
+  create,
+  remove,
+  startMatch,
+  publish,
+  projectStatus,
+};

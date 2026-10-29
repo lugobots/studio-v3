@@ -9,16 +9,20 @@ const {
   routeForStatus,
 } = require("../src/main/services/session/gate");
 
-test("startup starts the api whenever docker is up", () => {
+test("startup shows the bot list after docker and does not watch a container", () => {
   assert.equal(HEALTH_INTERVAL_MS, 500);
   assert.equal(HEALTH_DEADLINE_MS, 180000);
-  assert.deepEqual(decideStartup({ dockerRunning: false }), {
+  assert.deepEqual(decideStartup({ dockerRunning: false, botPaths: ["/bots/a"] }), {
     route: "/docker-check",
     watch: false,
   });
-  assert.deepEqual(decideStartup({ dockerRunning: true }), {
-    route: "/api-loading",
-    watch: true,
+  assert.deepEqual(decideStartup({ dockerRunning: true, botPaths: [] }), {
+    route: "/start-project",
+    watch: false,
+  });
+  assert.deepEqual(decideStartup({ dockerRunning: true, botPaths: ["/bots/a"] }), {
+    route: "/bots",
+    watch: false,
   });
   assert.equal(routeForStatus({ project_status: "missing" }), "/start-project");
   assert.equal(routeForStatus({ project_status: "ready" }), "/main");

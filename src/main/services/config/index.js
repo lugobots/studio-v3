@@ -15,6 +15,7 @@ function view(record) {
   const data = record.data;
   return {
     ...data,
+    bot_paths: store.botPaths(data),
     projectCreated: store.projectReady(data, fs.existsSync),
     telemetryEnabled: store.telemetryEnabled(data),
     measurementId: process.env.STUDIO_GA_MEASUREMENT_ID || "",
@@ -24,6 +25,33 @@ function view(record) {
 
 async function get() {
   return view(store.read(filePath()));
+}
+
+async function rememberBot(folder) {
+  const file = filePath();
+  const record = store.read(file);
+  const next = store.rememberBot(record.data, folder);
+  next.compose_file = path.join(folder, "docker-compose.yml");
+  if (!next.install_unique_id) {
+    next.install_unique_id = crypto.randomUUID();
+  }
+  next.app_version = pkg.version;
+  next.app_path = app.getAppPath();
+  store.write(file, next);
+  return view({ exists: true, data: next });
+}
+
+async function forgetBot(folder) {
+  const file = filePath();
+  const record = store.read(file);
+  const next = store.forgetBot(record.data, folder);
+  if (!next.install_unique_id) {
+    next.install_unique_id = crypto.randomUUID();
+  }
+  next.app_version = pkg.version;
+  next.app_path = app.getAppPath();
+  store.write(file, next);
+  return view({ exists: true, data: next });
 }
 
 async function set(patch) {
@@ -43,4 +71,4 @@ function projectFileReady(folder) {
   return fs.existsSync(path.join(folder, ".lugo", "info.json"));
 }
 
-module.exports = { get, set, filePath, projectFileReady };
+module.exports = { get, set, rememberBot, forgetBot, filePath, projectFileReady };

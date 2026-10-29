@@ -98,7 +98,13 @@ export function createHttpStudio({
       async retry() {
         return this.next();
       },
+      async current() {
+        return null;
+      },
       onRoute() {
+        return () => {};
+      },
+      onProgress() {
         return () => {};
       },
     },
@@ -106,6 +112,7 @@ export function createHttpStudio({
       pickFolder: async () => desktopOnly(),
       open: async () => desktopOnly(),
       create: async () => desktopOnly(),
+      remove: async () => desktopOnly(),
     },
     match: {
       async start() {

@@ -22,11 +22,14 @@ const CHANNELS = {
     next: "startup:next",
     retry: "startup:retry",
     route: "startup:route",
+    current: "startup:current",
+    progress: "startup:progress",
   },
   project: {
     pickFolder: "project:pick-folder",
     open: "project:open",
     create: "project:create",
+    remove: "project:remove",
   },
   match: {
     start: "match:start",

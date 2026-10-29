@@ -6,6 +6,7 @@ const { DEFAULTS, imageFrom } = require("../../../shared/ports");
 const { editorRunArgs, runArgs } = require("./args");
 
 let webContents = null;
+let pullListener = () => {};
 let pullState = { status: "idle", message: "" };
 
 function attach(contents) {
@@ -14,6 +15,15 @@ function attach(contents) {
 
 function notify(payload) {
   webContents?.send(CHANNELS.notifications.event, payload);
+}
+
+function setPullListener(listener) {
+  pullListener = typeof listener === "function" ? listener : () => {};
+}
+
+function publishPull() {
+  webContents?.send(CHANNELS.docker.progress, pullState);
+  pullListener(pullState);
 }
 
 function exec(command, args, timeout = 8000) {
@@ -50,13 +60,16 @@ function startPull() {
   pullState = { status: "pulling", message: "Starting pull" };
   const child = spawn("docker", ["pull", imageFrom()], { stdio: ["ignore", "pipe", "pipe"] });
   const onData = (chunk) => {
-    const line = String(chunk).trim().split("\n").filter(Boolean).pop();
+    const line = String(chunk)
+      .split(/\r|\n/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .pop();
     if (!line) {
       return;
     }
     pullState = { status: "pulling", message: line };
-    notify({ mode: "notify", title: "Studio image", body: line });
-    webContents?.send(CHANNELS.docker.progress, pullState);
+    publishPull();
   };
   child.stdout.on("data", onData);
   child.stderr.on("data", onData);
@@ -66,7 +79,7 @@ function startPull() {
       message: code === 0 ? "Studio image is ready" : "Image pull failed",
     };
     notify({ mode: "notify", title: "Studio image", body: pullState.message });
-    webContents?.send(CHANNELS.docker.progress, pullState);
+    publishPull();
   });
   return pullState;
 }
@@ -167,6 +180,7 @@ async function stopContainer() {
 
 module.exports = {
   attach,
+  setPullListener,
   getStatus,
   startPull,
   ensureImage,

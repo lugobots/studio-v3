@@ -7,6 +7,20 @@ export interface DockerStatus {
   error?: string;
 }
 
+export interface StartupStep {
+  id: string;
+  label: string;
+  state: "done" | "current" | "pending";
+}
+
+export interface StartupProgress {
+  phase: string;
+  label: string;
+  detail?: string;
+  percent: number;
+  steps: StartupStep[];
+}
+
 export interface AppConfig {
   projectCreated: boolean;
   telemetryEnabled: boolean;
@@ -44,12 +58,15 @@ export interface StudioApi {
   startup: {
     next: () => Promise<{ route: string; message?: string }>;
     retry: () => Promise<{ route: string; message?: string }>;
+    current: () => Promise<StartupProgress | null>;
     onRoute: (callback: (payload: { route: string; message?: string }) => void) => () => void;
+    onProgress: (callback: (payload: StartupProgress) => void) => () => void;
   };
   project: {
     pickFolder: () => Promise<{ ok: boolean; folder?: string; cancelled?: boolean; error?: string }>;
     open: (folder: string) => Promise<{ ok: boolean; error?: string; config?: AppConfig }>;
     create: (payload: { folder: string; language: string }) => Promise<{ ok: boolean; error?: string }>;
+    remove: (folder: string) => Promise<{ ok: boolean; error?: string; config?: AppConfig }>;
   };
   match: {
     start: () => Promise<{ ok: boolean; error?: string }>;

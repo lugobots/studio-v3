@@ -3,11 +3,15 @@
 const HEALTH_INTERVAL_MS = 500;
 const HEALTH_DEADLINE_MS = 3 * 60 * 1000;
 
-function decideStartup({ dockerRunning }) {
+function decideStartup({ dockerRunning, botPaths = [] }) {
   if (!dockerRunning) {
     return { route: "/docker-check", watch: false };
   }
-  return { route: "/api-loading", watch: true };
+  const saved = Array.isArray(botPaths) ? botPaths : [];
+  if (saved.length === 0) {
+    return { route: "/start-project", watch: false };
+  }
+  return { route: "/bots", watch: false };
 }
 
 function routeForStatus(body) {

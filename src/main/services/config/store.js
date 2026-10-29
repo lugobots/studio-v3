@@ -71,6 +71,38 @@ function projectReady(data, existsSync) {
   return existsSync(path.join(data.project_path, ".lugo", "info.json"));
 }
 
+function botPaths(data) {
+  if (data && Array.isArray(data.bot_paths)) {
+    return data.bot_paths.filter((item) => typeof item === "string" && item.length > 0);
+  }
+  if (data && typeof data.project_path === "string" && data.project_path.length > 0) {
+    return [data.project_path];
+  }
+  return [];
+}
+
+function rememberBot(data, folder) {
+  const paths = botPaths(data);
+  const bot_paths = paths.includes(folder) ? paths.slice() : paths.concat(folder);
+  return {
+    ...(data || {}),
+    bot_paths,
+    project_path: folder,
+  };
+}
+
+function forgetBot(data, folder) {
+  const next = {
+    ...(data || {}),
+    bot_paths: botPaths(data).filter((item) => item !== folder),
+  };
+  if (next.project_path === folder) {
+    next.project_path = "";
+    next.compose_file = "";
+  }
+  return next;
+}
+
 module.exports = {
   V1_KEYS,
   settingsFile,
@@ -79,4 +111,7 @@ module.exports = {
   applyPatch,
   telemetryEnabled,
   projectReady,
+  botPaths,
+  rememberBot,
+  forgetBot,
 };
