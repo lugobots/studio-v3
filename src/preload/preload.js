@@ -34,12 +34,15 @@ contextBridge.exposeInMainWorld("studio", {
   startup: {
     next: () => ipcRenderer.invoke(CHANNELS.startup.next),
     retry: () => ipcRenderer.invoke(CHANNELS.startup.retry),
+    current: () => ipcRenderer.invoke(CHANNELS.startup.current),
     onRoute: (callback) => subscribe(CHANNELS.startup.route, callback),
+    onProgress: (callback) => subscribe(CHANNELS.startup.progress, callback),
   },
   project: {
     pickFolder: () => ipcRenderer.invoke(CHANNELS.project.pickFolder),
     open: (folder) => ipcRenderer.invoke(CHANNELS.project.open, folder),
     create: (payload) => ipcRenderer.invoke(CHANNELS.project.create, payload),
+    remove: (folder) => ipcRenderer.invoke(CHANNELS.project.remove, folder),
   },
   match: {
     start: () => ipcRenderer.invoke(CHANNELS.match.start),

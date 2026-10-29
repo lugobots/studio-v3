@@ -23,13 +23,15 @@ export async function renderBots(outlet, documentRef = globalThis.document, deps
     createPageHeader({
       eyebrow: "Bots",
       title: "Your bots",
-      lede: "Open a saved bot, or add another folder.",
+      lede: "Open a saved bot, add a folder, or take one off this list.",
     }),
   );
 
   const list = documentRef.createElement("div");
   list.className = "bot-list";
   for (const botPath of paths) {
+    const entry = documentRef.createElement("div");
+    entry.className = "bot-entry";
     const row = documentRef.createElement("button");
     row.type = "button";
     row.className = "button bot-row";
@@ -48,7 +50,36 @@ export async function renderBots(outlet, documentRef = globalThis.document, deps
       }
       navigateTo(opened.route || "/api-loading");
     });
-    list.append(row);
+    const remove = documentRef.createElement("button");
+    remove.type = "button";
+    remove.className = "button bot-remove";
+    remove.textContent = "Remove";
+    remove.setAttribute("aria-label", `Remove ${folderName(botPath)}`);
+    remove.addEventListener("click", async () => {
+      const accepted = await prompt.confirm({
+        title: "Remove this bot?",
+        body: `${folderName(botPath)} will leave your list. The folder stays on disk.`,
+        confirmLabel: "Remove",
+        cancelLabel: "Cancel",
+      });
+      if (!accepted) {
+        return;
+      }
+      const removed = await host.project.remove(botPath);
+      if (!removed.ok) {
+        await report(prompt, removed);
+        return;
+      }
+      entry.remove();
+      const remaining = [...list.children].some((child) =>
+        String(child.className).split(/\s+/).includes("bot-entry"),
+      );
+      if (!remaining) {
+        navigateTo("/start-project");
+      }
+    });
+    entry.append(row, remove);
+    list.append(entry);
   }
 
   const add = documentRef.createElement("button");

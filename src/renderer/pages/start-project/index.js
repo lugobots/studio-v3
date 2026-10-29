@@ -1,3 +1,4 @@
+import { noteStartupProgress } from "../../components/startup-screen.js";
 import { createPageHeader } from "../../components/page-header.js";
 import { getHost } from "../../lib/api.js";
 import { dialogs, reportResult } from "../../lib/dialogs.js";
@@ -66,28 +67,55 @@ export function renderStartProject(outlet, documentRef = globalThis.document, de
       }
       return;
     }
-    let created = await host.project.create({ folder: picked.folder, language: language.value });
-    if (created && created.confirmOverwrite) {
-      const accepted = await prompt.confirm({
-        title: "Overwrite existing files?",
-        body: created.error || "Existing files may be overwritten.",
-        confirmLabel: "Continue",
-        cancelLabel: "Cancel",
-      });
-      if (!accepted) {
+    let shown = false;
+    let closed = false;
+    const showWorking = () => {
+      if (closed || shown) {
         return;
       }
-      created = await host.project.create({
-        folder: picked.folder,
-        language: language.value,
-        overwrite: true,
-      });
+      shown = true;
+      navigateTo("/api-loading");
+    };
+    const stopProgress =
+      host.startup && host.startup.onProgress
+        ? host.startup.onProgress((progress) => {
+            noteStartupProgress(progress);
+            showWorking();
+          })
+        : () => {};
+    try {
+      let created = await host.project.create({ folder: picked.folder, language: language.value });
+      if (created && created.confirmOverwrite) {
+        const accepted = await prompt.confirm({
+          title: "Overwrite existing files?",
+          body: created.error || "Existing files may be overwritten.",
+          confirmLabel: "Continue",
+          cancelLabel: "Cancel",
+        });
+        if (!accepted) {
+          closed = true;
+          return;
+        }
+        created = await host.project.create({
+          folder: picked.folder,
+          language: language.value,
+          overwrite: true,
+        });
+      }
+      if (!created.ok) {
+        closed = true;
+        if (shown) {
+          navigateTo("/start-project");
+        }
+        await report(prompt, created);
+        return;
+      }
+      if (!shown) {
+        navigateTo(created.route || "/api-loading");
+      }
+    } finally {
+      stopProgress();
     }
-    if (!created.ok) {
-      await report(prompt, created);
-      return;
-    }
-    navigateTo(created.route || "/api-loading");
   });
 
   page.append(open, form);

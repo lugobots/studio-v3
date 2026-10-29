@@ -8,6 +8,7 @@ import { renderStartProject } from "./pages/start-project/index.js";
 import { renderBots } from "./pages/bots/index.js";
 import { renderMain } from "./pages/main/index.js";
 import { renderApiLoading } from "./pages/api-loading/index.js";
+import { noteStartupProgress } from "./components/startup-screen.js";
 import { renderApiError } from "./pages/api-error/index.js";
 import { setGateMessage } from "./lib/gate-message.js";
 
@@ -71,6 +72,10 @@ host.notifications.onEvent((payload) => {
 
 startRouter(outlet);
 syncShell();
+
+if (host.startup.onProgress) {
+  host.startup.onProgress((progress) => noteStartupProgress(progress));
+}
 
 if (host.startup.onRoute) {
   host.startup.onRoute((payload) => {

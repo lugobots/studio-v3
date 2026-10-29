@@ -73,3 +73,81 @@ test("declining the overwrite warning stays on start-project and does not submit
   assert.equal(warnings[0].title, "Overwrite existing files?");
   assert.deepEqual(navigated, []);
 });
+
+test("a new bot shows the loading screen as soon as setup starts", async () => {
+  const doc = { createElement: (tag) => new El(tag) };
+  globalThis.document = doc;
+  const navigated = [];
+  let notify = () => {};
+  let release;
+  const outlet = new El("div");
+  renderStartProject(outlet, doc, {
+    navigate: (path) => navigated.push(path),
+    host: {
+      startup: {
+        onProgress: (callback) => {
+          notify = callback;
+          return () => {};
+        },
+      },
+      project: {
+        pickFolder: async () => ({ ok: true, folder: "/bots/new" }),
+        create: () =>
+          new Promise((resolve) => {
+            notify({
+              flow: "create",
+              phase: "setup",
+              label: "Setting up the bot",
+              detail: "Downloading the Python bot template. This can take a minute.",
+              percent: 74,
+            });
+            release = resolve;
+          }),
+      },
+    },
+  });
+
+  const form = walk(outlet).find((node) => node.tag === "form");
+  const pending = form.listeners[0]({ preventDefault() {} });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(navigated, ["/api-loading"]);
+  release({ ok: true, route: "/api-loading" });
+  await pending;
+  assert.deepEqual(navigated, ["/api-loading"]);
+});
+
+test("a failed setup returns to the bot screen and reports the error", async () => {
+  const doc = { createElement: (tag) => new El(tag) };
+  globalThis.document = doc;
+  const navigated = [];
+  const reports = [];
+  let notify = () => {};
+  const outlet = new El("div");
+  renderStartProject(outlet, doc, {
+    navigate: (path) => navigated.push(path),
+    reportResult: async (_prompt, result) => {
+      reports.push(result);
+    },
+    host: {
+      startup: {
+        onProgress: (callback) => {
+          notify = callback;
+          return () => {};
+        },
+      },
+      project: {
+        pickFolder: async () => ({ ok: true, folder: "/bots/new" }),
+        create: async () => {
+          notify({ flow: "create", phase: "setup", label: "Setting up the bot" });
+          return { ok: false, error: "clone failed" };
+        },
+      },
+    },
+  });
+
+  const form = walk(outlet).find((node) => node.tag === "form");
+  await form.listeners[0]({ preventDefault() {} });
+  assert.deepEqual(navigated, ["/api-loading", "/start-project"]);
+  assert.equal(reports[0].error, "clone failed");
+});

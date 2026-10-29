@@ -21,11 +21,18 @@ export function navigate(path) {
   window.location.hash = next;
 }
 
+let cleanup = () => {};
+
 export function renderRoute(outlet) {
+  cleanup();
+  cleanup = () => {};
   const path = getPath();
   const render = routes.get(path) ?? routes.get("/loading");
   outlet.replaceChildren();
-  render(outlet);
+  const stop = render(outlet);
+  if (typeof stop === "function") {
+    cleanup = stop;
+  }
 }
 
 export function startRouter(outlet) {

@@ -91,6 +91,18 @@ function rememberBot(data, folder) {
   };
 }
 
+function forgetBot(data, folder) {
+  const next = {
+    ...(data || {}),
+    bot_paths: botPaths(data).filter((item) => item !== folder),
+  };
+  if (next.project_path === folder) {
+    next.project_path = "";
+    next.compose_file = "";
+  }
+  return next;
+}
+
 module.exports = {
   V1_KEYS,
   settingsFile,
@@ -101,4 +113,5 @@ module.exports = {
   projectReady,
   botPaths,
   rememberBot,
+  forgetBot,
 };

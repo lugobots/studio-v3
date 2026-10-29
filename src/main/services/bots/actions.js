@@ -14,10 +14,13 @@ function inspectDirectory(folder, fsImpl = fs) {
   }
 }
 
-async function openBot({ folder, check, remember, stop, start, watch }) {
+async function openBot({ folder, check, remember, stop, start, watch, onWork }) {
   const compatibility = check(folder);
   if (!compatibility.ok) {
     return { ok: false, error: compatibility.error };
+  }
+  if (onWork) {
+    onWork("open");
   }
   const saved = await remember(folder);
   await stop();
@@ -40,13 +43,14 @@ async function createBot({
   start,
   setup,
   watch,
+  onWork,
 }) {
   if (!folder || !language) {
     return { ok: false, error: "Choose a language and a folder." };
   }
   const compatibility = check(folder);
   if (compatibility.ok) {
-    return openBot({ folder, check, remember, stop, start, watch });
+    return openBot({ folder, check, remember, stop, start, watch, onWork });
   }
   const directory = listEntries(folder);
   if (!directory.exists) {
@@ -58,6 +62,9 @@ async function createBot({
       confirmOverwrite: true,
       error: "Existing files may be overwritten.",
     };
+  }
+  if (onWork) {
+    onWork("create");
   }
   await stop();
   const started = await start(folder);

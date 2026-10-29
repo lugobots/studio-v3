@@ -48,6 +48,35 @@ test("a compatible folder skips setup and opens", async () => {
   );
 });
 
+test("setup reports that work started before containers stop", async () => {
+  const events = [];
+  const { deps } = harness({
+    overwrite: true,
+    listEntries: () => ({ exists: true, entries: [] }),
+    onWork: (kind) => {
+      events.push(kind);
+    },
+    stop: async () => {
+      events.push("stop");
+      return { ok: true };
+    },
+  });
+  await createBot(deps);
+  assert.deepEqual(events.slice(0, 2), ["create", "stop"]);
+});
+
+test("the overwrite prompt does not report that work started", async () => {
+  const events = [];
+  const { deps } = harness({
+    onWork: (kind) => {
+      events.push(kind);
+    },
+  });
+  const result = await createBot(deps);
+  assert.equal(result.confirmOverwrite, true);
+  assert.deepEqual(events, []);
+});
+
 test("declining an overwrite does not call docker or the api", async () => {
   const { calls, deps } = harness();
   const result = await createBot(deps);

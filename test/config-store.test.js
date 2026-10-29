@@ -46,6 +46,36 @@ test("adding a listed path does not duplicate it and still writes project_path",
   assert.deepEqual(store.rememberBot(saved, "/bots/other").bot_paths, ["/bots/demo", "/bots/other"]);
 });
 
+test("removing a bot drops it from the list and leaves the folder", () => {
+  const bot = fs.mkdtempSync(path.join(os.tmpdir(), "studio-forget-bot-"));
+  fs.writeFileSync(path.join(bot, "keep.txt"), "stay");
+  const next = store.forgetBot(
+    {
+      custom_flag: true,
+      project_path: bot,
+      bot_paths: [bot, "/bots/other"],
+      compose_file: path.join(bot, "docker-compose.yml"),
+    },
+    bot,
+  );
+  assert.deepEqual(next.bot_paths, ["/bots/other"]);
+  assert.equal(next.project_path, "");
+  assert.equal(next.compose_file, "");
+  assert.equal(next.custom_flag, true);
+  assert.equal(fs.readFileSync(path.join(bot, "keep.txt"), "utf8"), "stay");
+
+  const kept = store.forgetBot(
+    { project_path: "/bots/other", bot_paths: [bot, "/bots/other"] },
+    bot,
+  );
+  assert.deepEqual(kept.bot_paths, ["/bots/other"]);
+  assert.equal(kept.project_path, "/bots/other");
+
+  const seeded = store.forgetBot({ project_path: "/bots/demo" }, "/bots/demo");
+  assert.deepEqual(seeded.bot_paths, []);
+  assert.equal(seeded.project_path, "");
+});
+
 test("project readiness requires info.json", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-bot-"));
   assert.equal(store.projectReady({ project_path: dir }, fs.existsSync), false);
