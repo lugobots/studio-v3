@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"studio-v3/api/internal/server"
 )
 
 const defaultPort = "8081"
@@ -19,9 +21,8 @@ func listenAddr() string {
 
 func main() {
 	addr := listenAddr()
-	mux := http.NewServeMux()
 	log.Printf("studio-v3 api listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, server.NewMux()); err != nil {
 		fmt.Fprintf(os.Stderr, "listen: %v\n", err)
 		os.Exit(1)
 	}
