@@ -2,7 +2,7 @@
 # (see src/main/services/docker/args.js), mounts the bot at /home/coder/project,
 # and sets LUGO_STUDIO_API_PORT / LUGO_HOST_PROJECT_PATH.
 
-FROM golang:1.22-alpine AS build
+FROM golang:1.24-alpine AS build
 
 WORKDIR /src
 COPY api/ ./
@@ -17,9 +17,11 @@ COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 ENV LUGO_STUDIO_API_PORT=8081 \
+    LUGO_STUDIO_GAME_SERVER_PORT=5000 \
+    LUGO_STUDIO_GAME_FRONTEND_PORT=8080 \
     BOT_SOURCE_PATH=/home/coder/project
 
-EXPOSE 8081
+EXPOSE 8081 5000 8080
 
 WORKDIR /home/coder/project
 

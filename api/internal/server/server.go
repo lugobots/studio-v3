@@ -6,8 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"studio-v3/api/internal/bottemplate"
+	"studio-v3/api/internal/gameruntime"
+	"studio-v3/api/internal/procreg"
 )
 
 const defaultProjectRoot = "/home/coder/project"
@@ -15,14 +18,42 @@ const defaultProjectRoot = "/home/coder/project"
 // templateInstaller copies published dummy templates; tests may replace it.
 var templateInstaller bottemplate.Installer = bottemplate.DefaultInstaller()
 
-// NewMux returns the Studio V3 API HTTP handler.
+// Deps configures optional runtime collaborators for the API mux.
+type Deps struct {
+	Registry *procreg.Registry
+	Starter  gameruntime.Starter
+}
+
+// NewMux returns the Studio V3 API HTTP handler with default deps.
 func NewMux() http.Handler {
+	return NewMuxWith(Deps{})
+}
+
+// NewMuxWith returns the Studio V3 API HTTP handler.
+func NewMuxWith(deps Deps) http.Handler {
+	if deps.Registry == nil {
+		deps.Registry = procreg.New()
+	}
+	if deps.Starter == nil {
+		deps.Starter = gameruntime.New(deps.Registry)
+	}
+	api := &api{
+		starter:  deps.Starter,
+		registry: deps.Registry,
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", handleHealth)
 	mux.HandleFunc("GET /api/studio/status", handleStudioStatus)
 	mux.HandleFunc("POST /api/init/setup-new-bot", handleSetupNewBot)
 	mux.HandleFunc("POST /api/bot/publish", handlePublish)
+	mux.HandleFunc("POST /api/server/start", api.handleServerStart)
 	return mux
+}
+
+type api struct {
+	starter  gameruntime.Starter
+	registry *procreg.Registry
+	startMu  sync.Mutex
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +88,18 @@ func handleSetupNewBot(w http.ResponseWriter, r *http.Request) {
 
 func handlePublish(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"implemented": false})
+}
+
+func (a *api) handleServerStart(w http.ResponseWriter, r *http.Request) {
+	a.startMu.Lock()
+	defer a.startMu.Unlock()
+
+	ports := gameruntime.PortsFromEnv()
+	if err := a.starter.Start(ports); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
 }
 
 func studioStatus() map[string]string {
