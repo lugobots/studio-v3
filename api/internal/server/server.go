@@ -21,6 +21,7 @@ func NewMux() http.Handler {
 	mux.HandleFunc("GET /api/health", handleHealth)
 	mux.HandleFunc("GET /api/studio/status", handleStudioStatus)
 	mux.HandleFunc("POST /api/init/setup-new-bot", handleSetupNewBot)
+	mux.HandleFunc("POST /api/bot/publish", handlePublish)
 	return mux
 }
 
@@ -52,6 +53,10 @@ func handleSetupNewBot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
+}
+
+func handlePublish(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"implemented": false})
 }
 
 func studioStatus() map[string]string {
