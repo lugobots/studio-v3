@@ -1,6 +1,8 @@
 import { PINNED, TABS, tabById } from "./model.js";
 import { applyTelemetry } from "../lib/telemetry.js";
 import { reportResult } from "../lib/dialogs.js";
+import { initialGameControls } from "./game-controls.js";
+import { renderGameControls } from "./game-controls-view.js";
 
 export function renderAppFrame(outlet, { host, dialogs }) {
   const frame = document.createElement("div");
@@ -27,7 +29,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   frame.append(menu, workspace);
   outlet.append(frame);
 
-  const state = { tab: "workspace", view: "tab", config: null };
+  const state = { tab: "workspace", view: "tab", config: null, game: initialGameControls() };
 
   async function refreshConfig() {
     state.config = await host.config.get();
@@ -65,6 +67,16 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     const tab = tabById(state.tab);
     actions.setAttribute("aria-label", tab.label);
     actions.replaceChildren();
+    if (state.tab === "workspace") {
+      renderGameControls(actions, {
+        state: state.game,
+        host,
+        onChange(next) {
+          state.game = next;
+          paint();
+        },
+      });
+    }
     for (const action of tab.actions) {
       const button = document.createElement("button");
       button.type = "button";
@@ -200,41 +212,6 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   }
 
   async function runAction(id) {
-    if (id === "open") {
-      const picked = await host.project.pickFolder();
-      if (!picked.ok) {
-        if (!picked.cancelled) {
-          await reportResult(dialogs, picked);
-        }
-        return;
-      }
-      const opened = await host.project.open(picked.folder);
-      if (!opened.ok) {
-        await reportResult(dialogs, opened);
-        return;
-      }
-      state.config = opened.config;
-      state.view = "tab";
-      state.tab = "workspace";
-      paint();
-      return;
-    }
-    if (id === "match") {
-      const result = await host.match.start();
-      if (result.ok) {
-        dialogs.notify({ title: "Match", body: "The match start request was sent." });
-      } else {
-        await reportResult(dialogs, result);
-      }
-      return;
-    }
-    if (id === "publish") {
-      state.view = "tab";
-      state.tab = "workspace";
-      paint();
-      windowPane.querySelector(".publish-form input")?.focus();
-      return;
-    }
     if (id === "image") {
       const result = await host.docker.pull();
       if (result.unsupported || result.ok === false) {

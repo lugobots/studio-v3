@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createDialogController } from "../src/renderer/lib/dialog-controller.js";
 import { menuFor } from "../src/renderer/shell/model.js";
+import { renderAppFrame } from "../src/renderer/shell/frame.js";
+import { installDocument } from "./dom-stub.mjs";
 import { applyTelemetry, shouldLoadTelemetry } from "../src/renderer/lib/telemetry.js";
 import { createHttpStudio } from "../src/renderer/lib/http-studio.js";
 import http from "node:http";
@@ -27,7 +29,7 @@ test("a confirm dialog stays open until it is answered", async () => {
 test("tabs change the menu and keep profile and settings", () => {
   const workspace = menuFor("workspace");
   const runtime = menuFor("runtime");
-  assert.deepEqual(workspace.actions, ["open", "match", "publish"]);
+  assert.deepEqual(workspace.actions, []);
   assert.deepEqual(runtime.actions, ["image"]);
   assert.deepEqual(workspace.pinned, ["profile", "settings"]);
   assert.deepEqual(runtime.pinned, ["profile", "settings"]);
@@ -80,4 +82,50 @@ test("web adapter reaches match and publish and refuses local upgrade", async ()
   const docker = await studio.docker.status();
   assert.equal(docker.unsupported, true);
   server.close();
+});
+
+test("the shell shows the game panel, pinned items, runtime, and publish", async () => {
+  const installed = installDocument();
+  const outlet = installed.document.createElement("div");
+  let started = 0;
+  const host = {
+    config: {
+      async get() {
+        return { project_path: "/tmp/bot", telemetryEnabled: false };
+      },
+    },
+    match: {
+      async start() {
+        started += 1;
+        return { ok: true };
+      },
+    },
+    publish: { async bot() { return { ok: true }; } },
+    docker: {
+      async status() { return { imagePresent: false, image: "studio" }; },
+      async pull() { return { ok: true }; },
+    },
+  };
+  renderAppFrame(outlet, {
+    host,
+    dialogs: { notify() {}, confirm() { return Promise.resolve(false); } },
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  const labels = () => outlet.querySelectorAll("button").map((button) => button.textContent);
+  assert.equal(labels().includes("Profile"), true);
+  assert.equal(labels().includes("Settings"), true);
+  assert.equal(labels().includes("Open bot"), false);
+  assert.equal(labels().includes("Start match"), false);
+  assert.equal(labels().includes("Publish bot"), false);
+  assert.ok(outlet.querySelector('[aria-label="Bot URI"]'));
+  assert.equal(outlet.querySelector(".game-ctrl") !== null, true);
+
+  outlet.querySelectorAll("button").find((button) => button.textContent === "Runtime").click();
+  assert.equal(labels().includes("Studio image"), true);
+  assert.equal(labels().includes("Profile"), true);
+  assert.equal(labels().includes("Settings"), true);
+  assert.equal(started, 0);
+  installed.restore();
 });

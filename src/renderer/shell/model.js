@@ -2,11 +2,7 @@ export const TABS = [
   {
     id: "workspace",
     label: "Workspace",
-    actions: [
-      { id: "open", label: "Open bot" },
-      { id: "match", label: "Start match" },
-      { id: "publish", label: "Publish bot" },
-    ],
+    actions: [],
   },
   {
     id: "runtime",
