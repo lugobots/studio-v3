@@ -15,11 +15,14 @@ import (
 )
 
 type fakeStarter struct {
-	mu        sync.Mutex
-	calls     int
-	lastPorts gameruntime.Ports
-	err       error
-	onStart   func(gameruntime.Ports) error
+	mu         sync.Mutex
+	calls      int
+	stopCalls  int
+	lastPorts  gameruntime.Ports
+	err        error
+	stopErr    error
+	running    bool
+	onStart    func(gameruntime.Ports) error
 }
 
 func (f *fakeStarter) Start(ports gameruntime.Ports) error {
@@ -32,7 +35,28 @@ func (f *fakeStarter) Start(ports gameruntime.Ports) error {
 			return err
 		}
 	}
-	return f.err
+	if f.err != nil {
+		return f.err
+	}
+	f.running = true
+	return nil
+}
+
+func (f *fakeStarter) Running() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.running
+}
+
+func (f *fakeStarter) Stop() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.stopCalls++
+	if f.stopErr != nil {
+		return f.stopErr
+	}
+	f.running = false
+	return nil
 }
 
 func TestServerStartSuccess(t *testing.T) {

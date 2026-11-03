@@ -54,6 +54,8 @@ func NewMuxWith(deps Deps) http.Handler {
 	mux.HandleFunc("POST /api/init/setup-new-bot", handleSetupNewBot)
 	mux.HandleFunc("POST /api/bot/publish", handlePublish)
 	mux.HandleFunc("POST /api/server/start", api.handleServerStart)
+	mux.HandleFunc("GET /api/server/status", api.handleServerStatus)
+	mux.HandleFunc("POST /api/server/stop", api.handleServerStop)
 	mux.HandleFunc("POST /api/game/start", api.handleGameStart)
 	return mux
 }
@@ -105,6 +107,21 @@ func (a *api) handleServerStart(w http.ResponseWriter, r *http.Request) {
 
 	ports := gameruntime.PortsFromEnv()
 	if err := a.starter.Start(ports); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
+}
+
+func (a *api) handleServerStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"running": a.starter.Running()})
+}
+
+func (a *api) handleServerStop(w http.ResponseWriter, r *http.Request) {
+	a.startMu.Lock()
+	defer a.startMu.Unlock()
+
+	if err := a.starter.Stop(); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
 		return
 	}

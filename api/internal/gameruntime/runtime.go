@@ -28,9 +28,11 @@ const (
 	readyPollInterval  = 50 * time.Millisecond
 )
 
-// Starter starts the local game server and game frontend.
+// Starter starts, stops, and reports the local game server and game frontend.
 type Starter interface {
 	Start(ports Ports) error
+	Running() bool
+	Stop() error
 }
 
 // Local starts an in-process game server (gRPC) and game-frontend HTTP server,
