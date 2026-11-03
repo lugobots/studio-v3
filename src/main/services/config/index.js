@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const store = require("./store");
 const pkg = require("../../../../package.json");
+const { gameFrontendUrl } = require("../../../shared/ports");
 
 function filePath() {
   return store.settingsFile(app.getPath("appData"), process.platform);
@@ -20,6 +21,7 @@ function view(record) {
     telemetryEnabled: store.telemetryEnabled(data),
     measurementId: process.env.STUDIO_GA_MEASUREMENT_ID || "",
     appVersion: pkg.version,
+    game_frontend_url: gameFrontendUrl(),
   };
 }
 

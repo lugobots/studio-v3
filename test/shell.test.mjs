@@ -91,7 +91,11 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   const host = {
     config: {
       async get() {
-        return { project_path: "/tmp/bot", telemetryEnabled: false };
+        return {
+          project_path: "/tmp/bot",
+          telemetryEnabled: false,
+          game_frontend_url: "http://localhost:8080",
+        };
       },
     },
     match: {
@@ -121,6 +125,11 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   assert.equal(labels().includes("Publish bot"), false);
   assert.ok(outlet.querySelector('[aria-label="Bot URI"]'));
   assert.equal(outlet.querySelector(".game-ctrl") !== null, true);
+  const gameFrame = outlet.querySelector("#game_frame");
+  assert.ok(gameFrame);
+  assert.equal(gameFrame.tagName, "IFRAME");
+  assert.equal(gameFrame.src, "http://localhost:8080");
+  assert.equal(gameFrame.title, "Game");
 
   outlet.querySelectorAll("button").find((button) => button.textContent === "Runtime").click();
   assert.equal(labels().includes("Studio image"), true);

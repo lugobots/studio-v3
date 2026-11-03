@@ -3,6 +3,7 @@ import { applyTelemetry } from "../lib/telemetry.js";
 import { reportResult } from "../lib/dialogs.js";
 import { initialGameControls } from "./game-controls.js";
 import { renderGameControls } from "./game-controls-view.js";
+import { gameFrontendUrl } from "./game-frontend.js";
 
 export function renderAppFrame(outlet, { host, dialogs }) {
   const frame = document.createElement("div");
@@ -154,8 +155,16 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   function workspaceView(config) {
     const section = document.createElement("section");
     section.dataset.window = "workspace";
-    const title = document.createElement("h1");
-    title.textContent = "Workspace";
+    section.className = "workspace-main";
+
+    const frame = document.createElement("iframe");
+    frame.className = "game-frame";
+    frame.id = "game_frame";
+    frame.title = "Game";
+    frame.src = config?.game_frontend_url || gameFrontendUrl();
+
+    const meta = document.createElement("div");
+    meta.className = "workspace-meta";
     const path = document.createElement("p");
     path.textContent = config?.project_path || "No bot open";
     const form = document.createElement("form");
@@ -182,7 +191,8 @@ export function renderAppFrame(outlet, { host, dialogs }) {
         await reportResult(dialogs, result);
       }
     });
-    section.append(title, path, form);
+    meta.append(path, form);
+    section.append(frame, meta);
     return section;
   }
 

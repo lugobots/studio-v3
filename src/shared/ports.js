@@ -29,4 +29,8 @@ function editorImageFrom(env = process.env) {
   return env.LUGO_VS_CODE_IMAGE || DEFAULTS.editorImage;
 }
 
-module.exports = { DEFAULTS, portsFrom, imageFrom, editorImageFrom };
+function gameFrontendUrl(env = process.env) {
+  return `http://localhost:${portsFrom(env).gameFrontend}`;
+}
+
+module.exports = { DEFAULTS, portsFrom, imageFrom, editorImageFrom, gameFrontendUrl };
