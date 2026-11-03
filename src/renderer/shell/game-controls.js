@@ -2,7 +2,7 @@ const SPEEDS = ["slow", "normal", "fast"];
 const OPPONENTS = ["default", "zombies", "statues", "kids", "defenses"];
 
 function rows() {
-  return Array.from({ length: 11 }, () => ({ running: false, logs: false }));
+  return Array.from({ length: 11 }, () => ({ active: false, running: false, logs: false }));
 }
 
 function positionNames(saved) {
@@ -38,8 +38,16 @@ export function initialGameControls() {
 function copy(state) {
   return {
     serverRunning: state.serverRunning,
-    home: state.home.map((row) => ({ running: row.running, logs: row.logs })),
-    away: state.away.map((row) => ({ running: row.running, logs: row.logs })),
+    home: state.home.map((row) => ({
+      active: Boolean(row.active),
+      running: Boolean(row.running),
+      logs: Boolean(row.logs),
+    })),
+    away: state.away.map((row) => ({
+      active: Boolean(row.active),
+      running: Boolean(row.running),
+      logs: Boolean(row.logs),
+    })),
     side: state.side,
     skipGolden: state.skipGolden,
     speed: state.speed,
@@ -96,6 +104,33 @@ export function persistMatchSettings(host, state) {
   return host.config.matchSet(matchSettingsPatch(state));
 }
 
+/** Active rows as match-start IPC slots (HOME/AWAY + number). */
+export function activeBotSlots(state) {
+  const slots = [];
+  for (const team of ["home", "away"]) {
+    const rowsForTeam = state[team] || [];
+    for (let index = 0; index < rowsForTeam.length; index += 1) {
+      if (rowsForTeam[index]?.active) {
+        slots.push({ side: team.toUpperCase(), number: index + 1 });
+      }
+    }
+  }
+  return slots;
+}
+
+/** After a successful match start, mark desired-active rows as running. */
+export function markActiveBotsRunning(state) {
+  const next = copy(state);
+  for (const team of ["home", "away"]) {
+    for (const row of next[team]) {
+      if (row.active) {
+        row.running = true;
+      }
+    }
+  }
+  return next;
+}
+
 export function reduceGameControl(state, action) {
   const next = copy(state);
   if (!action || typeof action.type !== "string") {
@@ -119,10 +154,12 @@ export function reduceGameControl(state, action) {
     if (!row) {
       return next;
     }
-    if (action.control === "start") {
-      row.running = true;
-    } else if (action.control === "kill") {
-      row.running = false;
+    if (action.control === "active") {
+      row.active = Object.prototype.hasOwnProperty.call(action, "active")
+        ? Boolean(action.active)
+        : !row.active;
+    } else if (action.control === "running") {
+      row.running = Boolean(action.running);
     } else if (action.control === "logs") {
       row.logs = !row.logs;
     }

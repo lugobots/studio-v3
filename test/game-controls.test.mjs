@@ -1,15 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  activeBotSlots,
   applyMatchConfig,
   initialGameControls,
+  markActiveBotsRunning,
   matchSettingsPatch,
   persistMatchSettings,
   reduceGameControl,
 } from "../src/renderer/shell/game-controls.js";
 
 function stopped(rows) {
-  return rows.every((row) => row.running === false && row.logs === false);
+  return rows.every((row) => row.active === false && row.running === false && row.logs === false);
 }
 
 test("initial game controls are a stopped local match", () => {
@@ -24,33 +26,58 @@ test("initial game controls are a stopped local match", () => {
   assert.equal(state.speed, "normal");
   assert.equal(state.opponent, "default");
   assert.deepEqual(state.positions, []);
+  assert.deepEqual(activeBotSlots(state), []);
 });
 
-test("controls change only the selected local field", () => {
+test("active switch is desired-active; running is separate process state", () => {
   const initial = initialGameControls();
   const server = reduceGameControl(initial, { type: "set-server-running", running: true });
   assert.equal(server.serverRunning, true);
   assert.equal(server.speed, initial.speed);
+  assert.equal(server.home[0].active, false);
   assert.equal(server.home[0].running, false);
 
   const apiStop = reduceGameControl(server, { type: "set-server-running", running: false });
   assert.equal(apiStop.serverRunning, false);
 
-  const started = reduceGameControl(server, { type: "set-bot", team: "home", number: 2, control: "start" });
-  assert.equal(started.home[1].running, true);
-  assert.equal(started.home[0].running, false);
-  assert.equal(started.away[1].running, false);
-  assert.equal(started.home[1].logs, false);
+  const activated = reduceGameControl(server, {
+    type: "set-bot",
+    team: "home",
+    number: 2,
+    control: "active",
+  });
+  assert.equal(activated.home[1].active, true);
+  assert.equal(activated.home[1].running, false);
+  assert.equal(activated.home[0].active, false);
+  assert.equal(activated.away[1].active, false);
+  assert.equal(activated.home[1].logs, false);
 
-  const logged = reduceGameControl(started, { type: "set-bot", team: "away", number: 11, control: "logs" });
+  const running = reduceGameControl(activated, {
+    type: "set-bot",
+    team: "home",
+    number: 2,
+    control: "running",
+    running: true,
+  });
+  assert.equal(running.home[1].active, true);
+  assert.equal(running.home[1].running, true);
+
+  const logged = reduceGameControl(running, { type: "set-bot", team: "away", number: 11, control: "logs" });
   assert.equal(logged.away[10].logs, true);
   assert.equal(logged.home[1].running, true);
 
-  const killed = reduceGameControl(logged, { type: "set-bot", team: "home", number: 2, control: "kill" });
-  assert.equal(killed.home[1].running, false);
-  assert.equal(killed.away[10].logs, true);
+  const deactivated = reduceGameControl(logged, {
+    type: "set-bot",
+    team: "home",
+    number: 2,
+    control: "active",
+    active: false,
+  });
+  assert.equal(deactivated.home[1].active, false);
+  assert.equal(deactivated.home[1].running, true);
+  assert.equal(deactivated.away[10].logs, true);
 
-  const fast = reduceGameControl(killed, { type: "set-speed", speed: "fast" });
+  const fast = reduceGameControl(deactivated, { type: "set-speed", speed: "fast" });
   const slow = reduceGameControl(fast, { type: "set-speed", speed: "slow" });
   assert.equal(slow.speed, "slow");
   assert.equal(slow.opponent, "default");
@@ -62,6 +89,31 @@ test("controls change only the selected local field", () => {
   assert.equal(Object.hasOwn(kids, "request"), false);
   assert.equal(Object.hasOwn(kids, "url"), false);
   assert.equal(JSON.stringify(kids).includes("http"), false);
+});
+
+test("activeBotSlots lists only desired-active rows as HOME/AWAY slots", () => {
+  let state = initialGameControls();
+  state = reduceGameControl(state, { type: "set-bot", team: "home", number: 1, control: "active" });
+  state = reduceGameControl(state, { type: "set-bot", team: "away", number: 11, control: "active" });
+  state = reduceGameControl(state, { type: "set-bot", team: "home", number: 5, control: "active" });
+  state = reduceGameControl(state, {
+    type: "set-bot",
+    team: "home",
+    number: 5,
+    control: "running",
+    running: true,
+  });
+  assert.deepEqual(activeBotSlots(state), [
+    { side: "HOME", number: 1 },
+    { side: "HOME", number: 5 },
+    { side: "AWAY", number: 11 },
+  ]);
+
+  const afterStart = markActiveBotsRunning(state);
+  assert.equal(afterStart.home[0].running, true);
+  assert.equal(afterStart.home[4].running, true);
+  assert.equal(afterStart.away[10].running, true);
+  assert.equal(afterStart.home[1].running, false);
 });
 
 test("match and position actions do not invent a request", () => {

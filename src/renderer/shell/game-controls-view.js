@@ -1,5 +1,10 @@
 import { reportResult } from "../lib/dialogs.js";
-import { persistMatchSettings, reduceGameControl } from "./game-controls.js";
+import {
+  activeBotSlots,
+  markActiveBotsRunning,
+  persistMatchSettings,
+  reduceGameControl,
+} from "./game-controls.js";
 
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -127,17 +132,79 @@ async function stopServerFromApi(state, onChange, host, dialogs) {
   await reportResult(dialogs, result || { ok: false, error: "The game server failed to stop." });
 }
 
-async function startMatchFromApi(host, dialogs) {
+async function startMatchFromApi(state, onChange, host, dialogs) {
   if (!host?.match?.start) {
     return;
   }
-  const result = await host.match.start();
+  const result = await host.match.start({ active: activeBotSlots(state) });
   if (result?.ok) {
+    onChange(markActiveBotsRunning(state));
     dialogs?.notify?.({ title: "Match started", body: "The match is running." });
     return;
   }
   if (dialogs) {
     await reportResult(dialogs, result || { ok: false, error: "The match failed to start." });
+  }
+}
+
+async function toggleBotActive(state, onChange, host, dialogs, team, number) {
+  const index = Number(number) - 1;
+  const row = state[team]?.[index];
+  if (!row) {
+    return;
+  }
+  const nextActive = !row.active;
+  const next = reduceGameControl(state, {
+    type: "set-bot",
+    team,
+    number,
+    control: "active",
+    active: nextActive,
+  });
+  onChange(next);
+
+  if (!state.serverRunning) {
+    return;
+  }
+
+  const side = team.toUpperCase();
+  if (nextActive) {
+    if (row.running || !host?.bot?.start) {
+      return;
+    }
+    const result = await host.bot.start({ side, number });
+    if (result?.ok) {
+      onChange(reduceGameControl(next, {
+        type: "set-bot",
+        team,
+        number,
+        control: "running",
+        running: true,
+      }));
+      return;
+    }
+    if (dialogs) {
+      await reportResult(dialogs, result || { ok: false, error: "The bot failed to start." });
+    }
+    return;
+  }
+
+  if (!row.running || !host?.bot?.stop) {
+    return;
+  }
+  const result = await host.bot.stop({ side, number });
+  if (result?.ok) {
+    onChange(reduceGameControl(next, {
+      type: "set-bot",
+      team,
+      number,
+      control: "running",
+      running: false,
+    }));
+    return;
+  }
+  if (dialogs) {
+    await reportResult(dialogs, result || { ok: false, error: "The bot failed to stop." });
   }
 }
 
@@ -175,7 +242,7 @@ export function renderGameControls(parent, { state, onChange, host, dialogs }) {
   match.append(controlButton({
     title: "Starts the match",
     disabled: playLocked,
-    onClick: () => startMatchFromApi(host, dialogs),
+    onClick: () => startMatchFromApi(state, onChange, host, dialogs),
     graphic: icon("#22c55e", [["polygon", { points: "8,5 19,12 8,19", fill: "#22c55e", stroke: "#22c55e" }]]),
   }));
   match.append(controlButton({
@@ -192,8 +259,8 @@ export function renderGameControls(parent, { state, onChange, host, dialogs }) {
   const play = document.createElement("div");
   play.className = "game-ctrl-play";
   play.style.opacity = state.serverRunning ? "1" : "0.3";
-  play.append(teamBlock("home", "Home", state, onChange, playLocked));
-  play.append(teamBlock("away", "Away", state, onChange, playLocked));
+  play.append(teamBlock("home", "Home", state, onChange, host, dialogs));
+  play.append(teamBlock("away", "Away", state, onChange, host, dialogs));
   if (state.home.some((row) => row.logs) || state.away.some((row) => row.logs)) {
     const note = document.createElement("div");
     note.className = "game-ctrl-log-note";
@@ -228,7 +295,7 @@ export function renderGameControls(parent, { state, onChange, host, dialogs }) {
   return root;
 }
 
-function teamBlock(team, label, state, onChange, disabled = false) {
+function teamBlock(team, label, state, onChange, host, dialogs) {
   const block = document.createElement("div");
   block.className = "bot_actions";
   block.append(heading(label));
@@ -236,31 +303,30 @@ function teamBlock(team, label, state, onChange, disabled = false) {
   state[team].forEach((row, index) => {
     const line = document.createElement("div");
     line.className = "bot_action_buttons";
-    line.dataset.running = String(row.running);
+    line.dataset.active = String(Boolean(row.active));
+    line.dataset.running = String(Boolean(row.running));
     line.dataset.logs = String(row.logs);
     const number = document.createElement("span");
     number.className = "bot-number";
     number.textContent = String(index + 1);
     const player = index + 1;
+    const activeClasses = [
+      "bot-active-switch",
+      row.active ? "is-active" : "",
+      row.running ? "is-running" : "",
+    ].filter(Boolean).join(" ");
     line.append(
       number,
       controlButton({
-        title: "Start",
-        text: "🟢",
-        className: row.running ? "is-running" : "",
-        disabled,
-        onClick: () => dispatch(state, onChange, { type: "set-bot", team, number: player, control: "start" }),
-      }),
-      controlButton({
-        title: "Kill",
-        text: "💀",
-        disabled,
-        onClick: () => dispatch(state, onChange, { type: "set-bot", team, number: player, control: "kill" }),
+        title: "Active",
+        pressed: Boolean(row.active),
+        text: row.running ? "🟢" : (row.active ? "○" : "·"),
+        className: activeClasses,
+        onClick: () => toggleBotActive(state, onChange, host, dialogs, team, player),
       }),
       controlButton({
         title: "Ver logs",
         text: row.logs ? "X" : "📄",
-        disabled,
         onClick: () => dispatch(state, onChange, { type: "set-bot", team, number: player, control: "logs" }),
       }),
     );
