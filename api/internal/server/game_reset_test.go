@@ -54,6 +54,46 @@ func (f *remoteFake) GetGameSnapshot(_ context.Context, _ *proto.GameSnapshotReq
 	return &proto.GameSnapshotResponse{GameSnapshot: f.snapshot}, nil
 }
 
+func (f *remoteFake) SetBallProperties(_ context.Context, prop *proto.BallProperties) (*proto.CommandResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.snapshot.Ball == nil {
+		f.snapshot.Ball = &proto.Ball{}
+	}
+	if prop.Position != nil {
+		pos := *prop.Position
+		f.snapshot.Ball.Position = &pos
+	}
+	f.snapshot.Ball.Velocity = prop.Velocity
+	f.snapshot.Ball.Holder = nil
+	return &proto.CommandResponse{GameSnapshot: f.snapshot, Code: proto.CommandResponse_SUCCESS}, nil
+}
+
+func (f *remoteFake) SetPlayerProperties(_ context.Context, prop *proto.PlayerProperties) (*proto.CommandResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var team *proto.Team
+	switch prop.Side {
+	case proto.Team_HOME:
+		team = f.snapshot.HomeTeam
+	case proto.Team_AWAY:
+		team = f.snapshot.AwayTeam
+	}
+	if team == nil {
+		return &proto.CommandResponse{GameSnapshot: f.snapshot, Code: proto.CommandResponse_INVALID_VALUE}, nil
+	}
+	for _, player := range team.Players {
+		if player != nil && player.Number == prop.Number {
+			if prop.Position != nil {
+				pos := *prop.Position
+				player.Position = &pos
+			}
+			return &proto.CommandResponse{GameSnapshot: f.snapshot, Code: proto.CommandResponse_SUCCESS}, nil
+		}
+	}
+	return &proto.CommandResponse{GameSnapshot: f.snapshot, Code: proto.CommandResponse_INVALID_VALUE}, nil
+}
+
 func startRemoteFake(t *testing.T, snap *proto.GameSnapshot) (*remoteFake, int) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

@@ -22,6 +22,7 @@ import (
 )
 
 const gameResetTimeout = 3 * time.Second
+const gamePositionsTimeout = 3 * time.Second
 
 const defaultProjectRoot = "/home/coder/project"
 
@@ -68,6 +69,8 @@ func NewMuxWith(deps Deps) http.Handler {
 	mux.HandleFunc("POST /api/server/stop", api.handleServerStop)
 	mux.HandleFunc("POST /api/game/start", api.handleGameStart)
 	mux.HandleFunc("POST /api/game/reset", api.handleGameReset)
+	mux.HandleFunc("GET /api/game/positions", api.handleGamePositionsGet)
+	mux.HandleFunc("POST /api/game/positions", api.handleGamePositionsApply)
 	mux.HandleFunc("POST /api/team/{side}/bots/{number}", api.handleBotStart)
 	mux.HandleFunc("DELETE /api/team/{side}/bots/{number}", api.handleBotStop)
 	mux.HandleFunc("GET /api/team/{side}/bots/{number}", api.handleBotStatus)
@@ -217,6 +220,64 @@ func (a *api) handleGameReset(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if _, err := gameremote.ResetPlayerPositions(ctx, addr); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
+}
+
+func (a *api) handleGamePositionsGet(w http.ResponseWriter, r *http.Request) {
+	a.startMu.Lock()
+	defer a.startMu.Unlock()
+
+	if !a.starter.Running() {
+		writeJSON(w, http.StatusConflict, map[string]string{"message": "game server is not running"})
+		return
+	}
+
+	ports := gameruntime.PortsFromEnv()
+	addr := fmt.Sprintf("localhost:%d", ports.GameServer)
+	ctx, cancel := context.WithTimeout(r.Context(), gamePositionsTimeout)
+	defer cancel()
+
+	positions, err := gameremote.GetElementPositions(ctx, addr)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, positions)
+}
+
+func (a *api) handleGamePositionsApply(w http.ResponseWriter, r *http.Request) {
+	a.startMu.Lock()
+	defer a.startMu.Unlock()
+
+	if !a.starter.Running() {
+		writeJSON(w, http.StatusConflict, map[string]string{"message": "game server is not running"})
+		return
+	}
+
+	raw, err := readRequestBody(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": err.Error()})
+		return
+	}
+	if len(raw) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "missing positions snapshot body"})
+		return
+	}
+	var positions gameremote.ElementPositions
+	if err := json.Unmarshal(raw, &positions); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "invalid positions snapshot JSON"})
+		return
+	}
+
+	ports := gameruntime.PortsFromEnv()
+	addr := fmt.Sprintf("localhost:%d", ports.GameServer)
+	ctx, cancel := context.WithTimeout(r.Context(), gamePositionsTimeout)
+	defer cancel()
+
+	if err := gameremote.SetElementPositions(ctx, addr, positions); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
 		return
 	}
