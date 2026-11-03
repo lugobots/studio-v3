@@ -11,6 +11,9 @@ function register() {
   ipcMain.handle(CHANNELS.project.create, (_event, payload) => session.create(payload));
   ipcMain.handle(CHANNELS.project.remove, (_event, folder) => session.remove(folder));
   ipcMain.handle(CHANNELS.server.start, () => session.startServer());
+  ipcMain.handle(CHANNELS.server.stop, () => session.stopServer());
+  ipcMain.handle(CHANNELS.server.status, () => session.serverStatus());
+  ipcMain.handle(CHANNELS.server.watchStatus, () => session.watchServerStatus());
   ipcMain.handle(CHANNELS.match.start, () => session.startMatch());
   ipcMain.handle(CHANNELS.match.status, () => session.projectStatus());
   ipcMain.handle(CHANNELS.publish.bot, (_event, payload) => session.publish(payload));

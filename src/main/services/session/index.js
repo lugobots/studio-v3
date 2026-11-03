@@ -18,10 +18,12 @@ const {
   decideStartup,
   routeForStatus,
 } = require("./gate");
+const { createServerControls } = require("./server-controls");
 const { describeStartup } = require("../../../shared/startup-progress");
 
 let webContents = null;
 let watchGeneration = 0;
+let serverControls = null;
 let lastProgress = describeStartup({
   phase: "docker",
   detail: "Checking Docker and your bot.",
@@ -338,16 +340,33 @@ async function ensureStudioApiReady(missingBotError) {
   return { ok: true };
 }
 
+function getServerControls() {
+  if (!serverControls) {
+    serverControls = createServerControls({
+      ensureReady: ensureStudioApiReady,
+      api: studioApi,
+      sendStatus: (status) => {
+        webContents?.send(CHANNELS.server.statusEvent, status);
+      },
+    });
+  }
+  return serverControls;
+}
+
 async function startServer() {
-  const ready = await ensureStudioApiReady("Open a bot before starting the game server.");
-  if (!ready.ok) {
-    return ready;
-  }
-  try {
-    return actionResult(await studioApi.startServer());
-  } catch (error) {
-    return { ok: false, error: error.message };
-  }
+  return getServerControls().start();
+}
+
+async function stopServer() {
+  return getServerControls().stop();
+}
+
+async function serverStatus() {
+  return getServerControls().status();
+}
+
+function watchServerStatus(options) {
+  return getServerControls().watch(options);
 }
 
 async function startMatch() {
@@ -404,6 +423,9 @@ module.exports = {
   create,
   remove,
   startServer,
+  stopServer,
+  serverStatus,
+  watchServerStatus,
   startMatch,
   publish,
   projectStatus,

@@ -33,6 +33,10 @@ const CHANNELS = {
   },
   server: {
     start: "server:start",
+    stop: "server:stop",
+    status: "server:status",
+    watchStatus: "server:watch-status",
+    statusEvent: "server:status-event",
   },
   match: {
     start: "match:start",

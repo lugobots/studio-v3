@@ -46,6 +46,13 @@ contextBridge.exposeInMainWorld("studio", {
   },
   server: {
     start: () => ipcRenderer.invoke(CHANNELS.server.start),
+    stop: () => ipcRenderer.invoke(CHANNELS.server.stop),
+    status: () => ipcRenderer.invoke(CHANNELS.server.status),
+    onStatus: (callback) => {
+      const unsubscribe = subscribe(CHANNELS.server.statusEvent, callback);
+      void ipcRenderer.invoke(CHANNELS.server.watchStatus);
+      return unsubscribe;
+    },
   },
   match: {
     start: () => ipcRenderer.invoke(CHANNELS.match.start),
