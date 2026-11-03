@@ -34,11 +34,12 @@ const (
 )
 
 // MatchSettings are preferences applied when composing server/v2 Configuration
-// on local game-server start.
+// on local game-server start. JSON field names match the Studio request body /
+// app-level user.json keys.
 type MatchSettings struct {
-	TeamSide         TeamSide
-	SkipToGoldenGoal bool
-	GameSpeed        GameSpeed
+	TeamSide         TeamSide  `json:"team_side"`
+	SkipToGoldenGoal bool      `json:"skip_to_golden_goal"`
+	GameSpeed        GameSpeed `json:"game_speed"`
 }
 
 // ComposeConfiguration builds a server/v2 Configuration from ports and match

@@ -1,12 +1,14 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -132,6 +134,89 @@ func TestServerStartFailure(t *testing.T) {
 	}
 	if body["message"] == nil || body["message"] == "" {
 		t.Fatalf("missing message: %#v", body)
+	}
+}
+
+func TestServerStartAppliesMatchSettings(t *testing.T) {
+	starter := &fakeStarter{}
+	mux := NewMuxWith(Deps{Registry: procreg.New(), Starter: starter})
+	t.Setenv("LUGO_STUDIO_GAME_SERVER_PORT", "5500")
+	t.Setenv("LUGO_STUDIO_GAME_FRONTEND_PORT", "8800")
+
+	body := `{"team_side":"away","skip_to_golden_goal":true,"game_speed":"slow"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/server/start", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	if starter.calls != 1 {
+		t.Fatalf("calls = %d", starter.calls)
+	}
+	got := starter.lastSettings
+	if got.TeamSide != gameruntime.TeamSideAway {
+		t.Fatalf("team_side = %q", got.TeamSide)
+	}
+	if !got.SkipToGoldenGoal {
+		t.Fatal("skip_to_golden_goal = false")
+	}
+	if got.GameSpeed != gameruntime.GameSpeedSlow {
+		t.Fatalf("game_speed = %q", got.GameSpeed)
+	}
+}
+
+func TestServerStartIgnoresSettingsWhileRunning(t *testing.T) {
+	starter := &fakeStarter{}
+	mux := NewMuxWith(Deps{Registry: procreg.New(), Starter: starter})
+	t.Setenv("LUGO_STUDIO_GAME_SERVER_PORT", "5500")
+	t.Setenv("LUGO_STUDIO_GAME_FRONTEND_PORT", "8800")
+
+	first := `{"team_side":"home","skip_to_golden_goal":true,"game_speed":"fast"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/server/start", strings.NewReader(first))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("first start status %d body %s", rec.Code, rec.Body.String())
+	}
+	want := starter.lastSettings
+
+	second := `{"team_side":"away","skip_to_golden_goal":false,"game_speed":"slow"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/server/start", strings.NewReader(second))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("second start status %d body %s", rec.Code, rec.Body.String())
+	}
+	if starter.calls != 2 {
+		t.Fatalf("calls = %d", starter.calls)
+	}
+	got := starter.lastSettings
+	if got != want {
+		t.Fatalf("settings changed while running: got %#v want %#v", got, want)
+	}
+	if got.TeamSide != gameruntime.TeamSideHome || !got.SkipToGoldenGoal || got.GameSpeed != gameruntime.GameSpeedFast {
+		t.Fatalf("expected original settings, got %#v", got)
+	}
+}
+
+func TestServerStartRejectsInvalidMatchSettings(t *testing.T) {
+	starter := &fakeStarter{}
+	mux := NewMuxWith(Deps{Registry: procreg.New(), Starter: starter})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/server/start", bytes.NewBufferString(`{"team_side":"left"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	if starter.calls != 0 {
+		t.Fatalf("calls = %d, want 0", starter.calls)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -73,6 +74,113 @@ func TestGameStartSuccess(t *testing.T) {
 	}
 	if match.cfg.OpponentBinary != "/tmp/opp-bot" {
 		t.Fatalf("opponent = %q", match.cfg.OpponentBinary)
+	}
+}
+
+func TestGameStartAutoStartsServerWithMatchSettings(t *testing.T) {
+	starter := &fakeStarter{}
+	match := &fakeMatch{}
+	mux := NewMuxWith(Deps{Registry: procreg.New(), Starter: starter, Match: match})
+
+	project := t.TempDir()
+	t.Setenv("BOT_SOURCE_PATH", project)
+	t.Setenv("LUGO_STUDIO_GAME_SERVER_PORT", "5502")
+	t.Setenv("LUGO_STUDIO_GAME_FRONTEND_PORT", "8802")
+
+	body := `{"team_side":"away","skip_to_golden_goal":true,"game_speed":"fast"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/game/start", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	if starter.calls != 1 {
+		t.Fatalf("server start calls = %d", starter.calls)
+	}
+	got := starter.lastSettings
+	if got.TeamSide != gameruntime.TeamSideAway || !got.SkipToGoldenGoal || got.GameSpeed != gameruntime.GameSpeedFast {
+		t.Fatalf("settings = %#v", got)
+	}
+	if match.calls != 1 {
+		t.Fatalf("match start calls = %d", match.calls)
+	}
+}
+
+func TestGameStartReusesLastAppliedSettings(t *testing.T) {
+	starter := &fakeStarter{}
+	match := &fakeMatch{}
+	mux := NewMuxWith(Deps{Registry: procreg.New(), Starter: starter, Match: match})
+
+	t.Setenv("BOT_SOURCE_PATH", t.TempDir())
+	t.Setenv("LUGO_STUDIO_GAME_SERVER_PORT", "5503")
+	t.Setenv("LUGO_STUDIO_GAME_FRONTEND_PORT", "8803")
+
+	startBody := `{"team_side":"away","skip_to_golden_goal":true,"game_speed":"slow"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/server/start", strings.NewReader(startBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("server start status %d", rec.Code)
+	}
+	want := starter.lastSettings
+
+	// Stop so game/start must auto-start again; empty body should reuse last settings.
+	stopReq := httptest.NewRequest(http.MethodPost, "/api/server/stop", nil)
+	stopRec := httptest.NewRecorder()
+	mux.ServeHTTP(stopRec, stopReq)
+	if stopRec.Code != http.StatusOK {
+		t.Fatalf("server stop status %d", stopRec.Code)
+	}
+	if starter.Running() {
+		t.Fatal("expected stopped")
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/game/start", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("game start status %d body %s", rec.Code, rec.Body.String())
+	}
+	if starter.calls != 2 {
+		t.Fatalf("server start calls = %d", starter.calls)
+	}
+	if starter.lastSettings != want {
+		t.Fatalf("reused settings = %#v want %#v", starter.lastSettings, want)
+	}
+}
+
+func TestGameStartIgnoresSettingsWhileServerRunning(t *testing.T) {
+	starter := &fakeStarter{}
+	match := &fakeMatch{}
+	mux := NewMuxWith(Deps{Registry: procreg.New(), Starter: starter, Match: match})
+
+	t.Setenv("BOT_SOURCE_PATH", t.TempDir())
+	t.Setenv("LUGO_STUDIO_GAME_SERVER_PORT", "5504")
+	t.Setenv("LUGO_STUDIO_GAME_FRONTEND_PORT", "8804")
+
+	startBody := `{"team_side":"home","skip_to_golden_goal":false,"game_speed":"normal"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/server/start", strings.NewReader(startBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("server start status %d", rec.Code)
+	}
+	want := starter.lastSettings
+
+	changed := `{"team_side":"away","skip_to_golden_goal":true,"game_speed":"slow"}`
+	req = httptest.NewRequest(http.MethodPost, "/api/game/start", strings.NewReader(changed))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("game start status %d body %s", rec.Code, rec.Body.String())
+	}
+	if starter.lastSettings != want {
+		t.Fatalf("settings changed while running: got %#v want %#v", starter.lastSettings, want)
 	}
 }
 

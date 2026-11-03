@@ -1,8 +1,10 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -63,11 +65,12 @@ func NewMuxWith(deps Deps) http.Handler {
 }
 
 type api struct {
-	starter  gameruntime.Starter
-	match    bots.Starter
-	registry *procreg.Registry
-	status   *statusHub
-	startMu  sync.Mutex
+	starter      gameruntime.Starter
+	match        bots.Starter
+	registry     *procreg.Registry
+	status       *statusHub
+	startMu      sync.Mutex
+	lastSettings gameruntime.MatchSettings // last applied while server was down / on start
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -108,8 +111,27 @@ func (a *api) handleServerStart(w http.ResponseWriter, r *http.Request) {
 	a.startMu.Lock()
 	defer a.startMu.Unlock()
 
+	settings, _, err := decodeMatchSettings(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": err.Error()})
+		return
+	}
+
 	ports := gameruntime.PortsFromEnv()
-	if err := a.starter.Start(ports, gameruntime.MatchSettings{}); err != nil {
+	// Settings are locked while the server is running: ignore body changes and
+	// re-use the last applied session copy (Start itself is idempotent).
+	if a.starter.Running() {
+		if err := a.starter.Start(ports, a.lastSettings); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
+			return
+		}
+		a.publishStatus()
+		writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
+		return
+	}
+
+	a.lastSettings = settings
+	if err := a.starter.Start(ports, settings); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
 		return
 	}
@@ -137,8 +159,19 @@ func (a *api) handleGameStart(w http.ResponseWriter, r *http.Request) {
 	a.startMu.Lock()
 	defer a.startMu.Unlock()
 
+	settings, present, err := decodeMatchSettings(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": err.Error()})
+		return
+	}
+
 	ports := gameruntime.PortsFromEnv()
-	if err := a.starter.Start(ports, gameruntime.MatchSettings{}); err != nil {
+	// Auto-start reuses last-applied settings when the body omits them.
+	// Settings are locked while the server is already running.
+	if !a.starter.Running() && present {
+		a.lastSettings = settings
+	}
+	if err := a.starter.Start(ports, a.lastSettings); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
 		return
 	}
@@ -182,4 +215,44 @@ func writeJSON(w http.ResponseWriter, code int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+// decodeMatchSettings reads optional match-settings JSON from the request body.
+// An empty body yields zero-value defaults and present=false. Invalid JSON or
+// enum values return an error suitable for HTTP 400.
+func decodeMatchSettings(r *http.Request) (gameruntime.MatchSettings, bool, error) {
+	if r.Body == nil {
+		return gameruntime.MatchSettings{}, false, nil
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		return gameruntime.MatchSettings{}, false, fmt.Errorf("read body: %w", err)
+	}
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 {
+		return gameruntime.MatchSettings{}, false, nil
+	}
+
+	var settings gameruntime.MatchSettings
+	if err := json.Unmarshal(raw, &settings); err != nil {
+		return gameruntime.MatchSettings{}, false, fmt.Errorf("invalid match settings JSON: %w", err)
+	}
+	if err := validateMatchSettings(settings); err != nil {
+		return gameruntime.MatchSettings{}, false, err
+	}
+	return settings, true, nil
+}
+
+func validateMatchSettings(settings gameruntime.MatchSettings) error {
+	switch settings.TeamSide {
+	case "", gameruntime.TeamSideHome, gameruntime.TeamSideAway:
+	default:
+		return fmt.Errorf("invalid team_side %q", settings.TeamSide)
+	}
+	switch settings.GameSpeed {
+	case "", gameruntime.GameSpeedSlow, gameruntime.GameSpeedNormal, gameruntime.GameSpeedFast:
+	default:
+		return fmt.Errorf("invalid game_speed %q", settings.GameSpeed)
+	}
+	return nil
 }
