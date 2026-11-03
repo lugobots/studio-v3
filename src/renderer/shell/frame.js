@@ -1,7 +1,7 @@
 import { PINNED, TABS, tabById } from "./model.js";
 import { applyTelemetry } from "../lib/telemetry.js";
 import { reportResult } from "../lib/dialogs.js";
-import { initialGameControls, reduceGameControl } from "./game-controls.js";
+import { applyMatchConfig, initialGameControls, reduceGameControl } from "./game-controls.js";
 import { renderGameControls, startServerFromApi } from "./game-controls-view.js";
 import { gameFrontendUrl } from "./game-frontend.js";
 import { editorUrl } from "./editor-url.js";
@@ -90,6 +90,19 @@ export function renderAppFrame(outlet, { host, dialogs }) {
         telemetryEnabled: state.config.telemetryEnabled,
         measurementId: state.config.measurementId,
       });
+    }
+  }
+
+  async function refreshMatchConfig() {
+    if (typeof host?.config?.matchGet !== "function") {
+      return;
+    }
+    try {
+      const match = await host.config.matchGet();
+      state.game = applyMatchConfig(state.game, match);
+      paint();
+    } catch {
+      // Keep defaults when match prefs are unavailable.
     }
   }
 
@@ -338,6 +351,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   }
 
   refreshConfig();
+  refreshMatchConfig();
   bindServerStatus();
   return frame;
 }

@@ -201,6 +201,80 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   installed.restore();
 });
 
+test("workspace loads match config from app settings into game controls", async () => {
+  const installed = installDocument();
+  const outlet = installed.document.createElement("div");
+  let matchGets = 0;
+  const host = {
+    config: {
+      async get() {
+        return {
+          project_path: "/tmp/bot",
+          telemetryEnabled: false,
+          game_frontend_url: "http://localhost:8080",
+          editor_url: "http://localhost:8082",
+        };
+      },
+      async matchGet() {
+        matchGets += 1;
+        return {
+          team_side: "away",
+          skip_to_golden_goal: true,
+          game_speed: "fast",
+          opponent_team: "zombies",
+          saved_positions: [{ name: "corner" }, { name: "kickoff" }],
+        };
+      },
+    },
+    server: {
+      async start() {
+        return { ok: true };
+      },
+      async status() {
+        return { ok: true, body: { running: false } };
+      },
+      onStatus() {
+        return () => {};
+      },
+    },
+    match: {
+      async start() {
+        return { ok: true };
+      },
+    },
+    publish: { async bot() { return { ok: true }; } },
+    docker: {
+      async status() { return { imagePresent: false, image: "studio" }; },
+      async pull() { return { ok: true }; },
+    },
+  };
+
+  renderAppFrame(outlet, {
+    host,
+    dialogs: { notify() {}, confirm() { return Promise.resolve(false); } },
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(matchGets, 1);
+  assert.equal(outlet.querySelector("#team-side-switch").getAttribute("aria-checked"), "true");
+  assert.equal(outlet.querySelector("#extra-time-check input").checked, true);
+  assert.equal(
+    outlet.querySelectorAll("button").find((button) => button.getAttribute("title") === "Fast speed")
+      .getAttribute("aria-pressed"),
+    "true",
+  );
+  assert.equal(
+    outlet.querySelectorAll("button").find((button) => button.getAttribute("title") === "Zombies mode")
+      .getAttribute("aria-pressed"),
+    "true",
+  );
+  const options = outlet.querySelector("select").querySelectorAll("option").map((node) => node.textContent);
+  assert.deepEqual(options, ["corner", "kickoff"]);
+  installed.restore();
+});
+
 test("workspace hydrates power control from already-running API/live status", async () => {
   const installed = installDocument();
   const outlet = installed.document.createElement("div");

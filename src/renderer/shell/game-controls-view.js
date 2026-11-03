@@ -1,5 +1,5 @@
 import { reportResult } from "../lib/dialogs.js";
-import { reduceGameControl } from "./game-controls.js";
+import { persistMatchSettings, reduceGameControl } from "./game-controls.js";
 
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -80,6 +80,16 @@ function controlButton({ title, pressed, className, onClick, graphic, text, disa
 
 function dispatch(state, onChange, action) {
   onChange(reduceGameControl(state, action));
+}
+
+/** Selection-state change for Config / speed / opponent; persists only while server is down. */
+function dispatchSettings(state, onChange, host, action) {
+  if (state.serverRunning) {
+    return;
+  }
+  const next = reduceGameControl(state, action);
+  onChange(next);
+  void persistMatchSettings(host, next);
 }
 
 export async function startServerFromApi(state, onChange, host, dialogs) {
@@ -197,9 +207,21 @@ export function renderGameControls(parent, { state, onChange, host, dialogs }) {
   settings.className = "game-ctrl-settings";
   settings.style.opacity = state.serverRunning ? "0.2" : "1";
   const settingsLocked = Boolean(state.serverRunning);
-  settings.append(configBlock(state, onChange, settingsLocked));
-  settings.append(choiceBlock("Game speed", SPEEDS, state.speed, (id) => dispatch(state, onChange, { type: "set-speed", speed: id }), settingsLocked));
-  settings.append(choiceBlock("Opponent mode", OPPONENTS, state.opponent, (id) => dispatch(state, onChange, { type: "set-opponent", opponent: id }), settingsLocked));
+  settings.append(configBlock(state, onChange, host, settingsLocked));
+  settings.append(choiceBlock(
+    "Game speed",
+    SPEEDS,
+    state.speed,
+    (id) => dispatchSettings(state, onChange, host, { type: "set-speed", speed: id }),
+    settingsLocked,
+  ));
+  settings.append(choiceBlock(
+    "Opponent mode",
+    OPPONENTS,
+    state.opponent,
+    (id) => dispatchSettings(state, onChange, host, { type: "set-opponent", opponent: id }),
+    settingsLocked,
+  ));
   root.append(settings);
 
   parent.append(root);
@@ -286,7 +308,7 @@ function positionsBlock(state, onChange, disabled = false) {
   return section;
 }
 
-function configBlock(state, onChange, disabled = false) {
+function configBlock(state, onChange, host, disabled = false) {
   const wrap = document.createElement("div");
   const title = document.createElement("div");
   title.className = "game-ctrl-section-title";
@@ -316,7 +338,7 @@ function configBlock(state, onChange, disabled = false) {
     if (disabled) {
       return;
     }
-    dispatch(state, onChange, { type: "toggle-side" });
+    dispatchSettings(state, onChange, host, { type: "toggle-side" });
   });
   sideRow.append(side);
 
@@ -333,10 +355,10 @@ function configBlock(state, onChange, disabled = false) {
     input.setAttribute("aria-disabled", "true");
   }
   input.addEventListener("change", () => {
-    if (input.disabled) {
+    if (input.disabled || disabled) {
       return;
     }
-    dispatch(state, onChange, { type: "toggle-golden" });
+    dispatchSettings(state, onChange, host, { type: "toggle-golden" });
   });
   golden.append(input, document.createTextNode(" Skip to Golden Goal"));
   goldenRow.append(golden);

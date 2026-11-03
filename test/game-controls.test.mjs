@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initialGameControls, reduceGameControl } from "../src/renderer/shell/game-controls.js";
+import {
+  applyMatchConfig,
+  initialGameControls,
+  matchSettingsPatch,
+  persistMatchSettings,
+  reduceGameControl,
+} from "../src/renderer/shell/game-controls.js";
 
 function stopped(rows) {
   return rows.every((row) => row.running === false && row.logs === false);
@@ -72,4 +78,55 @@ test("match and position actions do not invent a request", () => {
   assert.equal(home.side, "home");
   const golden = reduceGameControl(initial, { type: "toggle-golden" });
   assert.equal(golden.skipGolden, true);
+});
+
+test("applyMatchConfig loads side, speed, opponent, golden skip, and position names", () => {
+  const loaded = applyMatchConfig(initialGameControls(), {
+    team_side: "away",
+    skip_to_golden_goal: true,
+    game_speed: "fast",
+    opponent_team: "kids",
+    saved_positions: [
+      { name: "corner", ball: { x: 1, y: 2 } },
+      { name: "kickoff" },
+      "legacy-string",
+      { ball: {} },
+    ],
+  });
+  assert.equal(loaded.side, "away");
+  assert.equal(loaded.skipGolden, true);
+  assert.equal(loaded.speed, "fast");
+  assert.equal(loaded.opponent, "kids");
+  assert.deepEqual(loaded.positions, ["corner", "kickoff", "legacy-string"]);
+  assert.equal(loaded.serverRunning, false);
+  assert.deepEqual(matchSettingsPatch(loaded), {
+    team_side: "away",
+    skip_to_golden_goal: true,
+    game_speed: "fast",
+    opponent_team: "kids",
+  });
+});
+
+test("persistMatchSettings writes while stopped and skips while the server is running", async () => {
+  const patches = [];
+  const host = {
+    config: {
+      async matchSet(patch) {
+        patches.push(patch);
+        return patch;
+      },
+    },
+  };
+  const stopped = reduceGameControl(initialGameControls(), { type: "set-speed", speed: "slow" });
+  await persistMatchSettings(host, stopped);
+  assert.deepEqual(patches, [{
+    team_side: "home",
+    skip_to_golden_goal: false,
+    game_speed: "slow",
+    opponent_team: "default",
+  }]);
+
+  const running = reduceGameControl(stopped, { type: "set-server-running", running: true });
+  await persistMatchSettings(host, running);
+  assert.equal(patches.length, 1);
 });

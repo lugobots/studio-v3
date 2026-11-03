@@ -12,14 +12,22 @@ function mountPanel({
   serverStop = async () => ({ ok: true }),
   matchStart = async () => ({ ok: true }),
   confirmAnswer = true,
+  initialState = null,
 } = {}) {
   const installed = installDocument();
   const parent = installed.document.createElement("div");
-  let state = initialGameControls();
+  let state = initialState || initialGameControls();
   const calls = { server: 0, stop: 0, match: 0 };
+  const matchSets = [];
   const notices = [];
   const confirms = [];
   const host = {
+    config: {
+      async matchSet(patch) {
+        matchSets.push(patch);
+        return patch;
+      },
+    },
     server: {
       async start() {
         calls.server += 1;
@@ -64,6 +72,7 @@ function mountPanel({
   return {
     parent,
     calls,
+    matchSets,
     notices,
     confirms,
     state: () => state,
@@ -191,10 +200,24 @@ test("config, game speed, and opponent mode stay locked while the server is runn
   panel.parent.querySelector("#team-side-switch").click();
   panel.parent.querySelector("#extra-time-check input").checked = true;
   panel.parent.querySelector("#extra-time-check input").listeners.change[0]({ preventDefault() {} });
+  await flush();
   assert.equal(panel.state().speed, "slow");
   assert.equal(panel.state().opponent, "kids");
   assert.equal(panel.state().side, "away");
   assert.equal(panel.state().skipGolden, true);
+  assert.equal(panel.matchSets.length, 4);
+  assert.deepEqual(panel.matchSets[0], {
+    team_side: "home",
+    skip_to_golden_goal: false,
+    game_speed: "slow",
+    opponent_team: "default",
+  });
+  assert.deepEqual(panel.matchSets[3], {
+    team_side: "away",
+    skip_to_golden_goal: true,
+    game_speed: "slow",
+    opponent_team: "kids",
+  });
 
   panel.button("Starts the Game Server").click();
   await flush();
@@ -206,11 +229,13 @@ test("config, game speed, and opponent mode stay locked while the server is runn
   assert.equal(panel.parent.querySelector("#team-side-switch").getAttribute("aria-disabled"), "true");
   assert.equal(panel.parent.querySelector("#extra-time-check input").disabled, true);
 
+  const writesBeforeLock = panel.matchSets.length;
   panel.button("Fast speed").click();
   panel.button("Zombies mode").click();
   panel.parent.querySelector("#team-side-switch").click();
   panel.parent.querySelector("#extra-time-check input").checked = false;
   panel.parent.querySelector("#extra-time-check input").listeners.change[0]({ preventDefault() {} });
+  await flush();
 
   assert.equal(panel.state().speed, "slow");
   assert.equal(panel.state().opponent, "kids");
@@ -218,6 +243,33 @@ test("config, game speed, and opponent mode stay locked while the server is runn
   assert.equal(panel.state().skipGolden, true);
   assert.equal(panel.button("Slow speed").getAttribute("aria-pressed"), "true");
   assert.equal(panel.button("Kids mode").getAttribute("aria-pressed"), "true");
+  assert.equal(panel.matchSets.length, writesBeforeLock);
+  panel.restore();
+});
+
+test("toggling side or speed while the server is down writes match settings", async () => {
+  const panel = mountPanel();
+
+  panel.parent.querySelector("#team-side-switch").click();
+  await flush();
+  assert.equal(panel.state().side, "away");
+  assert.deepEqual(panel.matchSets.at(-1), {
+    team_side: "away",
+    skip_to_golden_goal: false,
+    game_speed: "normal",
+    opponent_team: "default",
+  });
+
+  panel.button("Fast speed").click();
+  await flush();
+  assert.equal(panel.state().speed, "fast");
+  assert.deepEqual(panel.matchSets.at(-1), {
+    team_side: "away",
+    skip_to_golden_goal: false,
+    game_speed: "fast",
+    opponent_team: "default",
+  });
+  assert.equal(panel.matchSets.length, 2);
   panel.restore();
 });
 
