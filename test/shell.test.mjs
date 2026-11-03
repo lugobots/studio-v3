@@ -183,3 +183,79 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   assert.equal(serverStarts, 0);
   installed.restore();
 });
+
+test("workspace hydrates power control from already-running API/live status", async () => {
+  const installed = installDocument();
+  const outlet = installed.document.createElement("div");
+  const statusListeners = new Set();
+  let statusReads = 0;
+  const host = {
+    config: {
+      async get() {
+        return {
+          project_path: "/tmp/bot",
+          telemetryEnabled: false,
+          game_frontend_url: "http://localhost:8080",
+          editor_url: "http://localhost:8082",
+        };
+      },
+    },
+    server: {
+      async start() {
+        return { ok: true };
+      },
+      async status() {
+        statusReads += 1;
+        return { ok: true, body: { running: true } };
+      },
+      onStatus(callback) {
+        statusListeners.add(callback);
+        callback({ running: true });
+        return () => statusListeners.delete(callback);
+      },
+    },
+    match: {
+      async start() {
+        return { ok: true };
+      },
+    },
+    publish: { async bot() { return { ok: true }; } },
+    docker: {
+      async status() { return { imagePresent: false, image: "studio" }; },
+      async pull() { return { ok: true }; },
+    },
+  };
+
+  renderAppFrame(outlet, {
+    host,
+    dialogs: { notify() {}, confirm() { return Promise.resolve(false); } },
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  const runningPower = () => outlet.querySelector('button[title="Stops the Game Server"]');
+  const stoppedPower = () => outlet.querySelector('button[title="Starts the Game Server"]');
+  assert.equal(statusListeners.size, 1);
+  assert.equal(statusReads, 1);
+  assert.ok(runningPower());
+  assert.equal(runningPower().className.includes("is-running"), true);
+  assert.equal(stoppedPower(), null);
+
+  for (const listener of statusListeners) {
+    listener({ running: false });
+  }
+  await Promise.resolve();
+  assert.ok(stoppedPower());
+  assert.equal(stoppedPower().className.includes("is-running"), false);
+  assert.equal(runningPower(), null);
+
+  for (const listener of statusListeners) {
+    listener({ running: true });
+  }
+  await Promise.resolve();
+  assert.ok(runningPower());
+  assert.equal(runningPower().className.includes("is-running"), true);
+  assert.equal(stoppedPower(), null);
+  installed.restore();
+});

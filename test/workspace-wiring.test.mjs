@@ -59,6 +59,16 @@ test("workspace wiring hits API for server and match only, keeps layout placehol
         };
       },
     };
+    // Keep this fixture on the start/match HTTP paths; status hydration is covered in shell tests.
+    studio.server = {
+      ...studio.server,
+      async status() {
+        return { ok: true, body: { running: false } };
+      },
+      onStatus() {
+        return () => {};
+      },
+    };
     studio.docker = {
       ...studio.docker,
       async ensureEditor() {

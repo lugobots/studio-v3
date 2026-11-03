@@ -1,10 +1,23 @@
 import { PINNED, TABS, tabById } from "./model.js";
 import { applyTelemetry } from "../lib/telemetry.js";
 import { reportResult } from "../lib/dialogs.js";
-import { initialGameControls } from "./game-controls.js";
+import { initialGameControls, reduceGameControl } from "./game-controls.js";
 import { renderGameControls } from "./game-controls-view.js";
 import { gameFrontendUrl } from "./game-frontend.js";
 import { editorUrl } from "./editor-url.js";
+
+function statusRunning(payload) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  if (typeof payload.running === "boolean") {
+    return payload.running;
+  }
+  if (payload.body && typeof payload.body.running === "boolean") {
+    return payload.body.running;
+  }
+  return null;
+}
 
 export function renderAppFrame(outlet, { host, dialogs }) {
   const frame = document.createElement("div");
@@ -32,6 +45,42 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   outlet.append(frame);
 
   const state = { tab: "workspace", view: "tab", config: null, game: initialGameControls() };
+
+  function applyServerStatus(payload) {
+    const running = statusRunning(payload);
+    if (running === null || running === state.game.serverRunning) {
+      return;
+    }
+    state.game = reduceGameControl(state.game, { type: "set-server-running", running });
+    paint();
+  }
+
+  function bindServerStatus() {
+    // Push-first: live connect/reconnect snapshots own the truth. HTTP status is only a
+    // bootstrap fallback when the live channel has not delivered yet.
+    let sawLiveStatus = false;
+    if (typeof host?.server?.onStatus === "function") {
+      try {
+        host.server.onStatus((status) => {
+          sawLiveStatus = true;
+          applyServerStatus(status);
+        });
+      } catch {
+        // Live channel may be unavailable (missing WebSocket); HTTP status still hydrates.
+      }
+    }
+    if (typeof host?.server?.status === "function") {
+      void Promise.resolve()
+        .then(() => host.server.status())
+        .then((result) => {
+          if (sawLiveStatus || !result?.ok) {
+            return;
+          }
+          applyServerStatus(result);
+        })
+        .catch(() => {});
+    }
+  }
 
   async function refreshConfig() {
     state.config = await host.config.get();
@@ -262,5 +311,6 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   }
 
   refreshConfig();
+  bindServerStatus();
   return frame;
 }
