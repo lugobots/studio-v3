@@ -88,6 +88,27 @@ async function startServerFromApi(state, onChange, host, dialogs) {
   }
 }
 
+async function stopServerFromApi(state, onChange, host, dialogs) {
+  if (!host?.server?.stop || !dialogs?.confirm) {
+    return;
+  }
+  const accepted = await dialogs.confirm({
+    title: "Stop the Game Server?",
+    body: "The game server will stop. You can start it again when you are ready.",
+    confirmLabel: "Stop",
+    cancelLabel: "Cancel",
+  });
+  if (!accepted) {
+    return;
+  }
+  const result = await host.server.stop();
+  if (result?.ok) {
+    dispatch(state, onChange, { type: "set-server-running", running: false });
+    return;
+  }
+  await reportResult(dialogs, result || { ok: false, error: "The game server failed to stop." });
+}
+
 async function startMatchFromApi(host, dialogs) {
   if (!host?.match?.start) {
     return;
@@ -116,8 +137,7 @@ export function renderGameControls(parent, { state, onChange, host, dialogs }) {
     className: state.serverRunning ? "server-power is-running" : "server-power",
     onClick: () => {
       if (state.serverRunning) {
-        // Server stop stays local-only for this change.
-        dispatch(state, onChange, { type: "toggle-server" });
+        stopServerFromApi(state, onChange, host, dialogs);
         return;
       }
       startServerFromApi(state, onChange, host, dialogs);

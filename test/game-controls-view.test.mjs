@@ -9,12 +9,14 @@ const SECTIONS = ["Server", "Match", "Home", "Away", "Positions", "Config", "Gam
 
 function mountPanel({
   serverStart = async () => ({ ok: true }),
+  serverStop = async () => ({ ok: true }),
   matchStart = async () => ({ ok: true }),
+  confirmAnswer = true,
 } = {}) {
   const installed = installDocument();
   const parent = installed.document.createElement("div");
   let state = initialGameControls();
-  const calls = { server: 0, match: 0 };
+  const calls = { server: 0, stop: 0, match: 0 };
   const notices = [];
   const confirms = [];
   const host = {
@@ -22,6 +24,10 @@ function mountPanel({
       async start() {
         calls.server += 1;
         return serverStart();
+      },
+      async stop() {
+        calls.stop += 1;
+        return serverStop();
       },
     },
     match: {
@@ -37,7 +43,7 @@ function mountPanel({
     },
     async confirm(payload) {
       confirms.push(payload);
-      return true;
+      return confirmAnswer;
     },
   };
 
@@ -69,6 +75,7 @@ function mountPanel({
 }
 
 async function flush() {
+  await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
 }
@@ -157,10 +164,41 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   await flush();
   assert.equal(panel.calls.match, 1);
   assert.equal(panel.notices.length, 1);
+  assert.equal(panel.calls.stop, 0);
+  panel.restore();
+});
+
+test("canceling server stop confirmation does not call stop", async () => {
+  const panel = mountPanel({ confirmAnswer: false });
+
+  panel.button("Starts the Game Server").click();
+  await flush();
+  assert.equal(panel.state().serverRunning, true);
 
   panel.button("Stops the Game Server").click();
-  assert.equal(panel.state().serverRunning, false);
+  await flush();
+  assert.equal(panel.confirms.length, 1);
+  assert.equal(panel.confirms[0].title, "Stop the Game Server?");
+  assert.equal(panel.calls.stop, 0);
+  assert.equal(panel.state().serverRunning, true);
+  assert.equal(panel.button("Stops the Game Server") !== null, true);
+  panel.restore();
+});
+
+test("confirming server stop calls the API and updates the power control", async () => {
+  const panel = mountPanel();
+
+  panel.button("Starts the Game Server").click();
+  await flush();
+  assert.equal(panel.state().serverRunning, true);
+
+  panel.button("Stops the Game Server").click();
+  await flush();
+  assert.equal(panel.confirms.length, 1);
+  assert.equal(panel.confirms[0].confirmLabel, "Stop");
+  assert.equal(panel.calls.stop, 1);
   assert.equal(panel.calls.server, 1);
+  assert.equal(panel.state().serverRunning, false);
   assert.equal(panel.button("Starts the Game Server") !== null, true);
   panel.restore();
 });
