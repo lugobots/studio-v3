@@ -1,0 +1,140 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import http from "node:http";
+import { createHttpStudio } from "../src/renderer/lib/http-studio.js";
+import { renderAppFrame } from "../src/renderer/shell/frame.js";
+import { installDocument } from "./dom-stub.mjs";
+
+async function flush() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+function buttonByTitle(root, title) {
+  return root.querySelectorAll("button").find((button) => button.getAttribute("title") === title);
+}
+
+async function waitFor(predicate, { timeoutMs = 2000 } = {}) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("timed out waiting for condition");
+}
+
+test("workspace wiring hits API for server and match only, keeps layout placeholders local", async () => {
+  const hits = [];
+  const server = http.createServer((req, res) => {
+    hits.push(`${req.method} ${req.url}`);
+    if (req.url === "/api/server/start" && req.method === "POST") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "OK" }));
+      return;
+    }
+    if (req.url === "/api/game/start" && req.method === "POST") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "OK" }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address();
+
+  try {
+    const studio = createHttpStudio({ baseUrl: `http://127.0.0.1:${port}/api` });
+    let editorStarts = 0;
+    studio.config = {
+      async get() {
+        return {
+          project_path: "/tmp/bot",
+          telemetryEnabled: false,
+          game_frontend_url: "http://localhost:8080",
+          editor_url: "http://localhost:8082",
+        };
+      },
+    };
+    studio.docker = {
+      ...studio.docker,
+      async ensureEditor() {
+        editorStarts += 1;
+        throw new Error("Editor UI must not start the editor container");
+      },
+    };
+
+    const installed = installDocument();
+    const outlet = installed.document.createElement("div");
+    const notices = [];
+    renderAppFrame(outlet, {
+      host: studio,
+      dialogs: {
+        notify(payload) {
+          notices.push(payload);
+        },
+        confirm() {
+          return Promise.resolve(false);
+        },
+      },
+    });
+    await flush();
+
+    const gameFrame = outlet.querySelector("#game_frame");
+    assert.ok(gameFrame);
+    assert.equal(gameFrame.tagName, "IFRAME");
+    assert.equal(gameFrame.src, "http://localhost:8080");
+    assert.equal(outlet.querySelector(".game-ctrl") !== null, true);
+
+    buttonByTitle(outlet, "Starts the Game Server").click();
+    await waitFor(() => hits.length === 1);
+    await flush();
+    assert.deepEqual(hits, ["POST /api/server/start"]);
+    assert.ok(buttonByTitle(outlet, "Stops the Game Server"));
+
+    buttonByTitle(outlet, "Starts the match").click();
+    await waitFor(() => hits.length === 2);
+    await flush();
+    assert.deepEqual(hits, ["POST /api/server/start", "POST /api/game/start"]);
+    assert.equal(notices.some((item) => item.title === "Match started"), true);
+
+    const beforeLocal = hits.length;
+    const awayStart = outlet.querySelectorAll(".bot_actions")[1].querySelector('button[title="Start"]');
+    awayStart.click();
+    buttonByTitle(outlet, "Zombies mode").click();
+    buttonByTitle(outlet, "Slow speed").click();
+    buttonByTitle(outlet, "Resets the match").click();
+    buttonByTitle(outlet, "Save positions").click();
+    buttonByTitle(outlet, "Apply").click();
+    outlet.querySelector("#team-side-switch").click();
+    buttonByTitle(outlet, "Stops the Game Server").click();
+    await flush();
+    assert.equal(hits.length, beforeLocal);
+
+    outlet.querySelectorAll("button").find((button) => button.textContent === "Editor").click();
+    await flush();
+    const editorPane = outlet.querySelector(".editor-main");
+    assert.ok(editorPane);
+    assert.equal(editorPane.dataset.editorUrl, "http://localhost:8082");
+    const placeholder = outlet.querySelector(".editor-placeholder");
+    assert.ok(placeholder);
+    assert.equal(placeholder.textContent, "editor not started");
+    const editorFrame = outlet.querySelector("#editor_frame");
+    assert.ok(editorFrame);
+    assert.equal(editorFrame.src, undefined);
+    assert.equal(editorFrame.getAttribute("src"), null);
+    assert.equal(editorFrame.dataset.src, "http://localhost:8082");
+    assert.equal(editorFrame.hidden, true);
+    assert.equal(editorStarts, 0);
+    assert.deepEqual(hits, ["POST /api/server/start", "POST /api/game/start"]);
+
+    installed.restore();
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+});

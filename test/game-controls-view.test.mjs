@@ -130,6 +130,18 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   assert.equal(panel.calls.server, 1);
   assert.equal(panel.calls.match, 0);
 
+  panel.parent.querySelectorAll(".bot_actions")[1].querySelector('button[title="Start"]').click();
+  assert.equal(panel.state().away[0].running, true);
+  assert.equal(panel.calls.server, 1);
+  assert.equal(panel.calls.match, 0);
+
+  panel.button("Zombies mode").click();
+  assert.equal(panel.state().opponent, "zombies");
+  panel.parent.querySelector("#team-side-switch").click();
+  assert.equal(panel.state().side, "away");
+  assert.equal(panel.calls.server, 1);
+  assert.equal(panel.calls.match, 0);
+
   panel.parent.querySelectorAll('button[title="Ver logs"]')[0].click();
   const note = panel.parent.querySelector(".game-ctrl-log-note");
   assert.equal(note.textContent.includes("logger"), true);
