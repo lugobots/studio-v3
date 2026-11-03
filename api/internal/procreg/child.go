@@ -2,6 +2,7 @@ package procreg
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"syscall"
 	"time"
@@ -66,10 +67,38 @@ func (c *Child) signal(sig syscall.Signal) error {
 // StartChild starts name with args in a new process group and returns a Child
 // ready to register. The caller owns registration with the Registry.
 func StartChild(name string, args ...string) (*Child, error) {
-	cmd := exec.Command(name, args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	return StartCmd(exec.Command(name, args...))
+}
+
+// StartShell runs command via `sh -c` in dir with extraEnv merged onto the
+// current environment, in a new process group.
+func StartShell(dir, command string, extraEnv map[string]string) (*Child, error) {
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Dir = dir
+	cmd.Env = mergeEnv(extraEnv)
+	return StartCmd(cmd)
+}
+
+// StartCmd starts cmd in a new process group and returns a Child ready to
+// register. The caller owns registration with the Registry.
+func StartCmd(cmd *exec.Cmd) (*Child, error) {
+	if cmd == nil {
+		return nil, errors.New("procreg: StartCmd(nil)")
+	}
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setpgid = true
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
 	return &Child{Cmd: cmd, ProcessGroup: true}, nil
+}
+
+func mergeEnv(extra map[string]string) []string {
+	env := os.Environ()
+	for k, v := range extra {
+		env = append(env, k+"="+v)
+	}
+	return env
 }

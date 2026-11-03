@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"studio-v3/api/internal/bots"
 	"studio-v3/api/internal/gameruntime"
 	"studio-v3/api/internal/procreg"
 	"studio-v3/api/internal/server"
@@ -28,9 +29,11 @@ func listenAddr() string {
 func main() {
 	reg := procreg.New()
 	starter := gameruntime.New(reg)
+	match := bots.New(reg)
 	mux := server.NewMuxWith(server.Deps{
 		Registry: reg,
 		Starter:  starter,
+		Match:    match,
 	})
 
 	addr := listenAddr()

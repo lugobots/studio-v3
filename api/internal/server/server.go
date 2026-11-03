@@ -2,12 +2,14 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"studio-v3/api/internal/bots"
 	"studio-v3/api/internal/bottemplate"
 	"studio-v3/api/internal/gameruntime"
 	"studio-v3/api/internal/procreg"
@@ -22,6 +24,7 @@ var templateInstaller bottemplate.Installer = bottemplate.DefaultInstaller()
 type Deps struct {
 	Registry *procreg.Registry
 	Starter  gameruntime.Starter
+	Match    bots.Starter
 }
 
 // NewMux returns the Studio V3 API HTTP handler with default deps.
@@ -37,8 +40,12 @@ func NewMuxWith(deps Deps) http.Handler {
 	if deps.Starter == nil {
 		deps.Starter = gameruntime.New(deps.Registry)
 	}
+	if deps.Match == nil {
+		deps.Match = bots.New(deps.Registry)
+	}
 	api := &api{
 		starter:  deps.Starter,
+		match:    deps.Match,
 		registry: deps.Registry,
 	}
 	mux := http.NewServeMux()
@@ -47,11 +54,13 @@ func NewMuxWith(deps Deps) http.Handler {
 	mux.HandleFunc("POST /api/init/setup-new-bot", handleSetupNewBot)
 	mux.HandleFunc("POST /api/bot/publish", handlePublish)
 	mux.HandleFunc("POST /api/server/start", api.handleServerStart)
+	mux.HandleFunc("POST /api/game/start", api.handleGameStart)
 	return mux
 }
 
 type api struct {
 	starter  gameruntime.Starter
+	match    bots.Starter
 	registry *procreg.Registry
 	startMu  sync.Mutex
 }
@@ -96,6 +105,28 @@ func (a *api) handleServerStart(w http.ResponseWriter, r *http.Request) {
 
 	ports := gameruntime.PortsFromEnv()
 	if err := a.starter.Start(ports); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
+}
+
+func (a *api) handleGameStart(w http.ResponseWriter, r *http.Request) {
+	a.startMu.Lock()
+	defer a.startMu.Unlock()
+
+	ports := gameruntime.PortsFromEnv()
+	if err := a.starter.Start(ports); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
+		return
+	}
+
+	cfg := bots.Config{
+		ProjectRoot:    projectRoot(),
+		GRPCURL:        fmt.Sprintf("localhost:%d", ports.GameServer),
+		OpponentBinary: bots.OpponentBinaryFromEnv(),
+	}
+	if err := a.match.Start(cfg); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
 		return
 	}
