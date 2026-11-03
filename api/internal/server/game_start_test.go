@@ -33,6 +33,10 @@ func (f *fakeMatch) StartMatch(cfg bots.Config, active []bots.Slot) error {
 	return f.err
 }
 
+func (f *fakeMatch) StartBot(cfg bots.Config, slot bots.Slot) error { return nil }
+func (f *fakeMatch) StopBot(slot bots.Slot) error                   { return nil }
+func (f *fakeMatch) BotRunning(slot bots.Slot) bool                 { return false }
+
 func TestGameStartSuccess(t *testing.T) {
 	starter := &fakeStarter{}
 	match := &fakeMatch{}
@@ -335,3 +339,7 @@ func (r *recordingMatch) StartMatch(cfg bots.Config, active []bots.Slot) error {
 	}
 	return nil
 }
+
+func (r *recordingMatch) StartBot(cfg bots.Config, slot bots.Slot) error { return nil }
+func (r *recordingMatch) StopBot(slot bots.Slot) error                   { return nil }
+func (r *recordingMatch) BotRunning(slot bots.Slot) bool                 { return false }

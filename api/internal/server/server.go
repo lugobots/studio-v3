@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -61,6 +62,9 @@ func NewMuxWith(deps Deps) http.Handler {
 	mux.HandleFunc("GET /api/server/status/ws", api.handleServerStatusWS)
 	mux.HandleFunc("POST /api/server/stop", api.handleServerStop)
 	mux.HandleFunc("POST /api/game/start", api.handleGameStart)
+	mux.HandleFunc("POST /api/team/{side}/bots/{number}", api.handleBotStart)
+	mux.HandleFunc("DELETE /api/team/{side}/bots/{number}", api.handleBotStop)
+	mux.HandleFunc("GET /api/team/{side}/bots/{number}", api.handleBotStatus)
 	return mux
 }
 
@@ -190,6 +194,82 @@ func (a *api) handleGameStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
+}
+
+func (a *api) handleBotStart(w http.ResponseWriter, r *http.Request) {
+	a.startMu.Lock()
+	defer a.startMu.Unlock()
+
+	slot, err := parseBotSlot(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": err.Error()})
+		return
+	}
+	if err := a.match.StartBot(a.botConfig(), slot); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, botStatusBody(slot, a.match.BotRunning(slot)))
+}
+
+func (a *api) handleBotStop(w http.ResponseWriter, r *http.Request) {
+	a.startMu.Lock()
+	defer a.startMu.Unlock()
+
+	slot, err := parseBotSlot(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": err.Error()})
+		return
+	}
+	if err := a.match.StopBot(slot); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, botStatusBody(slot, a.match.BotRunning(slot)))
+}
+
+func (a *api) handleBotStatus(w http.ResponseWriter, r *http.Request) {
+	slot, err := parseBotSlot(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, botStatusBody(slot, a.match.BotRunning(slot)))
+}
+
+func (a *api) botConfig() bots.Config {
+	ports := gameruntime.PortsFromEnv()
+	return bots.Config{
+		ProjectRoot:    projectRoot(),
+		GRPCURL:        fmt.Sprintf("localhost:%d", ports.GameServer),
+		PlayerSide:     playerSideForBots(a.lastSettings.TeamSide),
+		OpponentMode:   string(a.lastSettings.OpponentMode),
+		OpponentBinary: bots.OpponentBinaryFromEnv(),
+	}
+}
+
+func parseBotSlot(r *http.Request) (bots.Slot, error) {
+	side := strings.ToUpper(r.PathValue("side"))
+	if side != bots.SideHome && side != bots.SideAway {
+		return bots.Slot{}, fmt.Errorf("invalid side %q", r.PathValue("side"))
+	}
+	number, err := strconv.Atoi(r.PathValue("number"))
+	if err != nil {
+		return bots.Slot{}, fmt.Errorf("invalid bot number %q", r.PathValue("number"))
+	}
+	if number < 1 || number > 11 {
+		return bots.Slot{}, fmt.Errorf("invalid bot number %d", number)
+	}
+	return bots.Slot{Side: side, Number: number}, nil
+}
+
+func botStatusBody(slot bots.Slot, running bool) map[string]any {
+	return map[string]any{
+		"status":  "OK",
+		"side":    slot.Side,
+		"number":  slot.Number,
+		"running": running,
+	}
 }
 
 // playerSideForBots maps match-settings team_side to the BOT_TEAM value used by

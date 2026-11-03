@@ -20,9 +20,13 @@ type Slot struct {
 	Number int    // 1..11
 }
 
-// Starter starts the bots listed in an explicit active set for a local match.
+// Starter starts the bots listed in an explicit active set for a local match
+// and supports per-bot start/stop afterward.
 type Starter interface {
 	StartMatch(cfg Config, active []Slot) error
+	StartBot(cfg Config, slot Slot) error
+	StopBot(slot Slot) error
+	BotRunning(slot Slot) bool
 }
 
 // Config describes how to launch player and opponent bots for one match.
@@ -37,7 +41,7 @@ type Config struct {
 
 type botHandle struct {
 	id    procreg.ID
-	entry procreg.Entry
+	child *procreg.Child
 }
 
 // Manager prepares the player project once and starts only the requested bot
@@ -50,7 +54,7 @@ type Manager struct {
 	StartProcess func(dir, command string, env map[string]string) (*procreg.Child, error)
 
 	mu   sync.Mutex
-	bots []botHandle
+	bots map[string]botHandle
 }
 
 // New returns a Manager that registers bot children on reg.
@@ -58,7 +62,7 @@ func New(reg *procreg.Registry) *Manager {
 	if reg == nil {
 		panic("bots: New(nil registry)")
 	}
-	return &Manager{Registry: reg}
+	return &Manager{Registry: reg, bots: make(map[string]botHandle)}
 }
 
 // OpponentBinaryFromEnv reads LUGO_STUDIO_OPPONENT_BOT (default
@@ -82,6 +86,10 @@ func AllSlots() []Slot {
 	return out
 }
 
+func slotKey(s Slot) string {
+	return fmt.Sprintf("%s/%d", s.Side, s.Number)
+}
+
 // StartMatch prepares the player project (when needed) and launches only the
 // listed slots. Slots on PlayerSide use the project bots; other slots use the
 // opponent binary. An empty active set is allowed (stops prior bots, starts none).
@@ -90,34 +98,13 @@ func (m *Manager) StartMatch(cfg Config, active []Slot) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if cfg.ProjectRoot == "" {
-		return fmt.Errorf("project root is required")
+	cfg, err := normalizeConfig(cfg)
+	if err != nil {
+		return err
 	}
-	if cfg.GRPCURL == "" {
-		return fmt.Errorf("grpc url is required")
-	}
-	if cfg.PlayerSide == "" {
-		cfg.PlayerSide = SideHome
-	}
-	if cfg.PlayerSide != SideHome && cfg.PlayerSide != SideAway {
-		return fmt.Errorf("invalid player side %q", cfg.PlayerSide)
-	}
-	if cfg.OpponentMode == "" {
-		cfg.OpponentMode = defaultOpponentMode
-	}
-	if cfg.OpponentBinary == "" {
-		cfg.OpponentBinary = OpponentBinaryFromEnv()
-	}
-	if cfg.CacheDir == "" {
-		cfg.CacheDir = filepath.Join(cfg.ProjectRoot, ".cache")
-	}
-
 	for _, slot := range active {
-		if slot.Side != SideHome && slot.Side != SideAway {
-			return fmt.Errorf("invalid bot side %q", slot.Side)
-		}
-		if slot.Number < 1 || slot.Number > playersPerSide {
-			return fmt.Errorf("invalid bot number %d", slot.Number)
+		if err := validateSlot(slot); err != nil {
+			return err
 		}
 	}
 
@@ -157,17 +144,80 @@ func (m *Manager) StartMatch(cfg Config, active []Slot) error {
 	}
 
 	for _, slot := range active {
-		if slot.Side == cfg.PlayerSide {
-			if err := m.startPlayer(lang, cfg, slot.Side, slot.Number); err != nil {
-				m.stopBotsLocked()
-				return fmt.Errorf("start player bot %s/%d: %w", slot.Side, slot.Number, err)
-			}
-			continue
-		}
-		if err := m.startOpponent(cfg, slot.Side, slot.Number); err != nil {
+		if err := m.startSlotLocked(lang, cfg, slot); err != nil {
 			m.stopBotsLocked()
-			return fmt.Errorf("start opponent bot %s/%d: %w", slot.Side, slot.Number, err)
+			return err
 		}
+	}
+	return nil
+}
+
+// StartBot starts a single slot (player project or opponent by team side) and
+// registers it with procreg. Idempotent when the slot is already running.
+func (m *Manager) StartBot(cfg Config, slot Slot) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	cfg, err := normalizeConfig(cfg)
+	if err != nil {
+		return err
+	}
+	if err := validateSlot(slot); err != nil {
+		return err
+	}
+	if m.botRunningLocked(slot) {
+		return nil
+	}
+	m.clearSlotLocked(slot)
+
+	var lang Language
+	if slot.Side == cfg.PlayerSide {
+		lang = DetectLanguage(cfg.ProjectRoot)
+		if lang == LangUnknown {
+			return fmt.Errorf("could not detect project language in %s (need go.mod, requirements.txt, or package.json)", cfg.ProjectRoot)
+		}
+		if err := os.MkdirAll(cfg.CacheDir, 0o755); err != nil {
+			return fmt.Errorf("create cache dir: %w", err)
+		}
+		if err := m.preparePlayer(lang, cfg); err != nil {
+			return fmt.Errorf("prepare player bots: %w", err)
+		}
+	} else {
+		if err := ensureOpponentBinary(cfg.OpponentBinary); err != nil {
+			return err
+		}
+	}
+	return m.startSlotLocked(lang, cfg, slot)
+}
+
+// StopBot stops a single slot and unregisters it from procreg. No-op when the
+// slot is not running.
+func (m *Manager) StopBot(slot Slot) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if err := validateSlot(slot); err != nil {
+		return err
+	}
+	m.clearSlotLocked(slot)
+	return nil
+}
+
+// BotRunning reports whether a managed process for the slot is alive.
+func (m *Manager) BotRunning(slot Slot) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.botRunningLocked(slot)
+}
+
+func (m *Manager) startSlotLocked(lang Language, cfg Config, slot Slot) error {
+	if slot.Side == cfg.PlayerSide {
+		if err := m.startPlayer(lang, cfg, slot); err != nil {
+			return fmt.Errorf("start player bot %s/%d: %w", slot.Side, slot.Number, err)
+		}
+		return nil
+	}
+	if err := m.startOpponent(cfg, slot); err != nil {
+		return fmt.Errorf("start opponent bot %s/%d: %w", slot.Side, slot.Number, err)
 	}
 	return nil
 }
@@ -197,7 +247,7 @@ func (m *Manager) preparePlayer(lang Language, cfg Config) error {
 	}
 }
 
-func (m *Manager) startPlayer(lang Language, cfg Config, side string, number int) error {
+func (m *Manager) startPlayer(lang Language, cfg Config, slot Slot) error {
 	var command string
 	switch lang {
 	case LangGo:
@@ -209,30 +259,57 @@ func (m *Manager) startPlayer(lang Language, cfg Config, side string, number int
 	default:
 		return fmt.Errorf("unsupported language %q", lang)
 	}
-	return m.launch(cfg.ProjectRoot, command, botEnv(side, number, cfg.GRPCURL, ""))
+	return m.launch(slot, cfg.ProjectRoot, command, botEnv(slot.Side, slot.Number, cfg.GRPCURL, ""))
 }
 
-func (m *Manager) startOpponent(cfg Config, side string, number int) error {
+func (m *Manager) startOpponent(cfg Config, slot Slot) error {
 	command := shellQuote(cfg.OpponentBinary)
-	return m.launch("", command, botEnv(side, number, cfg.GRPCURL, cfg.OpponentMode))
+	return m.launch(slot, "", command, botEnv(slot.Side, slot.Number, cfg.GRPCURL, cfg.OpponentMode))
 }
 
-func (m *Manager) launch(dir, command string, env map[string]string) error {
+func (m *Manager) launch(slot Slot, dir, command string, env map[string]string) error {
 	child, err := m.startProcessFn()(dir, command, env)
 	if err != nil {
 		return err
 	}
 	id := m.Registry.Register(child)
-	m.bots = append(m.bots, botHandle{id: id, entry: child})
+	if m.bots == nil {
+		m.bots = make(map[string]botHandle)
+	}
+	m.bots[slotKey(slot)] = botHandle{id: id, child: child}
 	return nil
 }
 
 func (m *Manager) stopBotsLocked() {
-	for _, b := range m.bots {
+	for key, b := range m.bots {
 		m.Registry.Unregister(b.id)
-		_ = b.entry.Shutdown()
+		_ = b.child.Shutdown()
+		delete(m.bots, key)
 	}
-	m.bots = nil
+}
+
+func (m *Manager) clearSlotLocked(slot Slot) {
+	key := slotKey(slot)
+	b, ok := m.bots[key]
+	if !ok {
+		return
+	}
+	m.Registry.Unregister(b.id)
+	_ = b.child.Shutdown()
+	delete(m.bots, key)
+}
+
+func (m *Manager) botRunningLocked(slot Slot) bool {
+	b, ok := m.bots[slotKey(slot)]
+	if !ok {
+		return false
+	}
+	if b.child.Alive() {
+		return true
+	}
+	m.Registry.Unregister(b.id)
+	delete(m.bots, slotKey(slot))
+	return false
 }
 
 func (m *Manager) runSyncFn() func(dir, command string, env map[string]string) error {
@@ -256,6 +333,41 @@ func (m *Manager) startProcessFn() func(dir, command string, env map[string]stri
 		return m.StartProcess
 	}
 	return procreg.StartShell
+}
+
+func normalizeConfig(cfg Config) (Config, error) {
+	if cfg.ProjectRoot == "" {
+		return cfg, fmt.Errorf("project root is required")
+	}
+	if cfg.GRPCURL == "" {
+		return cfg, fmt.Errorf("grpc url is required")
+	}
+	if cfg.PlayerSide == "" {
+		cfg.PlayerSide = SideHome
+	}
+	if cfg.PlayerSide != SideHome && cfg.PlayerSide != SideAway {
+		return cfg, fmt.Errorf("invalid player side %q", cfg.PlayerSide)
+	}
+	if cfg.OpponentMode == "" {
+		cfg.OpponentMode = defaultOpponentMode
+	}
+	if cfg.OpponentBinary == "" {
+		cfg.OpponentBinary = OpponentBinaryFromEnv()
+	}
+	if cfg.CacheDir == "" {
+		cfg.CacheDir = filepath.Join(cfg.ProjectRoot, ".cache")
+	}
+	return cfg, nil
+}
+
+func validateSlot(slot Slot) error {
+	if slot.Side != SideHome && slot.Side != SideAway {
+		return fmt.Errorf("invalid bot side %q", slot.Side)
+	}
+	if slot.Number < 1 || slot.Number > playersPerSide {
+		return fmt.Errorf("invalid bot number %d", slot.Number)
+	}
+	return nil
 }
 
 func ensureOpponentBinary(path string) error {

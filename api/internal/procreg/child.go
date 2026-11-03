@@ -17,6 +17,17 @@ type Child struct {
 	ProcessGroup bool
 }
 
+// Alive reports whether the OS process appears to still be running.
+func (c *Child) Alive() bool {
+	if c == nil || c.Cmd == nil || c.Cmd.Process == nil {
+		return false
+	}
+	if c.Cmd.ProcessState != nil {
+		return false
+	}
+	return syscall.Kill(c.Cmd.Process.Pid, 0) == nil
+}
+
 // Shutdown implements Entry. It sends SIGTERM (to the process group when
 // ProcessGroup is set), waits briefly, then SIGKILL if still running.
 func (c *Child) Shutdown() error {

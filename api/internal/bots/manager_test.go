@@ -275,6 +275,97 @@ func TestBotEnv(t *testing.T) {
 	}
 }
 
+func TestManagerStartStopBotHomeAndAway(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opp := filepath.Join(t.TempDir(), "opp-bot")
+	if err := os.WriteFile(opp, []byte("#!/bin/sh\nexec sleep 60\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	reg := procreg.New()
+	mgr := New(reg)
+	mgr.RunSync = func(dir, command string, env map[string]string) error { return nil }
+
+	var mu sync.Mutex
+	var started []map[string]string
+	mgr.StartProcess = func(dir, command string, env map[string]string) (*procreg.Child, error) {
+		mu.Lock()
+		started = append(started, env)
+		mu.Unlock()
+		return procreg.StartChild("sleep", "60")
+	}
+
+	cfg := Config{
+		ProjectRoot:    root,
+		GRPCURL:        "localhost:5123",
+		PlayerSide:     SideHome,
+		OpponentMode:   "zombies",
+		OpponentBinary: opp,
+	}
+	home := Slot{Side: SideHome, Number: 3}
+	away := Slot{Side: SideAway, Number: 7}
+
+	if mgr.BotRunning(home) || mgr.BotRunning(away) {
+		t.Fatal("slots should start stopped")
+	}
+	if err := mgr.StartBot(cfg, home); err != nil {
+		t.Fatalf("StartBot home: %v", err)
+	}
+	if err := mgr.StartBot(cfg, away); err != nil {
+		t.Fatalf("StartBot away: %v", err)
+	}
+	t.Cleanup(func() { _ = reg.ShutdownAll() })
+
+	if !mgr.BotRunning(home) || !mgr.BotRunning(away) {
+		t.Fatalf("running home=%v away=%v", mgr.BotRunning(home), mgr.BotRunning(away))
+	}
+	if reg.Len() != 2 {
+		t.Fatalf("registry len = %d, want 2", reg.Len())
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(started) != 2 {
+		t.Fatalf("started %d, want 2", len(started))
+	}
+	got := map[string]string{}
+	for _, env := range started {
+		got[env["BOT_TEAM"]+"/"+env["BOT_NUMBER"]] = env["MODE"]
+	}
+	if got[SideHome+"/3"] != "" {
+		t.Fatalf("home player MODE = %q", got[SideHome+"/3"])
+	}
+	if got[SideAway+"/7"] != "zombies" {
+		t.Fatalf("away opponent MODE = %q", got[SideAway+"/7"])
+	}
+
+	if err := mgr.StopBot(home); err != nil {
+		t.Fatalf("StopBot home: %v", err)
+	}
+	if mgr.BotRunning(home) {
+		t.Fatal("home should be stopped")
+	}
+	if !mgr.BotRunning(away) {
+		t.Fatal("away should still run")
+	}
+	if reg.Len() != 1 {
+		t.Fatalf("registry len = %d after home stop, want 1", reg.Len())
+	}
+
+	if err := mgr.StopBot(away); err != nil {
+		t.Fatalf("StopBot away: %v", err)
+	}
+	if mgr.BotRunning(away) {
+		t.Fatal("away should be stopped")
+	}
+	if reg.Len() != 0 {
+		t.Fatalf("registry len = %d after both stopped", reg.Len())
+	}
+}
+
 func assertDead(t *testing.T, pid int) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
