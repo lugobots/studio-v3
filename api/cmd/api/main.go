@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"studio-v3/api/internal/bots"
 	"studio-v3/api/internal/gameruntime"
@@ -42,15 +41,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_ = httpServer.Shutdown(shutdownCtx)
-		if err := reg.ShutdownAll(); err != nil {
-			log.Printf("runtime shutdown: %v", err)
-		}
-	}()
+	go awaitRuntimeShutdown(ctx, httpServer, reg)
 
 	log.Printf("studio-v3 api listening on %s", addr)
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {

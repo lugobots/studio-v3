@@ -34,26 +34,27 @@ func (c *Child) Shutdown() error {
 
 	select {
 	case err := <-done:
-		if err == nil {
-			return nil
-		}
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return nil
-		}
-		return err
+		return ignoreExitError(err)
 	case <-time.After(childStopTimeout):
 		_ = c.signal(syscall.SIGKILL)
-		err := <-done
-		if err == nil {
-			return nil
+		select {
+		case err := <-done:
+			return ignoreExitError(err)
+		case <-time.After(childStopTimeout):
+			return errors.New("procreg: child did not exit after SIGKILL")
 		}
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return nil
-		}
-		return err
 	}
+}
+
+func ignoreExitError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return nil
+	}
+	return err
 }
 
 func (c *Child) signal(sig syscall.Signal) error {
