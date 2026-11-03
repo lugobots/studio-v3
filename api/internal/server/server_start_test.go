@@ -15,23 +15,25 @@ import (
 )
 
 type fakeStarter struct {
-	mu         sync.Mutex
-	calls      int
-	stopCalls  int
-	lastPorts  gameruntime.Ports
-	err        error
-	stopErr    error
-	running    bool
-	onStart    func(gameruntime.Ports) error
+	mu           sync.Mutex
+	calls        int
+	stopCalls    int
+	lastPorts    gameruntime.Ports
+	lastSettings gameruntime.MatchSettings
+	err          error
+	stopErr      error
+	running      bool
+	onStart      func(gameruntime.Ports, gameruntime.MatchSettings) error
 }
 
-func (f *fakeStarter) Start(ports gameruntime.Ports) error {
+func (f *fakeStarter) Start(ports gameruntime.Ports, settings gameruntime.MatchSettings) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
 	f.lastPorts = ports
+	f.lastSettings = settings
 	if f.onStart != nil {
-		if err := f.onStart(ports); err != nil {
+		if err := f.onStart(ports, settings); err != nil {
 			return err
 		}
 	}
@@ -151,7 +153,7 @@ func TestServerStartRegistersCleanupAndServesFrontend(t *testing.T) {
 	})
 
 	starter := &fakeStarter{
-		onStart: func(ports gameruntime.Ports) error {
+		onStart: func(ports gameruntime.Ports, _ gameruntime.MatchSettings) error {
 			if ports.GameFrontend != frontPort {
 				return fmt.Errorf("unexpected frontend port %d", ports.GameFrontend)
 			}

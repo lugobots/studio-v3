@@ -109,7 +109,7 @@ func (a *api) handleServerStart(w http.ResponseWriter, r *http.Request) {
 	defer a.startMu.Unlock()
 
 	ports := gameruntime.PortsFromEnv()
-	if err := a.starter.Start(ports); err != nil {
+	if err := a.starter.Start(ports, gameruntime.MatchSettings{}); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
 		return
 	}
@@ -138,7 +138,7 @@ func (a *api) handleGameStart(w http.ResponseWriter, r *http.Request) {
 	defer a.startMu.Unlock()
 
 	ports := gameruntime.PortsFromEnv()
-	if err := a.starter.Start(ports); err != nil {
+	if err := a.starter.Start(ports, gameruntime.MatchSettings{}); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
 		return
 	}

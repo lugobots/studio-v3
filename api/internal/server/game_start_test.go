@@ -80,7 +80,7 @@ func TestGameStartEnsuresServerBeforeBots(t *testing.T) {
 	var order []string
 	var mu sync.Mutex
 	starter := &fakeStarter{
-		onStart: func(ports gameruntime.Ports) error {
+		onStart: func(ports gameruntime.Ports, _ gameruntime.MatchSettings) error {
 			mu.Lock()
 			order = append(order, "server")
 			mu.Unlock()

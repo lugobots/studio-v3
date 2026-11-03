@@ -36,7 +36,7 @@ func TestLocalStartMakesFrontendReachable(t *testing.T) {
 
 	reg := procreg.New()
 	starter := New(reg)
-	if err := starter.Start(Ports{GameServer: grpcPort, GameFrontend: httpPort}); err != nil {
+	if err := starter.Start(Ports{GameServer: grpcPort, GameFrontend: httpPort}, MatchSettings{}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	t.Cleanup(func() {
@@ -61,7 +61,7 @@ func TestLocalStartMakesFrontendReachable(t *testing.T) {
 	}
 
 	// Idempotent second start.
-	if err := starter.Start(Ports{GameServer: grpcPort, GameFrontend: httpPort}); err != nil {
+	if err := starter.Start(Ports{GameServer: grpcPort, GameFrontend: httpPort}, MatchSettings{}); err != nil {
 		t.Fatalf("second Start: %v", err)
 	}
 	if reg.Len() != 1 {
@@ -83,7 +83,7 @@ func TestLocalStartRunningStopLifecycle(t *testing.T) {
 		t.Fatalf("Stop before Start: %v", err)
 	}
 
-	if err := runtime.Start(Ports{GameServer: grpcPort, GameFrontend: httpPort}); err != nil {
+	if err := runtime.Start(Ports{GameServer: grpcPort, GameFrontend: httpPort}, MatchSettings{}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	if !runtime.Running() {
@@ -126,7 +126,7 @@ func TestLocalStartRunningStopLifecycle(t *testing.T) {
 	// Restart must succeed after a clean stop.
 	grpcPort = freePort(t)
 	httpPort = freePort(t)
-	if err := runtime.Start(Ports{GameServer: grpcPort, GameFrontend: httpPort}); err != nil {
+	if err := runtime.Start(Ports{GameServer: grpcPort, GameFrontend: httpPort}, MatchSettings{}); err != nil {
 		t.Fatalf("Start after Stop: %v", err)
 	}
 	t.Cleanup(func() {

@@ -12,10 +12,8 @@ import (
 	"sync"
 	"time"
 
-	serverConfig "github.com/lugobots/server/v2/config"
 	"github.com/lugobots/server/v2/helpers"
 	serverInits "github.com/lugobots/server/v2/initializers"
-	"github.com/lugobots/server/v2/machine"
 	"github.com/rubens21/srvmgr"
 	"go.uber.org/zap"
 
@@ -30,7 +28,7 @@ const (
 
 // Starter starts, stops, and reports the local game server and game frontend.
 type Starter interface {
-	Start(ports Ports) error
+	Start(ports Ports, settings MatchSettings) error
 	Running() bool
 	Stop() error
 }
@@ -96,15 +94,13 @@ func (l *Local) Stop() error {
 }
 
 // Start brings up the game server and frontend. It is idempotent: a second
-// call while already started returns nil without restarting.
-func (l *Local) Start(ports Ports) error {
+// call while already started returns nil without restarting. Match settings
+// compose listening/get-ready durations, SkipToGoldenGoal, and side branding.
+func (l *Local) Start(ports Ports, settings MatchSettings) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.started {
 		return nil
-	}
-	if ports.GameServer <= 0 || ports.GameFrontend <= 0 {
-		return fmt.Errorf("invalid ports: game_server=%d game_frontend=%d", ports.GameServer, ports.GameFrontend)
 	}
 
 	logger := l.Logger
@@ -112,28 +108,9 @@ func (l *Local) Start(ports Ports) error {
 		logger = zap.NewNop().Sugar()
 	}
 
-	teams, err := serverConfig.GetDefaultConfig()
+	cfg, err := ComposeConfiguration(ports, settings)
 	if err != nil {
-		return fmt.Errorf("default team config: %w", err)
-	}
-
-	cfg := serverConfig.Configuration{
-		GRPCPort:             uint16(ports.GameServer),
-		HTTPPort:             uint16(ports.GameFrontend),
-		WaitingDuration:      machine.TimeLimitTeamsConnect,
-		ListeningDuration:    machine.DefaultListeningDuration,
-		GetReadyDuration:     machine.PhaseReadyDuration,
-		ListeningMode:        serverConfig.ListeningModeTimer,
-		DevMode:              true,
-		VerboseLog:           false,
-		Quiet:                true,
-		Headless:             true, // frontend is started separately below
-		StartingMode:         serverConfig.ConfigStartModeNoWait,
-		EnableGoldenGoal:     true,
-		HomeTeam:             teams.HomeTeam,
-		AwayTeam:             teams.AwayTeam,
-		KnockoutTimeLimit:    time.Minute,
-		KnockoutMaxScoreDiff: 10,
+		return err
 	}
 
 	frontMgr := srvmgr.NewManager(logger.Named("game-frontend"), managerStopTimeout)
