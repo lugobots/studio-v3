@@ -42,6 +42,7 @@ type Local struct {
 	mu      sync.Mutex
 	started bool
 	hookID  procreg.ID
+	stopFn  func() error
 }
 
 // New returns a Local starter that registers cleanup on reg.
@@ -53,6 +54,43 @@ func New(reg *procreg.Registry) *Local {
 		Registry: reg,
 		Logger:   zap.NewNop().Sugar(),
 	}
+}
+
+// Running reports whether Start has successfully brought up the game runtime
+// and Stop has not yet torn it down.
+func (l *Local) Running() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.started
+}
+
+// Stop shuts down the registered game frontend/server managers, unregisters
+// the procreg hook, tears down any remaining session children on the shared
+// registry (match bots), and resets started so a later Start can succeed.
+// Stop is safe when already stopped.
+func (l *Local) Stop() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if !l.started {
+		return nil
+	}
+
+	hookID := l.hookID
+	stopFn := l.stopFn
+	l.Registry.Unregister(hookID)
+
+	var mgrErr error
+	if stopFn != nil {
+		mgrErr = stopFn()
+	}
+	// Match bots (and any other session children) share this registry; clear
+	// them so stop does not leave orphans after the game server is down.
+	botErr := l.Registry.ShutdownAll()
+
+	l.hookID = 0
+	l.stopFn = nil
+	l.started = false
+	return errors.Join(mgrErr, botErr)
 }
 
 // Start brings up the game server and frontend. It is idempotent: a second
@@ -140,13 +178,15 @@ func (l *Local) Start(ports Ports) error {
 	default:
 	}
 
-	hookID := l.Registry.Register(procreg.Hook(func() error {
+	stopFn := func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), managerStopTimeout)
 		defer cancel()
 		return errors.Join(frontMgr.Shutdown(ctx), gameMgr.Shutdown(ctx))
-	}))
+	}
+	hookID := l.Registry.Register(procreg.Hook(stopFn))
 
 	l.hookID = hookID
+	l.stopFn = stopFn
 	l.started = true
 	return nil
 }

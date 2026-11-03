@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"syscall"
 	"testing"
 	"time"
 
@@ -66,6 +67,91 @@ func TestLocalStartMakesFrontendReachable(t *testing.T) {
 	if reg.Len() != 1 {
 		t.Fatalf("registry grew on idempotent start: %d", reg.Len())
 	}
+}
+
+func TestLocalStartRunningStopLifecycle(t *testing.T) {
+	grpcPort := freePort(t)
+	httpPort := freePort(t)
+
+	reg := procreg.New()
+	runtime := New(reg)
+
+	if runtime.Running() {
+		t.Fatal("Running() = true before Start")
+	}
+	if err := runtime.Stop(); err != nil {
+		t.Fatalf("Stop before Start: %v", err)
+	}
+
+	if err := runtime.Start(Ports{GameServer: grpcPort, GameFrontend: httpPort}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if !runtime.Running() {
+		t.Fatal("Running() = false after Start")
+	}
+
+	bot, err := procreg.StartChild("sleep", "60")
+	if err != nil {
+		t.Fatalf("StartChild: %v", err)
+	}
+	botPID := bot.Cmd.Process.Pid
+	reg.Register(bot)
+	if reg.Len() != 2 {
+		t.Fatalf("registry len = %d, want game hook + bot child", reg.Len())
+	}
+
+	if err := runtime.Stop(); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	if runtime.Running() {
+		t.Fatal("Running() = true after Stop")
+	}
+	if reg.Len() != 0 {
+		t.Fatalf("registry len = %d after Stop, want 0", reg.Len())
+	}
+	assertProcessGone(t, "match bot", botPID)
+
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	if _, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/", httpPort)); err == nil {
+		t.Fatal("frontend still reachable after Stop")
+	}
+
+	if err := runtime.Stop(); err != nil {
+		t.Fatalf("second Stop: %v", err)
+	}
+	if runtime.Running() {
+		t.Fatal("Running() = true after double Stop")
+	}
+
+	// Restart must succeed after a clean stop.
+	grpcPort = freePort(t)
+	httpPort = freePort(t)
+	if err := runtime.Start(Ports{GameServer: grpcPort, GameFrontend: httpPort}); err != nil {
+		t.Fatalf("Start after Stop: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := runtime.Stop(); err != nil {
+			t.Errorf("cleanup Stop: %v", err)
+		}
+	})
+	if !runtime.Running() {
+		t.Fatal("Running() = false after restart")
+	}
+}
+
+func assertProcessGone(t *testing.T, name string, pid int) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for processAlive(pid) {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s (pid %d) still running after Stop", name, pid)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func processAlive(pid int) bool {
+	return syscall.Kill(pid, 0) == nil
 }
 
 func freePort(t *testing.T) int {
