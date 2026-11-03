@@ -5,6 +5,7 @@ go 1.24.0
 toolchain go1.24.11
 
 require (
+	github.com/gorilla/websocket v1.5.3
 	github.com/lugobots/server/v2 v2.4.2
 	github.com/rubens21/srvmgr v0.0.1
 	go.uber.org/zap v1.27.0

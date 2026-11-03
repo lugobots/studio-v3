@@ -47,6 +47,7 @@ func NewMuxWith(deps Deps) http.Handler {
 		starter:  deps.Starter,
 		match:    deps.Match,
 		registry: deps.Registry,
+		status:   newStatusHub(),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", handleHealth)
@@ -55,6 +56,7 @@ func NewMuxWith(deps Deps) http.Handler {
 	mux.HandleFunc("POST /api/bot/publish", handlePublish)
 	mux.HandleFunc("POST /api/server/start", api.handleServerStart)
 	mux.HandleFunc("GET /api/server/status", api.handleServerStatus)
+	mux.HandleFunc("GET /api/server/status/ws", api.handleServerStatusWS)
 	mux.HandleFunc("POST /api/server/stop", api.handleServerStop)
 	mux.HandleFunc("POST /api/game/start", api.handleGameStart)
 	return mux
@@ -64,6 +66,7 @@ type api struct {
 	starter  gameruntime.Starter
 	match    bots.Starter
 	registry *procreg.Registry
+	status   *statusHub
 	startMu  sync.Mutex
 }
 
@@ -110,6 +113,7 @@ func (a *api) handleServerStart(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
 		return
 	}
+	a.publishStatus()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
 }
 
@@ -125,6 +129,7 @@ func (a *api) handleServerStop(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
 		return
 	}
+	a.publishStatus()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
 }
 
@@ -137,6 +142,7 @@ func (a *api) handleGameStart(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
 		return
 	}
+	a.publishStatus()
 
 	cfg := bots.Config{
 		ProjectRoot:    projectRoot(),
