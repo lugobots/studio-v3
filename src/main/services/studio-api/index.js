@@ -1,9 +1,8 @@
 "use strict";
 
-// studio-v2/api/router.go already exposes GET /studio/status, POST /game/start,
-// POST /init/setup-new-bot, and POST /bot/publish under /api. entrypoint.sh runs
-// `app run` with the bot mounted at /home/coder/project. lugobots/studio:latest
-// was not present on this machine, so a live image smoke belongs to the image publisher.
+// Client talks to the V3-owned API in lugobots/studio-v3-api:latest (command `api`).
+// Routes under /api include health, studio/status, init/setup-new-bot, server/start,
+// game/start, and bot/publish.
 
 function apiBase() {
   const port = process.env.LUGO_STUDIO_API_PORT || "8081";

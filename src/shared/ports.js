@@ -1,7 +1,7 @@
 "use strict";
 
 const DEFAULTS = {
-  image: "lugobots/studio:latest",
+  image: "lugobots/studio-v3-api:latest",
   editorImage: "lugobots/vs-code-for-lugo:latest",
   containerName: "lugo-studio-v3",
   editorContainerName: "lugo-studio-v3-editor",

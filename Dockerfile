@@ -1,4 +1,5 @@
-# Studio V3 API image. Electron starts this container with command `api`
+# Studio V3 API image (tag: lugobots/studio-v3-api:latest).
+# Electron starts this container with command `api`
 # (see src/main/services/docker/args.js), mounts the bot at /home/coder/project,
 # and sets LUGO_STUDIO_API_PORT / LUGO_HOST_PROJECT_PATH.
 

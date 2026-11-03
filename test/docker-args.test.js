@@ -16,7 +16,13 @@ test("studio container runs the api command and does not publish the editor port
   assert.ok(args.includes("LUGO_STUDIO_API_PORT=8081"));
   assert.ok(args.includes("LUGO_HOST_PROJECT_PATH="));
   assert.ok(runArgs("/bots/demo", {}, "/bots/demo").includes("LUGO_HOST_PROJECT_PATH=/bots/demo"));
-  assert.equal(args.at(-2), "lugobots/studio:latest");
+  assert.equal(args.at(-2), "lugobots/studio-v3-api:latest");
+  assert.equal(args.at(-1), "api");
+});
+
+test("studio image can be overridden with LUGO_STUDIO_IMAGE", () => {
+  const args = runArgs("/bots/demo", { LUGO_STUDIO_IMAGE: "example/studio-api:dev" });
+  assert.equal(args.at(-2), "example/studio-api:dev");
   assert.equal(args.at(-1), "api");
 });
 
