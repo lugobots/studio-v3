@@ -71,3 +71,95 @@ test("web adapter treats stub server, match and publish calls as failures", asyn
   assert.match(server.error, /not available/);
   assert.match(match.error, /not available/);
 });
+
+test("web adapter stop hits the server stop API", async () => {
+  const calls = [];
+  const studio = createHttpStudio({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, method: options.method || "GET" });
+      return respond(200, { status: "OK" });
+    },
+    storage: null,
+  });
+  const stopped = await studio.server.stop();
+  assert.equal(stopped.ok, true);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /\/api\/server\/stop$/);
+  assert.equal(calls[0].method, "POST");
+});
+
+test("web adapter status reads the server status API", async () => {
+  const calls = [];
+  const studio = createHttpStudio({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, method: options.method || "GET" });
+      return respond(200, { running: true });
+    },
+    storage: null,
+  });
+  const status = await studio.server.status();
+  assert.equal(status.ok, true);
+  assert.equal(status.body.running, true);
+  assert.match(calls[0].url, /\/api\/server\/status$/);
+  assert.equal(calls[0].method, "GET");
+});
+
+test("web adapter onStatus delivers live server status updates", () => {
+  const sockets = [];
+  class FakeWebSocket {
+    constructor(url) {
+      this.url = url;
+      this.listeners = new Map();
+      this.closed = false;
+      sockets.push(this);
+    }
+
+    addEventListener(type, handler) {
+      const list = this.listeners.get(type) || [];
+      list.push(handler);
+      this.listeners.set(type, list);
+    }
+
+    removeEventListener(type, handler) {
+      const list = this.listeners.get(type) || [];
+      this.listeners.set(
+        type,
+        list.filter((entry) => entry !== handler),
+      );
+    }
+
+    emit(data) {
+      const event = { data: typeof data === "string" ? data : JSON.stringify(data) };
+      for (const handler of this.listeners.get("message") || []) {
+        handler(event);
+      }
+    }
+
+    close() {
+      this.closed = true;
+    }
+  }
+
+  const studio = createHttpStudio({
+    fetchImpl: async () => respond(200, {}),
+    storage: null,
+    WebSocketImpl: FakeWebSocket,
+  });
+  const updates = [];
+  const unsubscribe = studio.server.onStatus((status) => {
+    updates.push(status);
+  });
+
+  assert.equal(sockets.length, 1);
+  assert.match(sockets[0].url, /\/api\/server\/status\/ws$/);
+  assert.match(sockets[0].url, /^ws:\/\//);
+
+  sockets[0].emit({ running: true });
+  sockets[0].emit({ running: false });
+  assert.deepEqual(updates, [{ running: true }, { running: false }]);
+
+  unsubscribe();
+  assert.equal(sockets[0].closed, true);
+  sockets[0].emit({ running: true });
+  assert.equal(updates.length, 2);
+});

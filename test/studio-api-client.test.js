@@ -14,6 +14,42 @@ function respond(status, body) {
   };
 }
 
+class FakeWebSocket {
+  constructor(url) {
+    this.url = url;
+    this.listeners = new Map();
+    this.closed = false;
+    FakeWebSocket.instances.push(this);
+  }
+
+  addEventListener(type, handler) {
+    const list = this.listeners.get(type) || [];
+    list.push(handler);
+    this.listeners.set(type, list);
+  }
+
+  removeEventListener(type, handler) {
+    const list = this.listeners.get(type) || [];
+    this.listeners.set(
+      type,
+      list.filter((entry) => entry !== handler),
+    );
+  }
+
+  emit(data) {
+    const event = { data: typeof data === "string" ? data : JSON.stringify(data) };
+    for (const handler of this.listeners.get("message") || []) {
+      handler(event);
+    }
+  }
+
+  close() {
+    this.closed = true;
+  }
+}
+
+FakeWebSocket.instances = [];
+
 test("studio api client posts server and match start routes", async () => {
   const calls = [];
   const fetchImpl = async (url, options = {}) => {
@@ -29,4 +65,51 @@ test("studio api client posts server and match start routes", async () => {
   assert.equal(calls[0].method, "POST");
   assert.match(calls[1].url, /\/api\/game\/start$/);
   assert.equal(calls[1].method, "POST");
+});
+
+test("studio api client gets server status and posts stop", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, method: options.method || "GET" });
+    if (String(url).endsWith("/server/status")) {
+      return respond(200, { running: true });
+    }
+    return respond(200, { status: "OK" });
+  };
+
+  const status = await studioApi.serverStatus(fetchImpl);
+  assert.equal(status.running, true);
+
+  await studioApi.stopServer(fetchImpl);
+
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].url, /\/api\/server\/status$/);
+  assert.equal(calls[0].method, "GET");
+  assert.match(calls[1].url, /\/api\/server\/stop$/);
+  assert.equal(calls[1].method, "POST");
+});
+
+test("studio api client subscribe delivers status updates", () => {
+  FakeWebSocket.instances = [];
+  const updates = [];
+  const unsubscribe = studioApi.subscribeServerStatus(
+    (status) => {
+      updates.push(status);
+    },
+    { WebSocketImpl: FakeWebSocket },
+  );
+
+  assert.equal(FakeWebSocket.instances.length, 1);
+  const ws = FakeWebSocket.instances[0];
+  assert.match(ws.url, /\/api\/server\/status\/ws$/);
+  assert.match(ws.url, /^ws:\/\//);
+
+  ws.emit({ running: false });
+  ws.emit({ running: true });
+  assert.deepEqual(updates, [{ running: false }, { running: true }]);
+
+  unsubscribe();
+  assert.equal(ws.closed, true);
+  ws.emit({ running: false });
+  assert.equal(updates.length, 2);
 });

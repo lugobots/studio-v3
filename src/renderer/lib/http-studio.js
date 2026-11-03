@@ -1,7 +1,27 @@
+function statusWsUrl(baseUrl) {
+  return `${baseUrl.replace(/^http/, "ws")}/server/status/ws`;
+}
+
+function parseStatusPayload(raw) {
+  let data = raw;
+  if (typeof data === "string") {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+  return { running: Boolean(data.running) };
+}
+
 export function createHttpStudio({
   baseUrl = "http://127.0.0.1:8081/api",
   fetchImpl = globalThis.fetch,
   storage = globalThis.localStorage,
+  WebSocketImpl = globalThis.WebSocket,
 } = {}) {
   const desktopOnly = () => ({
     ok: false,
@@ -121,6 +141,55 @@ export function createHttpStudio({
         } catch (error) {
           return { ok: false, error: error.message };
         }
+      },
+      async stop() {
+        try {
+          return actionResult(await request("/server/stop", { method: "POST" }));
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
+      },
+      async status() {
+        try {
+          const body = await request("/server/status", { method: "GET" });
+          return { ok: true, body };
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
+      },
+      onStatus(callback) {
+        if (typeof callback !== "function") {
+          throw new TypeError("server.onStatus requires a callback");
+        }
+        if (typeof WebSocketImpl !== "function") {
+          throw new Error("WebSocket is not available");
+        }
+        const ws = new WebSocketImpl(statusWsUrl(baseUrl));
+        const handleMessage = (event) => {
+          const status = parseStatusPayload(event && event.data);
+          if (status) {
+            callback(status);
+          }
+        };
+        if (typeof ws.addEventListener === "function") {
+          ws.addEventListener("message", handleMessage);
+        } else {
+          ws.onmessage = handleMessage;
+        }
+        return () => {
+          if (typeof ws.removeEventListener === "function") {
+            ws.removeEventListener("message", handleMessage);
+          } else if (ws.onmessage === handleMessage) {
+            ws.onmessage = null;
+          }
+          if (typeof ws.close === "function") {
+            try {
+              ws.close();
+            } catch {
+              // ignore close errors on teardown
+            }
+          }
+        };
       },
     },
     match: {
