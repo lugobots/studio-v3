@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,12 +12,16 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"studio-v3/api/internal/bots"
 	"studio-v3/api/internal/bottemplate"
+	"studio-v3/api/internal/gameremote"
 	"studio-v3/api/internal/gameruntime"
 	"studio-v3/api/internal/procreg"
 )
+
+const gameResetTimeout = 3 * time.Second
 
 const defaultProjectRoot = "/home/coder/project"
 
@@ -62,6 +67,7 @@ func NewMuxWith(deps Deps) http.Handler {
 	mux.HandleFunc("GET /api/server/status/ws", api.handleServerStatusWS)
 	mux.HandleFunc("POST /api/server/stop", api.handleServerStop)
 	mux.HandleFunc("POST /api/game/start", api.handleGameStart)
+	mux.HandleFunc("POST /api/game/reset", api.handleGameReset)
 	mux.HandleFunc("POST /api/team/{side}/bots/{number}", api.handleBotStart)
 	mux.HandleFunc("DELETE /api/team/{side}/bots/{number}", api.handleBotStop)
 	mux.HandleFunc("GET /api/team/{side}/bots/{number}", api.handleBotStatus)
@@ -190,6 +196,27 @@ func (a *api) handleGameStart(w http.ResponseWriter, r *http.Request) {
 	}
 	// Start only the requested active set; empty means server-only (no bots).
 	if err := a.match.StartMatch(cfg, active); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
+}
+
+func (a *api) handleGameReset(w http.ResponseWriter, r *http.Request) {
+	a.startMu.Lock()
+	defer a.startMu.Unlock()
+
+	if !a.starter.Running() {
+		writeJSON(w, http.StatusConflict, map[string]string{"message": "game server is not running"})
+		return
+	}
+
+	ports := gameruntime.PortsFromEnv()
+	addr := fmt.Sprintf("localhost:%d", ports.GameServer)
+	ctx, cancel := context.WithTimeout(r.Context(), gameResetTimeout)
+	defer cancel()
+
+	if _, err := gameremote.ResetPlayerPositions(ctx, addr); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
 		return
 	}
