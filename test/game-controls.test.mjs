@@ -27,8 +27,8 @@ test("controls change only the selected local field", () => {
   assert.equal(server.speed, initial.speed);
   assert.equal(server.home[0].running, false);
 
-  const localStop = reduceGameControl(server, { type: "toggle-server" });
-  assert.equal(localStop.serverRunning, false);
+  const apiStop = reduceGameControl(server, { type: "set-server-running", running: false });
+  assert.equal(apiStop.serverRunning, false);
 
   const started = reduceGameControl(server, { type: "set-bot", team: "home", number: 2, control: "start" });
   assert.equal(started.home[1].running, true);

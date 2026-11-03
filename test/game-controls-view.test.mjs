@@ -111,23 +111,22 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   assert.equal(panel.button("Normal game").getAttribute("aria-pressed"), "true");
   assert.equal(panel.button("Zombies mode").getAttribute("aria-pressed"), "false");
 
-  const play = panel.parent.querySelector(".game-ctrl-play");
-  const settings = panel.parent.querySelector(".game-ctrl-settings");
-  assert.equal(play.style.opacity, "0.3");
-  assert.equal(settings.style.opacity, "1");
   assert.equal(panel.button("Starts the match").disabled, true);
   assert.equal(panel.button("Resets the match").disabled, true);
   assert.equal(panel.button("Save positions").disabled, true);
   assert.equal(panel.button("Apply").disabled, true);
   assert.equal(panel.parent.querySelector("select").disabled, true);
   assert.equal(panel.parent.querySelector(".bot_actions").querySelector('button[title="Start"]').disabled, true);
+  assert.equal(panel.button("Fast speed").disabled, false);
+  assert.equal(panel.button("Zombies mode").disabled, false);
+  assert.equal(panel.parent.querySelector("#team-side-switch").getAttribute("aria-disabled"), "false");
 
   panel.parent.querySelector(".bot_actions").querySelector('button[title="Start"]').click();
   assert.equal(panel.state().home[0].running, false);
   assert.equal(panel.state().serverRunning, false);
   assert.equal(panel.calls.server, 0);
   assert.equal(panel.calls.match, 0);
-  assert.equal(panel.parent.querySelector(".game-ctrl-play").style.opacity, "0.3");
+  assert.equal(panel.button("Starts the match").disabled, true);
 
   panel.button("Fast speed").click();
   assert.equal(panel.state().speed, "fast");
@@ -147,8 +146,6 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   await flush();
   assert.equal(panel.calls.server, 1);
   assert.equal(panel.button("Stops the Game Server") !== null, true);
-  assert.equal(panel.parent.querySelector(".game-ctrl-play").style.opacity, "1");
-  assert.equal(panel.parent.querySelector(".game-ctrl-settings").style.opacity, "0.2");
   assert.equal(panel.button("Fast speed").disabled, true);
   assert.equal(panel.button("Zombies mode").disabled, true);
   assert.equal(panel.parent.querySelector("#team-side-switch").getAttribute("aria-disabled"), "true");
