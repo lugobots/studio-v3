@@ -8,6 +8,7 @@ const V1_KEYS = [
   "debug_mode",
   "project_path",
   "team_side",
+  "skip_to_golden_goal",
   "opponent_team",
   "game_speed",
   "saved_positions",
@@ -21,6 +22,28 @@ const V1_KEYS = [
   "app_path",
   "app_version",
 ];
+
+/** App-level match preference keys persisted in user.json (not per-bot). */
+const MATCH_KEYS = [
+  "team_side",
+  "skip_to_golden_goal",
+  "game_speed",
+  "opponent_team",
+  "saved_positions",
+];
+
+const TEAM_SIDES = ["home", "away"];
+const GAME_SPEEDS = ["slow", "normal", "fast"];
+/** Values stored under opponent_team — opponent Level-1 MODE strings used today. */
+const OPPONENT_MODES = ["default", "zombies", "statues", "kids", "defenses"];
+
+const MATCH_DEFAULTS = {
+  team_side: "home",
+  skip_to_golden_goal: false,
+  game_speed: "normal",
+  opponent_team: "default",
+  saved_positions: [],
+};
 
 function settingsFile(appData, platform = process.platform) {
   const joiner = platform === "win32" ? path.win32 : path;
@@ -55,6 +78,44 @@ function applyPatch(current, patch) {
     }
   }
   return next;
+}
+
+function pickAllowed(value, allowed, fallback) {
+  return allowed.includes(value) ? value : fallback;
+}
+
+/**
+ * Normalized app-level match prefs from user.json data.
+ * Missing or invalid keys use defaults (home, no golden skip, normal, default, []).
+ * opponent_team holds opponent mode values (default/zombies/statues/kids/defenses).
+ */
+function matchConfig(data) {
+  const source = data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  const positions = Array.isArray(source.saved_positions) ? source.saved_positions.slice() : [];
+  return {
+    team_side: pickAllowed(source.team_side, TEAM_SIDES, MATCH_DEFAULTS.team_side),
+    skip_to_golden_goal: source.skip_to_golden_goal === true,
+    game_speed: pickAllowed(source.game_speed, GAME_SPEEDS, MATCH_DEFAULTS.game_speed),
+    opponent_team: pickAllowed(source.opponent_team, OPPONENT_MODES, MATCH_DEFAULTS.opponent_team),
+    saved_positions: positions,
+  };
+}
+
+/**
+ * Build a patch of only known match keys from a partial update.
+ * Undefined fields are omitted so applyPatch leaves them unchanged.
+ */
+function matchPatch(partial) {
+  const patch = {};
+  if (!partial || typeof partial !== "object") {
+    return patch;
+  }
+  for (const key of MATCH_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(partial, key) && partial[key] !== undefined) {
+      patch[key] = partial[key];
+    }
+  }
+  return patch;
 }
 
 function telemetryEnabled(data) {
@@ -105,10 +166,17 @@ function forgetBot(data, folder) {
 
 module.exports = {
   V1_KEYS,
+  MATCH_KEYS,
+  MATCH_DEFAULTS,
+  TEAM_SIDES,
+  GAME_SPEEDS,
+  OPPONENT_MODES,
   settingsFile,
   read,
   write,
   applyPatch,
+  matchConfig,
+  matchPatch,
   telemetryEnabled,
   projectReady,
   botPaths,
