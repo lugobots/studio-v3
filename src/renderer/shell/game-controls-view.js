@@ -48,18 +48,26 @@ function heading(text) {
   return title;
 }
 
-function controlButton({ title, pressed, className, onClick, graphic, text }) {
+function controlButton({ title, pressed, className, onClick, graphic, text, disabled = false }) {
   const button = document.createElement("button");
   button.type = "button";
   button.title = title;
   button.setAttribute("title", title);
   button.className = className || "";
   button.setAttribute("aria-pressed", pressed ? "true" : "false");
+  button.disabled = Boolean(disabled);
+  if (disabled) {
+    button.setAttribute("disabled", "true");
+    button.setAttribute("aria-disabled", "true");
+  }
   if (pressed) {
     button.style.borderBottom = "3px solid #60a5f8";
   }
   button.addEventListener("click", (event) => {
     event.preventDefault();
+    if (button.disabled) {
+      return;
+    }
     onClick();
   });
   if (graphic) {
@@ -184,9 +192,10 @@ export function renderGameControls(parent, { state, onChange, host, dialogs }) {
   const settings = document.createElement("div");
   settings.className = "game-ctrl-settings";
   settings.style.opacity = state.serverRunning ? "0.2" : "1";
-  settings.append(configBlock(state, onChange));
-  settings.append(choiceBlock("Game speed", SPEEDS, state.speed, (id) => dispatch(state, onChange, { type: "set-speed", speed: id })));
-  settings.append(choiceBlock("Opponent mode", OPPONENTS, state.opponent, (id) => dispatch(state, onChange, { type: "set-opponent", opponent: id })));
+  const settingsLocked = Boolean(state.serverRunning);
+  settings.append(configBlock(state, onChange, settingsLocked));
+  settings.append(choiceBlock("Game speed", SPEEDS, state.speed, (id) => dispatch(state, onChange, { type: "set-speed", speed: id }), settingsLocked));
+  settings.append(choiceBlock("Opponent mode", OPPONENTS, state.opponent, (id) => dispatch(state, onChange, { type: "set-opponent", opponent: id }), settingsLocked));
   root.append(settings);
 
   parent.append(root);
@@ -263,7 +272,7 @@ function positionsBlock(state, onChange) {
   return section;
 }
 
-function configBlock(state, onChange) {
+function configBlock(state, onChange, disabled = false) {
   const wrap = document.createElement("div");
   const title = document.createElement("div");
   title.className = "game-ctrl-section-title";
@@ -275,6 +284,10 @@ function configBlock(state, onChange) {
   side.setAttribute("role", "switch");
   side.setAttribute("aria-checked", state.side === "away" ? "true" : "false");
   side.setAttribute("aria-label", "Team side");
+  side.setAttribute("aria-disabled", disabled ? "true" : "false");
+  if (disabled) {
+    side.style.pointerEvents = "none";
+  }
   const caption = document.createElement("span");
   caption.textContent = "Team side:";
   const track = document.createElement("span");
@@ -285,7 +298,12 @@ function configBlock(state, onChange) {
   knob.textContent = state.side === "away" ? "Away" : "Home";
   track.append(knob);
   side.append(caption, track);
-  side.addEventListener("click", () => dispatch(state, onChange, { type: "toggle-side" }));
+  side.addEventListener("click", () => {
+    if (disabled) {
+      return;
+    }
+    dispatch(state, onChange, { type: "toggle-side" });
+  });
   sideRow.append(side);
 
   const goldenRow = document.createElement("div");
@@ -295,14 +313,24 @@ function configBlock(state, onChange) {
   const input = document.createElement("input");
   input.type = "checkbox";
   input.checked = state.skipGolden;
-  input.addEventListener("change", () => dispatch(state, onChange, { type: "toggle-golden" }));
+  input.disabled = Boolean(disabled);
+  if (disabled) {
+    input.setAttribute("disabled", "true");
+    input.setAttribute("aria-disabled", "true");
+  }
+  input.addEventListener("change", () => {
+    if (input.disabled) {
+      return;
+    }
+    dispatch(state, onChange, { type: "toggle-golden" });
+  });
   golden.append(input, document.createTextNode(" Skip to Golden Goal"));
   goldenRow.append(golden);
   wrap.append(title, sideRow, goldenRow);
   return wrap;
 }
 
-function choiceBlock(label, choices, selected, onPick) {
+function choiceBlock(label, choices, selected, onPick, disabled = false) {
   const wrap = document.createElement("div");
   const title = document.createElement("div");
   title.className = "game-ctrl-section-title";
@@ -313,6 +341,7 @@ function choiceBlock(label, choices, selected, onPick) {
     row.append(controlButton({
       title: choice.title,
       pressed: choice.id === selected,
+      disabled,
       onClick: () => onPick(choice.id),
       graphic: icon(choice.color, [["circle", { cx: "12", cy: "12", r: "6" }]]),
     }));

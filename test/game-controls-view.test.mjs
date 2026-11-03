@@ -123,29 +123,33 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   assert.equal(panel.calls.match, 0);
   assert.equal(panel.parent.querySelector(".game-ctrl-play").style.opacity, "0.3");
 
+  panel.button("Fast speed").click();
+  assert.equal(panel.state().speed, "fast");
+  assert.equal(panel.button("Fast speed").getAttribute("aria-pressed"), "true");
+  assert.equal(panel.button("Normal Speed").getAttribute("aria-pressed"), "false");
+  assert.equal(panel.button("Fast speed").disabled, false);
+
+  panel.button("Zombies mode").click();
+  assert.equal(panel.state().opponent, "zombies");
+  panel.parent.querySelector("#team-side-switch").click();
+  assert.equal(panel.state().side, "away");
+  assert.equal(panel.parent.querySelector("#team-side-switch").getAttribute("aria-disabled"), "false");
+  assert.equal(panel.calls.server, 0);
+  assert.equal(panel.calls.match, 0);
+
   panel.button("Starts the Game Server").click();
   await flush();
   assert.equal(panel.calls.server, 1);
   assert.equal(panel.button("Stops the Game Server") !== null, true);
   assert.equal(panel.parent.querySelector(".game-ctrl-play").style.opacity, "1");
   assert.equal(panel.parent.querySelector(".game-ctrl-settings").style.opacity, "0.2");
-
-  panel.button("Fast speed").click();
-  assert.equal(panel.state().speed, "fast");
-  assert.equal(panel.button("Fast speed").getAttribute("aria-pressed"), "true");
-  assert.equal(panel.button("Normal Speed").getAttribute("aria-pressed"), "false");
-  assert.equal(panel.calls.server, 1);
-  assert.equal(panel.calls.match, 0);
+  assert.equal(panel.button("Fast speed").disabled, true);
+  assert.equal(panel.button("Zombies mode").disabled, true);
+  assert.equal(panel.parent.querySelector("#team-side-switch").getAttribute("aria-disabled"), "true");
+  assert.equal(panel.parent.querySelector("#extra-time-check input").disabled, true);
 
   panel.parent.querySelectorAll(".bot_actions")[1].querySelector('button[title="Start"]').click();
   assert.equal(panel.state().away[0].running, true);
-  assert.equal(panel.calls.server, 1);
-  assert.equal(panel.calls.match, 0);
-
-  panel.button("Zombies mode").click();
-  assert.equal(panel.state().opponent, "zombies");
-  panel.parent.querySelector("#team-side-switch").click();
-  assert.equal(panel.state().side, "away");
   assert.equal(panel.calls.server, 1);
   assert.equal(panel.calls.match, 0);
 
@@ -165,6 +169,44 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   assert.equal(panel.calls.match, 1);
   assert.equal(panel.notices.length, 1);
   assert.equal(panel.calls.stop, 0);
+  panel.restore();
+});
+
+test("config, game speed, and opponent mode stay locked while the server is running", async () => {
+  const panel = mountPanel();
+
+  panel.button("Slow speed").click();
+  panel.button("Kids mode").click();
+  panel.parent.querySelector("#team-side-switch").click();
+  panel.parent.querySelector("#extra-time-check input").checked = true;
+  panel.parent.querySelector("#extra-time-check input").listeners.change[0]({ preventDefault() {} });
+  assert.equal(panel.state().speed, "slow");
+  assert.equal(panel.state().opponent, "kids");
+  assert.equal(panel.state().side, "away");
+  assert.equal(panel.state().skipGolden, true);
+
+  panel.button("Starts the Game Server").click();
+  await flush();
+  assert.equal(panel.state().serverRunning, true);
+  assert.equal(panel.button("Normal Speed").disabled, true);
+  assert.equal(panel.button("Fast speed").disabled, true);
+  assert.equal(panel.button("Zombies mode").disabled, true);
+  assert.equal(panel.button("Normal game").disabled, true);
+  assert.equal(panel.parent.querySelector("#team-side-switch").getAttribute("aria-disabled"), "true");
+  assert.equal(panel.parent.querySelector("#extra-time-check input").disabled, true);
+
+  panel.button("Fast speed").click();
+  panel.button("Zombies mode").click();
+  panel.parent.querySelector("#team-side-switch").click();
+  panel.parent.querySelector("#extra-time-check input").checked = false;
+  panel.parent.querySelector("#extra-time-check input").listeners.change[0]({ preventDefault() {} });
+
+  assert.equal(panel.state().speed, "slow");
+  assert.equal(panel.state().opponent, "kids");
+  assert.equal(panel.state().side, "away");
+  assert.equal(panel.state().skipGolden, true);
+  assert.equal(panel.button("Slow speed").getAttribute("aria-pressed"), "true");
+  assert.equal(panel.button("Kids mode").getAttribute("aria-pressed"), "true");
   panel.restore();
 });
 
