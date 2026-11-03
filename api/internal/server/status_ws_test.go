@@ -116,3 +116,45 @@ func TestStatusWSBroadcastsStartAndStopTransitions(t *testing.T) {
 		t.Fatalf("stop transition running = %v, want false", msg.Running)
 	}
 }
+
+func TestStatusWSBroadcastsRunningOnGameStart(t *testing.T) {
+	starter := &fakeStarter{}
+	match := &fakeMatch{}
+	mux := NewMuxWith(Deps{Registry: procreg.New(), Starter: starter, Match: match})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	t.Setenv("BOT_SOURCE_PATH", t.TempDir())
+	t.Setenv("LUGO_STUDIO_GAME_SERVER_PORT", "5502")
+	t.Setenv("LUGO_STUDIO_GAME_FRONTEND_PORT", "8802")
+
+	conn := dialStatusWS(t, srv.URL)
+	if msg := readStatusMessage(t, conn); msg.Running {
+		t.Fatalf("initial snapshot running = %v, want false", msg.Running)
+	}
+
+	startReq, err := http.NewRequest(http.MethodPost, srv.URL+"/api/game/start", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = startResp.Body.Close()
+	if startResp.StatusCode != http.StatusOK {
+		t.Fatalf("game start status %d", startResp.StatusCode)
+	}
+	if starter.calls != 1 {
+		t.Fatalf("server start calls = %d", starter.calls)
+	}
+	if match.calls != 1 {
+		t.Fatalf("match start calls = %d", match.calls)
+	}
+	if !starter.Running() {
+		t.Fatal("runtime not running after game start")
+	}
+	if msg := readStatusMessage(t, conn); !msg.Running {
+		t.Fatalf("game start transition running = %v, want true", msg.Running)
+	}
+}
