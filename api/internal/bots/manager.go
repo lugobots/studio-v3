@@ -74,8 +74,8 @@ func OpponentBinaryFromEnv() string {
 	return defaultOpponentBinary
 }
 
-// AllSlots returns HOME and AWAY numbers 1..11 (22 slots). Used by callers that
-// still start a full roster until the game-start payload carries an active set.
+// AllSlots returns HOME and AWAY numbers 1..11 (22 slots). Handy for tests and
+// callers that intentionally start a full roster.
 func AllSlots() []Slot {
 	out := make([]Slot, 0, playersPerSide*2)
 	for _, side := range []string{SideHome, SideAway} {

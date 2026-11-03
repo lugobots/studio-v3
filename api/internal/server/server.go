@@ -163,7 +163,7 @@ func (a *api) handleGameStart(w http.ResponseWriter, r *http.Request) {
 	a.startMu.Lock()
 	defer a.startMu.Unlock()
 
-	settings, present, err := decodeMatchSettings(r)
+	settings, settingsPresent, active, err := decodeGameStartRequest(r)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"message": err.Error()})
 		return
@@ -172,7 +172,7 @@ func (a *api) handleGameStart(w http.ResponseWriter, r *http.Request) {
 	ports := gameruntime.PortsFromEnv()
 	// Auto-start reuses last-applied settings when the body omits them.
 	// Settings are locked while the server is already running.
-	if !a.starter.Running() && present {
+	if !a.starter.Running() && settingsPresent {
 		a.lastSettings = settings
 	}
 	if err := a.starter.Start(ports, a.lastSettings); err != nil {
@@ -188,8 +188,8 @@ func (a *api) handleGameStart(w http.ResponseWriter, r *http.Request) {
 		OpponentMode:   string(a.lastSettings.OpponentMode),
 		OpponentBinary: bots.OpponentBinaryFromEnv(),
 	}
-	// Full roster until game-start accepts an explicit active set (task 2.3).
-	if err := a.match.StartMatch(cfg, bots.AllSlots()); err != nil {
+	// Start only the requested active set; empty means server-only (no bots).
+	if err := a.match.StartMatch(cfg, active); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
 		return
 	}
@@ -313,18 +313,63 @@ func writeJSON(w http.ResponseWriter, code int, body any) {
 // An empty body yields zero-value defaults and present=false. Invalid JSON or
 // enum values return an error suitable for HTTP 400.
 func decodeMatchSettings(r *http.Request) (gameruntime.MatchSettings, bool, error) {
-	if r.Body == nil {
-		return gameruntime.MatchSettings{}, false, nil
-	}
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	raw, err := readRequestBody(r)
 	if err != nil {
-		return gameruntime.MatchSettings{}, false, fmt.Errorf("read body: %w", err)
+		return gameruntime.MatchSettings{}, false, err
 	}
-	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 {
 		return gameruntime.MatchSettings{}, false, nil
 	}
+	return parseMatchSettingsJSON(raw)
+}
 
+// decodeGameStartRequest reads optional match settings plus an active-bot set
+// from POST /api/game/start. An empty body yields no settings update and an
+// empty active set (server-only start). Settings keys alone update session
+// settings; an active-only body leaves last-applied settings unchanged.
+func decodeGameStartRequest(r *http.Request) (gameruntime.MatchSettings, bool, []bots.Slot, error) {
+	raw, err := readRequestBody(r)
+	if err != nil {
+		return gameruntime.MatchSettings{}, false, nil, err
+	}
+	if len(raw) == 0 {
+		return gameruntime.MatchSettings{}, false, nil, nil
+	}
+
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &keys); err != nil {
+		return gameruntime.MatchSettings{}, false, nil, fmt.Errorf("invalid game start JSON: %w", err)
+	}
+
+	settingsPresent := hasMatchSettingsKeys(keys)
+	var settings gameruntime.MatchSettings
+	if settingsPresent {
+		parsed, _, err := parseMatchSettingsJSON(raw)
+		if err != nil {
+			return gameruntime.MatchSettings{}, false, nil, err
+		}
+		settings = parsed
+	}
+
+	active, err := parseActiveSlots(keys["active"])
+	if err != nil {
+		return gameruntime.MatchSettings{}, false, nil, err
+	}
+	return settings, settingsPresent, active, nil
+}
+
+func readRequestBody(r *http.Request) ([]byte, error) {
+	if r.Body == nil {
+		return nil, nil
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read body: %w", err)
+	}
+	return bytes.TrimSpace(raw), nil
+}
+
+func parseMatchSettingsJSON(raw []byte) (gameruntime.MatchSettings, bool, error) {
 	var settings gameruntime.MatchSettings
 	if err := json.Unmarshal(raw, &settings); err != nil {
 		return gameruntime.MatchSettings{}, false, fmt.Errorf("invalid match settings JSON: %w", err)
@@ -333,6 +378,43 @@ func decodeMatchSettings(r *http.Request) (gameruntime.MatchSettings, bool, erro
 		return gameruntime.MatchSettings{}, false, err
 	}
 	return settings, true, nil
+}
+
+func hasMatchSettingsKeys(keys map[string]json.RawMessage) bool {
+	for _, k := range []string{"team_side", "skip_to_golden_goal", "game_speed", "opponent_mode"} {
+		if _, ok := keys[k]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+type activeSlotDTO struct {
+	Side   string `json:"side"`
+	Number int    `json:"number"`
+}
+
+func parseActiveSlots(raw json.RawMessage) ([]bots.Slot, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var dtos []activeSlotDTO
+	if err := json.Unmarshal(raw, &dtos); err != nil {
+		return nil, fmt.Errorf("invalid active set JSON: %w", err)
+	}
+	out := make([]bots.Slot, 0, len(dtos))
+	for _, dto := range dtos {
+		side := strings.ToUpper(dto.Side)
+		slot := bots.Slot{Side: side, Number: dto.Number}
+		if side != bots.SideHome && side != bots.SideAway {
+			return nil, fmt.Errorf("invalid bot side %q", dto.Side)
+		}
+		if dto.Number < 1 || dto.Number > 11 {
+			return nil, fmt.Errorf("invalid bot number %d", dto.Number)
+		}
+		out = append(out, slot)
+	}
+	return out, nil
 }
 
 func validateMatchSettings(settings gameruntime.MatchSettings) error {
