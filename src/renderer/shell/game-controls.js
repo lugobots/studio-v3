@@ -42,6 +42,11 @@ export function reduceGameControl(state, action) {
     return next;
   }
 
+  if (action.type === "set-server-running") {
+    next.serverRunning = Boolean(action.running);
+    return next;
+  }
+
   if (action.type === "set-bot") {
     const team = action.team === "away" ? "away" : "home";
     const index = Number(action.number) - 1;

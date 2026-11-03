@@ -60,6 +60,10 @@ async function status(fetchImpl) {
   return request("/studio/status", { method: "GET" }, fetchImpl);
 }
 
+async function startServer(fetchImpl) {
+  return request("/server/start", { method: "POST" }, fetchImpl);
+}
+
 async function startMatch(fetchImpl) {
   return request("/game/start", { method: "POST" }, fetchImpl);
 }
@@ -82,4 +86,14 @@ async function publishBot({ botUri, tag }, fetchImpl) {
   );
 }
 
-module.exports = { apiBase, request, healthy, waitUntilReady, status, startMatch, setupBot, publishBot };
+module.exports = {
+  apiBase,
+  request,
+  healthy,
+  waitUntilReady,
+  status,
+  startServer,
+  startMatch,
+  setupBot,
+  publishBot,
+};

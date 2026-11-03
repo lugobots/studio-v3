@@ -57,14 +57,17 @@ test("web adapter opens the shell when health and status succeed", async () => {
   assert.equal(next.route, "/main");
 });
 
-test("web adapter treats stub match and publish calls as failures", async () => {
+test("web adapter treats stub server, match and publish calls as failures", async () => {
   const studio = createHttpStudio({
     fetchImpl: async () => respond(200, { implemented: false, message: "not implemented" }),
     storage: null,
   });
+  const server = await studio.server.start();
   const match = await studio.match.start();
   const published = await studio.publish.bot({ botUri: "demo", tag: "v1" });
+  assert.equal(server.ok, false);
   assert.equal(match.ok, false);
   assert.equal(published.ok, false);
+  assert.match(server.error, /not available/);
   assert.match(match.error, /not available/);
 });

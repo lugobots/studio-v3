@@ -22,10 +22,13 @@ test("initial game controls are a stopped local match", () => {
 
 test("controls change only the selected local field", () => {
   const initial = initialGameControls();
-  const server = reduceGameControl(initial, { type: "toggle-server" });
+  const server = reduceGameControl(initial, { type: "set-server-running", running: true });
   assert.equal(server.serverRunning, true);
   assert.equal(server.speed, initial.speed);
   assert.equal(server.home[0].running, false);
+
+  const localStop = reduceGameControl(server, { type: "toggle-server" });
+  assert.equal(localStop.serverRunning, false);
 
   const started = reduceGameControl(server, { type: "set-bot", team: "home", number: 2, control: "start" });
   assert.equal(started.home[1].running, true);

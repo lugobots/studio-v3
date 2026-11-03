@@ -114,6 +114,15 @@ export function createHttpStudio({
       create: async () => desktopOnly(),
       remove: async () => desktopOnly(),
     },
+    server: {
+      async start() {
+        try {
+          return actionResult(await request("/server/start", { method: "POST" }));
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
+      },
+    },
     match: {
       async start() {
         try {

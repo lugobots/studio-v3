@@ -58,8 +58,15 @@ test("telemetry loads only with an id and an on switch", () => {
   assert.equal(nodes.size, 0);
 });
 
-test("web adapter reaches match and publish and refuses local upgrade", async () => {
+test("web adapter reaches server, match and publish and refuses local upgrade", async () => {
+  const hits = [];
   const server = http.createServer((req, res) => {
+    hits.push(`${req.method} ${req.url}`);
+    if (req.url === "/api/server/start" && req.method === "POST") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "OK" }));
+      return;
+    }
     if (req.url === "/api/game/start" && req.method === "POST") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "OK" }));
@@ -76,10 +83,17 @@ test("web adapter reaches match and publish and refuses local upgrade", async ()
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   const studio = createHttpStudio({ baseUrl: `http://127.0.0.1:${port}/api` });
+  const serverStarted = await studio.server.start();
+  assert.equal(serverStarted.ok, true);
   const started = await studio.match.start();
   assert.equal(started.ok, true);
   const published = await studio.publish.bot({ botUri: "repo/bot", tag: "latest" });
   assert.equal(published.ok, true);
+  assert.deepEqual(hits, [
+    "POST /api/server/start",
+    "POST /api/game/start",
+    "POST /api/bot/publish",
+  ]);
   const upgrade = await studio.updates.apply();
   assert.equal(upgrade.unsupported, true);
   const docker = await studio.docker.status();
@@ -91,6 +105,7 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   const installed = installDocument();
   const outlet = installed.document.createElement("div");
   let started = 0;
+  let serverStarts = 0;
   const host = {
     config: {
       async get() {
@@ -100,6 +115,12 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
           game_frontend_url: "http://localhost:8080",
           editor_url: "http://localhost:8082",
         };
+      },
+    },
+    server: {
+      async start() {
+        serverStarts += 1;
+        return { ok: true };
       },
     },
     match: {
@@ -159,5 +180,6 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   assert.equal(labels().includes("Profile"), true);
   assert.equal(labels().includes("Settings"), true);
   assert.equal(started, 0);
+  assert.equal(serverStarts, 0);
   installed.restore();
 });

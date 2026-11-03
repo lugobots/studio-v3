@@ -44,6 +44,9 @@ contextBridge.exposeInMainWorld("studio", {
     create: (payload) => ipcRenderer.invoke(CHANNELS.project.create, payload),
     remove: (folder) => ipcRenderer.invoke(CHANNELS.project.remove, folder),
   },
+  server: {
+    start: () => ipcRenderer.invoke(CHANNELS.server.start),
+  },
   match: {
     start: () => ipcRenderer.invoke(CHANNELS.match.start),
     status: () => ipcRenderer.invoke(CHANNELS.match.status),

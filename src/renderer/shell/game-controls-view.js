@@ -1,3 +1,4 @@
+import { reportResult } from "../lib/dialogs.js";
 import { reduceGameControl } from "./game-controls.js";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -73,8 +74,35 @@ function dispatch(state, onChange, action) {
   onChange(reduceGameControl(state, action));
 }
 
-export function renderGameControls(parent, { state, onChange, host }) {
-  void host;
+async function startServerFromApi(state, onChange, host, dialogs) {
+  if (!host?.server?.start) {
+    return;
+  }
+  const result = await host.server.start();
+  if (result?.ok) {
+    dispatch(state, onChange, { type: "set-server-running", running: true });
+    return;
+  }
+  if (dialogs) {
+    await reportResult(dialogs, result || { ok: false, error: "The game server failed to start." });
+  }
+}
+
+async function startMatchFromApi(host, dialogs) {
+  if (!host?.match?.start) {
+    return;
+  }
+  const result = await host.match.start();
+  if (result?.ok) {
+    dialogs?.notify?.({ title: "Match started", body: "The match is running." });
+    return;
+  }
+  if (dialogs) {
+    await reportResult(dialogs, result || { ok: false, error: "The match failed to start." });
+  }
+}
+
+export function renderGameControls(parent, { state, onChange, host, dialogs }) {
   const root = document.createElement("div");
   root.className = "game-ctrl";
 
@@ -86,7 +114,14 @@ export function renderGameControls(parent, { state, onChange, host }) {
   server.append(controlButton({
     title: serverTitle,
     className: state.serverRunning ? "server-power is-running" : "server-power",
-    onClick: () => dispatch(state, onChange, { type: "toggle-server" }),
+    onClick: () => {
+      if (state.serverRunning) {
+        // Server stop stays local-only for this change.
+        dispatch(state, onChange, { type: "toggle-server" });
+        return;
+      }
+      startServerFromApi(state, onChange, host, dialogs);
+    },
     graphic: icon(serverColor, [
       ["path", { d: "M12 3v6" }],
       ["path", { d: "M7 7.5a6.5 6.5 0 1 0 10 0" }],
@@ -99,7 +134,7 @@ export function renderGameControls(parent, { state, onChange, host }) {
   match.append(heading("Match"));
   match.append(controlButton({
     title: "Starts the match",
-    onClick: () => dispatch(state, onChange, { type: "start-match" }),
+    onClick: () => startMatchFromApi(host, dialogs),
     graphic: icon("#22c55e", [["polygon", { points: "8,5 19,12 8,19", fill: "#22c55e", stroke: "#22c55e" }]]),
   }));
   match.append(controlButton({

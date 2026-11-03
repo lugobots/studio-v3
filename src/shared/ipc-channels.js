@@ -31,6 +31,9 @@ const CHANNELS = {
     create: "project:create",
     remove: "project:remove",
   },
+  server: {
+    start: "server:start",
+  },
   match: {
     start: "match:start",
     status: "match:status",

@@ -10,6 +10,7 @@ function register() {
   ipcMain.handle(CHANNELS.project.open, (_event, folder) => session.open(folder));
   ipcMain.handle(CHANNELS.project.create, (_event, payload) => session.create(payload));
   ipcMain.handle(CHANNELS.project.remove, (_event, folder) => session.remove(folder));
+  ipcMain.handle(CHANNELS.server.start, () => session.startServer());
   ipcMain.handle(CHANNELS.match.start, () => session.startMatch());
   ipcMain.handle(CHANNELS.match.status, () => session.projectStatus());
   ipcMain.handle(CHANNELS.publish.bot, (_event, payload) => session.publish(payload));

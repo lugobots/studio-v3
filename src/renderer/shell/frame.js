@@ -73,6 +73,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       renderGameControls(actions, {
         state: state.game,
         host,
+        dialogs,
         onChange(next) {
           state.game = next;
           paint();

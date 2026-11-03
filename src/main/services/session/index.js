@@ -322,16 +322,36 @@ async function remove(folder) {
   return { ok: true, config: saved };
 }
 
-async function startMatch() {
+async function ensureStudioApiReady(missingBotError) {
   const saved = await config.get();
   if (!saved.project_path) {
-    return { ok: false, error: "Open a bot before starting a match." };
+    return { ok: false, error: missingBotError };
   }
   const container = await docker.ensureContainer(saved.project_path, saved.project_path);
   if (!container.ok) {
     return container;
   }
   const ready = await studioApi.waitUntilReady(undefined, HEALTH_DEADLINE_MS / HEALTH_INTERVAL_MS);
+  if (!ready.ok) {
+    return ready;
+  }
+  return { ok: true };
+}
+
+async function startServer() {
+  const ready = await ensureStudioApiReady("Open a bot before starting the game server.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    return actionResult(await studioApi.startServer());
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function startMatch() {
+  const ready = await ensureStudioApiReady("Open a bot before starting a match.");
   if (!ready.ok) {
     return ready;
   }
@@ -383,6 +403,7 @@ module.exports = {
   open,
   create,
   remove,
+  startServer,
   startMatch,
   publish,
   projectStatus,
