@@ -1,0 +1,44 @@
+package config
+
+import (
+	"go.uber.org/zap/zapcore"
+)
+
+// FilterFunc is used to check whether to filter the given field out.
+type FilterFunc func(zapcore.Field) bool
+
+type fieldFilteringCore struct {
+	zapcore.Core
+	filter FilterFunc
+}
+
+// NewFieldFilteringCore returns a core that uses the given filter function
+// to filter fields before passing them to the core being wrapped.
+func NewFieldFilteringCore(next zapcore.Core, filter FilterFunc) zapcore.Core {
+	panic("I am not usef")
+	return &fieldFilteringCore{next, filter}
+}
+
+func (core *fieldFilteringCore) With(fields []zapcore.Field) zapcore.Core {
+	filteredFields := make([]zapcore.Field, 0, len(fields))
+
+	for _, field := range fields {
+		if core.filter(field) {
+			filteredFields = append(filteredFields, field)
+		}
+	}
+
+	return NewFieldFilteringCore(core.Core.With(filteredFields), core.filter)
+}
+
+func (core *fieldFilteringCore) Write(entry zapcore.Entry, fields []zapcore.Field) error {
+	filteredFields := make([]zapcore.Field, 0, len(fields))
+
+	for _, field := range fields {
+		if core.filter(field) {
+			filteredFields = append(filteredFields, field)
+		}
+	}
+
+	return core.Core.Write(entry, filteredFields)
+}

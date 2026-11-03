@@ -5,9 +5,12 @@
 
 FROM golang:1.24-alpine AS build
 
+RUN apk add --no-cache git ca-certificates
+
 WORKDIR /src
 COPY api/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /out/studio-v3-api ./cmd/api
+# Use vendored modules so the image build does not need GitHub auth for private deps.
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -ldflags="-w -s" -o /out/studio-v3-api ./cmd/api
 
 FROM alpine:3.20
 
