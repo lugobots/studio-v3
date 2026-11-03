@@ -1,10 +1,13 @@
 const { app, BrowserWindow, Menu } = require("electron");
 const { createAppWindow } = require("./windows/app-window");
 const { registerIpc } = require("./ipc/register");
+const { registerContainerCleanupOnQuit } = require("./services/app-lifecycle");
 const notifications = require("./services/notifications");
 const docker = require("./services/docker");
 const session = require("./services/session");
 const updater = require("./services/updater");
+
+registerContainerCleanupOnQuit(app, () => docker.stopContainer());
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);

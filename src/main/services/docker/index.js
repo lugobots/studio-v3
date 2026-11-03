@@ -4,6 +4,7 @@ const { execFile, spawn } = require("node:child_process");
 const { CHANNELS } = require("../../../shared/ipc-channels");
 const { DEFAULTS, imageFrom } = require("../../../shared/ports");
 const { editorRunArgs, runArgs } = require("./args");
+const { removeOk, stopStudioContainers } = require("./stop");
 
 let webContents = null;
 let pullListener = () => {};
@@ -149,8 +150,7 @@ async function ensureContainer(projectPath, hostProjectPath = "") {
 
 async function stopEditor() {
   const editor = await exec("docker", ["rm", "-f", DEFAULTS.editorContainerName], 20000);
-  const editorMissing = /No such container/i.test(editor.stderr || "");
-  return { ok: editor.ok || editorMissing };
+  return { ok: removeOk(editor) };
 }
 
 async function recentLogs(name = DEFAULTS.containerName) {
@@ -172,10 +172,7 @@ async function ensureEditor(projectPath) {
 }
 
 async function stopContainer() {
-  const editor = await exec("docker", ["rm", "-f", DEFAULTS.editorContainerName], 20000);
-  const studio = await exec("docker", ["rm", "-f", DEFAULTS.containerName], 20000);
-  const editorMissing = /No such container/i.test(editor.stderr || "");
-  return { ok: studio.ok && (editor.ok || editorMissing) };
+  return stopStudioContainers(async (name) => exec("docker", ["rm", "-f", name], 20000));
 }
 
 module.exports = {
