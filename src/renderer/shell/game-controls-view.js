@@ -82,7 +82,7 @@ function dispatch(state, onChange, action) {
   onChange(reduceGameControl(state, action));
 }
 
-async function startServerFromApi(state, onChange, host, dialogs) {
+export async function startServerFromApi(state, onChange, host, dialogs) {
   if (!host?.server?.start) {
     return;
   }

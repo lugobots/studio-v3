@@ -93,17 +93,22 @@ test("workspace wiring hits API for server and match only, keeps layout placehol
     });
     await flush();
 
+    assert.ok(outlet.querySelector(".game-start-overlay"));
+    assert.ok(outlet.querySelector(".game-start-control"));
     const gameFrame = outlet.querySelector("#game_frame");
     assert.ok(gameFrame);
     assert.equal(gameFrame.tagName, "IFRAME");
-    assert.equal(gameFrame.src, "http://localhost:8080");
+    assert.equal(gameFrame.src, undefined);
+    assert.equal(gameFrame.hidden, true);
     assert.equal(outlet.querySelector(".game-ctrl") !== null, true);
 
-    buttonByTitle(outlet, "Starts the Game Server").click();
+    outlet.querySelector(".game-start-control").click();
     await waitFor(() => hits.length === 1);
     await flush();
     assert.deepEqual(hits, ["POST /api/server/start"]);
     assert.ok(buttonByTitle(outlet, "Stops the Game Server"));
+    assert.equal(outlet.querySelector(".game-start-overlay"), null);
+    assert.equal(outlet.querySelector("#game_frame").src, "http://localhost:8080");
 
     buttonByTitle(outlet, "Starts the match").click();
     await waitFor(() => hits.length === 2);

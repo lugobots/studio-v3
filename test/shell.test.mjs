@@ -154,11 +154,28 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   assert.equal(labels().includes("Publish bot"), false);
   assert.ok(outlet.querySelector('[aria-label="Bot URI"]'));
   assert.equal(outlet.querySelector(".game-ctrl") !== null, true);
+  const overlay = outlet.querySelector(".game-start-overlay");
+  assert.ok(overlay);
+  const panelStart = outlet.querySelector(".game-start-control");
+  assert.ok(panelStart);
+  assert.equal(panelStart.getAttribute("title"), "Starts the Game Server");
   const gameFrame = outlet.querySelector("#game_frame");
   assert.ok(gameFrame);
   assert.equal(gameFrame.tagName, "IFRAME");
-  assert.equal(gameFrame.src, "http://localhost:8080");
+  assert.equal(gameFrame.src, undefined);
+  assert.equal(gameFrame.getAttribute("src"), null);
+  assert.equal(gameFrame.hidden, true);
   assert.equal(gameFrame.title, "Game");
+
+  panelStart.click();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(serverStarts, 1);
+  assert.equal(outlet.querySelector(".game-start-overlay"), null);
+  const runningFrame = outlet.querySelector("#game_frame");
+  assert.ok(runningFrame);
+  assert.equal(runningFrame.src, "http://localhost:8080");
+  assert.equal(runningFrame.hidden, undefined);
 
   outlet.querySelectorAll("button").find((button) => button.textContent === "Editor").click();
   const editorPane = outlet.querySelector(".editor-main");
@@ -180,7 +197,7 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   assert.equal(labels().includes("Profile"), true);
   assert.equal(labels().includes("Settings"), true);
   assert.equal(started, 0);
-  assert.equal(serverStarts, 0);
+  assert.equal(serverStarts, 1);
   installed.restore();
 });
 
@@ -234,13 +251,18 @@ test("workspace hydrates power control from already-running API/live status", as
   await Promise.resolve();
   await Promise.resolve();
 
-  const runningPower = () => outlet.querySelector('button[title="Stops the Game Server"]');
-  const stoppedPower = () => outlet.querySelector('button[title="Starts the Game Server"]');
+  const runningPower = () => outlet.querySelector('.server-power[title="Stops the Game Server"]');
+  const stoppedPower = () => outlet.querySelector('.server-power[title="Starts the Game Server"]');
   assert.equal(statusListeners.size, 1);
   assert.equal(statusReads, 1);
   assert.ok(runningPower());
   assert.equal(runningPower().className.includes("is-running"), true);
   assert.equal(stoppedPower(), null);
+  assert.equal(outlet.querySelector(".game-start-overlay"), null);
+  const upFrame = outlet.querySelector("#game_frame");
+  assert.ok(upFrame);
+  assert.equal(upFrame.src, "http://localhost:8080");
+  assert.equal(upFrame.hidden, undefined);
 
   for (const listener of statusListeners) {
     listener({ running: false });
@@ -249,6 +271,12 @@ test("workspace hydrates power control from already-running API/live status", as
   assert.ok(stoppedPower());
   assert.equal(stoppedPower().className.includes("is-running"), false);
   assert.equal(runningPower(), null);
+  assert.ok(outlet.querySelector(".game-start-overlay"));
+  assert.ok(outlet.querySelector(".game-start-control"));
+  const downFrame = outlet.querySelector("#game_frame");
+  assert.ok(downFrame);
+  assert.equal(downFrame.src, undefined);
+  assert.equal(downFrame.hidden, true);
 
   for (const listener of statusListeners) {
     listener({ running: true });
@@ -257,5 +285,7 @@ test("workspace hydrates power control from already-running API/live status", as
   assert.ok(runningPower());
   assert.equal(runningPower().className.includes("is-running"), true);
   assert.equal(stoppedPower(), null);
+  assert.equal(outlet.querySelector(".game-start-overlay"), null);
+  assert.equal(outlet.querySelector("#game_frame").src, "http://localhost:8080");
   installed.restore();
 });

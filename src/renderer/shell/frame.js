@@ -2,7 +2,7 @@ import { PINNED, TABS, tabById } from "./model.js";
 import { applyTelemetry } from "../lib/telemetry.js";
 import { reportResult } from "../lib/dialogs.js";
 import { initialGameControls, reduceGameControl } from "./game-controls.js";
-import { renderGameControls } from "./game-controls-view.js";
+import { renderGameControls, startServerFromApi } from "./game-controls-view.js";
 import { gameFrontendUrl } from "./game-frontend.js";
 import { editorUrl } from "./editor-url.js";
 
@@ -210,11 +210,38 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     section.dataset.window = "workspace";
     section.className = "workspace-main";
 
+    const panel = document.createElement("div");
+    panel.className = "game-panel";
+
     const frame = document.createElement("iframe");
     frame.className = "game-frame";
     frame.id = "game_frame";
     frame.title = "Game";
-    frame.src = config?.game_frontend_url || gameFrontendUrl();
+
+    if (state.game.serverRunning) {
+      frame.src = config?.game_frontend_url || gameFrontendUrl();
+      panel.append(frame);
+    } else {
+      // Unload the frontend while down so authors are not left on a white/failed document.
+      frame.hidden = true;
+      frame.setAttribute("aria-hidden", "true");
+      const overlay = document.createElement("div");
+      overlay.className = "game-start-overlay";
+      const start = document.createElement("button");
+      start.type = "button";
+      start.className = "button game-start-control";
+      start.title = "Starts the Game Server";
+      start.setAttribute("title", "Starts the Game Server");
+      start.textContent = "Starts the Game Server";
+      start.addEventListener("click", () => {
+        startServerFromApi(state.game, (next) => {
+          state.game = next;
+          paint();
+        }, host, dialogs);
+      });
+      overlay.append(start);
+      panel.append(overlay, frame);
+    }
 
     const meta = document.createElement("div");
     meta.className = "workspace-meta";
@@ -245,7 +272,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       }
     });
     meta.append(path, form);
-    section.append(frame, meta);
+    section.append(panel, meta);
     return section;
   }
 
