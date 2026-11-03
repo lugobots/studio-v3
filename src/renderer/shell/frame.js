@@ -4,6 +4,7 @@ import { reportResult } from "../lib/dialogs.js";
 import { initialGameControls } from "./game-controls.js";
 import { renderGameControls } from "./game-controls-view.js";
 import { gameFrontendUrl } from "./game-frontend.js";
+import { editorUrl } from "./editor-url.js";
 
 export function renderAppFrame(outlet, { host, dialogs }) {
   const frame = document.createElement("div");
@@ -112,6 +113,8 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       windowPane.append(settingsView(state.config));
     } else if (state.tab === "runtime") {
       windowPane.append(runtimeView());
+    } else if (state.tab === "editor") {
+      windowPane.append(editorView(state.config));
     } else {
       windowPane.append(workspaceView(state.config));
     }
@@ -193,6 +196,31 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     });
     meta.append(path, form);
     section.append(frame, meta);
+    return section;
+  }
+
+  function editorView(config) {
+    const section = document.createElement("section");
+    section.dataset.window = "editor";
+    section.className = "editor-main";
+    const url = config?.editor_url || editorUrl();
+    section.dataset.editorUrl = url;
+
+    const placeholder = document.createElement("div");
+    placeholder.className = "editor-placeholder";
+    placeholder.textContent = "editor not started";
+
+    // Reserve the iframe placement for a later change. Do not set src — that would
+    // load code-server and imply the editor container is running.
+    const frame = document.createElement("iframe");
+    frame.className = "editor-frame";
+    frame.id = "editor_frame";
+    frame.title = "Editor";
+    frame.hidden = true;
+    frame.setAttribute("aria-hidden", "true");
+    frame.dataset.src = url;
+
+    section.append(placeholder, frame);
     return section;
   }
 

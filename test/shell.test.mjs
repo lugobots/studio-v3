@@ -28,10 +28,13 @@ test("a confirm dialog stays open until it is answered", async () => {
 
 test("tabs change the menu and keep profile and settings", () => {
   const workspace = menuFor("workspace");
+  const editor = menuFor("editor");
   const runtime = menuFor("runtime");
   assert.deepEqual(workspace.actions, []);
+  assert.deepEqual(editor.actions, []);
   assert.deepEqual(runtime.actions, ["image"]);
   assert.deepEqual(workspace.pinned, ["profile", "settings"]);
+  assert.deepEqual(editor.pinned, ["profile", "settings"]);
   assert.deepEqual(runtime.pinned, ["profile", "settings"]);
 });
 
@@ -95,6 +98,7 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
           project_path: "/tmp/bot",
           telemetryEnabled: false,
           game_frontend_url: "http://localhost:8080",
+          editor_url: "http://localhost:8082",
         };
       },
     },
@@ -108,6 +112,9 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
     docker: {
       async status() { return { imagePresent: false, image: "studio" }; },
       async pull() { return { ok: true }; },
+      async ensureEditor() {
+        throw new Error("Editor UI must not start the editor container");
+      },
     },
   };
   renderAppFrame(outlet, {
@@ -120,6 +127,7 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   const labels = () => outlet.querySelectorAll("button").map((button) => button.textContent);
   assert.equal(labels().includes("Profile"), true);
   assert.equal(labels().includes("Settings"), true);
+  assert.equal(labels().includes("Editor"), true);
   assert.equal(labels().includes("Open bot"), false);
   assert.equal(labels().includes("Start match"), false);
   assert.equal(labels().includes("Publish bot"), false);
@@ -130,6 +138,21 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   assert.equal(gameFrame.tagName, "IFRAME");
   assert.equal(gameFrame.src, "http://localhost:8080");
   assert.equal(gameFrame.title, "Game");
+
+  outlet.querySelectorAll("button").find((button) => button.textContent === "Editor").click();
+  const editorPane = outlet.querySelector(".editor-main");
+  assert.ok(editorPane);
+  assert.equal(editorPane.dataset.editorUrl, "http://localhost:8082");
+  const placeholder = outlet.querySelector(".editor-placeholder");
+  assert.ok(placeholder);
+  assert.equal(placeholder.textContent, "editor not started");
+  const editorFrame = outlet.querySelector("#editor_frame");
+  assert.ok(editorFrame);
+  assert.equal(editorFrame.tagName, "IFRAME");
+  assert.equal(editorFrame.src, undefined);
+  assert.equal(editorFrame.getAttribute("src"), null);
+  assert.equal(editorFrame.dataset.src, "http://localhost:8082");
+  assert.equal(editorFrame.hidden, true);
 
   outlet.querySelectorAll("button").find((button) => button.textContent === "Runtime").click();
   assert.equal(labels().includes("Studio image"), true);

@@ -33,4 +33,8 @@ function gameFrontendUrl(env = process.env) {
   return `http://localhost:${portsFrom(env).gameFrontend}`;
 }
 
-module.exports = { DEFAULTS, portsFrom, imageFrom, editorImageFrom, gameFrontendUrl };
+function editorUrl(env = process.env) {
+  return `http://localhost:${portsFrom(env).vsCode}`;
+}
+
+module.exports = { DEFAULTS, portsFrom, imageFrom, editorImageFrom, gameFrontendUrl, editorUrl };
