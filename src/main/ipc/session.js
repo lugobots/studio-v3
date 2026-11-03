@@ -14,8 +14,11 @@ function register() {
   ipcMain.handle(CHANNELS.server.stop, () => session.stopServer());
   ipcMain.handle(CHANNELS.server.status, () => session.serverStatus());
   ipcMain.handle(CHANNELS.server.watchStatus, () => session.watchServerStatus());
-  ipcMain.handle(CHANNELS.match.start, () => session.startMatch());
+  ipcMain.handle(CHANNELS.match.start, (_event, payload) => session.startMatch(payload || {}));
   ipcMain.handle(CHANNELS.match.status, () => session.projectStatus());
+  ipcMain.handle(CHANNELS.bot.start, (_event, payload) => session.startBot(payload || {}));
+  ipcMain.handle(CHANNELS.bot.stop, (_event, payload) => session.stopBot(payload || {}));
+  ipcMain.handle(CHANNELS.bot.status, (_event, payload) => session.botStatus(payload || {}));
   ipcMain.handle(CHANNELS.publish.bot, (_event, payload) => session.publish(payload));
 }
 

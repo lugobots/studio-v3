@@ -9,6 +9,8 @@ const CHANNELS = {
   config: {
     get: "config:get",
     set: "config:set",
+    matchGet: "config:match-get",
+    matchSet: "config:match-set",
   },
   updates: {
     check: "updates:check",
@@ -41,6 +43,11 @@ const CHANNELS = {
   match: {
     start: "match:start",
     status: "match:status",
+  },
+  bot: {
+    start: "bot:start",
+    stop: "bot:stop",
+    status: "bot:status",
   },
   publish: {
     bot: "publish:bot",

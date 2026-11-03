@@ -2,7 +2,7 @@
 
 const { actionResult } = require("./gate");
 
-function createServerControls({ ensureReady, api, sendStatus }) {
+function createServerControls({ ensureReady, api, sendStatus, matchSettings }) {
   let unsubscribe = null;
 
   function watch(options) {
@@ -25,7 +25,8 @@ function createServerControls({ ensureReady, api, sendStatus }) {
       return ready;
     }
     try {
-      return actionResult(await api.startServer());
+      const settings = typeof matchSettings === "function" ? await matchSettings() : undefined;
+      return actionResult(await api.startServer(settings));
     } catch (error) {
       return { ok: false, error: error.message };
     }

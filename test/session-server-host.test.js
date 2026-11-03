@@ -96,6 +96,47 @@ test("ipc channels expose server stop, status, watch, and status events", () => 
   assert.equal(CHANNELS.server.statusEvent, "server:status-event");
 });
 
+test("ipc channels expose match config get/set and bot lifecycle", () => {
+  assert.equal(CHANNELS.config.matchGet, "config:match-get");
+  assert.equal(CHANNELS.config.matchSet, "config:match-set");
+  assert.equal(CHANNELS.bot.start, "bot:start");
+  assert.equal(CHANNELS.bot.stop, "bot:stop");
+  assert.equal(CHANNELS.bot.status, "bot:status");
+});
+
+test("server controls start posts current match settings payload", async () => {
+  const apiCalls = [];
+  const controls = createServerControls({
+    ensureReady: async () => ({ ok: true }),
+    matchSettings: async () => ({
+      team_side: "away",
+      skip_to_golden_goal: true,
+      game_speed: "slow",
+      opponent_mode: "zombies",
+    }),
+    api: {
+      startServer: async (settings) => {
+        apiCalls.push({ op: "start", settings });
+        return { status: "OK" };
+      },
+      stopServer: async () => ({ status: "OK" }),
+      serverStatus: async () => ({ running: false }),
+      subscribeServerStatus: () => () => {},
+    },
+    sendStatus: () => {},
+  });
+
+  const result = await controls.start();
+  assert.equal(result.ok, true);
+  assert.equal(apiCalls.length, 1);
+  assert.deepEqual(apiCalls[0].settings, {
+    team_side: "away",
+    skip_to_golden_goal: true,
+    game_speed: "slow",
+    opponent_mode: "zombies",
+  });
+});
+
 test("thin desktop host stop hits session controls and onStatus receives events", async () => {
   FakeWebSocket.instances = [];
   const apiCalls = [];

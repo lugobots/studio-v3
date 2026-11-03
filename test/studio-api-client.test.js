@@ -53,7 +53,7 @@ FakeWebSocket.instances = [];
 test("studio api client posts server and match start routes", async () => {
   const calls = [];
   const fetchImpl = async (url, options = {}) => {
-    calls.push({ url, method: options.method || "GET" });
+    calls.push({ url, method: options.method || "GET", body: options.body, headers: options.headers });
     return respond(200, { status: "OK" });
   };
 
@@ -65,6 +65,42 @@ test("studio api client posts server and match start routes", async () => {
   assert.equal(calls[0].method, "POST");
   assert.match(calls[1].url, /\/api\/game\/start$/);
   assert.equal(calls[1].method, "POST");
+});
+
+test("studio api client posts match settings on server match and bot routes", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({
+      url,
+      method: options.method || "GET",
+      body: options.body ? JSON.parse(options.body) : null,
+    });
+    return respond(200, { status: "OK", running: false });
+  };
+
+  const settings = {
+    team_side: "away",
+    skip_to_golden_goal: true,
+    game_speed: "slow",
+    opponent_mode: "zombies",
+  };
+
+  await studioApi.startServer(settings, fetchImpl);
+  await studioApi.startMatch({ ...settings, active: [{ side: "HOME", number: 1 }] }, fetchImpl);
+  await studioApi.startBot({ side: "HOME", number: 1, settings }, fetchImpl);
+
+  assert.equal(calls.length, 3);
+  assert.match(calls[0].url, /\/api\/server\/start$/);
+  assert.deepEqual(calls[0].body, settings);
+  assert.match(calls[1].url, /\/api\/game\/start$/);
+  assert.equal(calls[1].body.team_side, "away");
+  assert.equal(calls[1].body.skip_to_golden_goal, true);
+  assert.equal(calls[1].body.game_speed, "slow");
+  assert.equal(calls[1].body.opponent_mode, "zombies");
+  assert.deepEqual(calls[1].body.active, [{ side: "HOME", number: 1 }]);
+  assert.match(calls[2].url, /\/api\/team\/HOME\/bots\/1$/);
+  assert.equal(calls[2].method, "POST");
+  assert.deepEqual(calls[2].body, settings);
 });
 
 test("studio api client gets server status and posts stop", async () => {

@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld("studio", {
   config: {
     get: () => ipcRenderer.invoke(CHANNELS.config.get),
     set: (patch) => ipcRenderer.invoke(CHANNELS.config.set, patch),
+    matchGet: () => ipcRenderer.invoke(CHANNELS.config.matchGet),
+    matchSet: (patch) => ipcRenderer.invoke(CHANNELS.config.matchSet, patch),
   },
   updates: {
     check: () => ipcRenderer.invoke(CHANNELS.updates.check),
@@ -55,8 +57,13 @@ contextBridge.exposeInMainWorld("studio", {
     },
   },
   match: {
-    start: () => ipcRenderer.invoke(CHANNELS.match.start),
+    start: (payload) => ipcRenderer.invoke(CHANNELS.match.start, payload),
     status: () => ipcRenderer.invoke(CHANNELS.match.status),
+  },
+  bot: {
+    start: (payload) => ipcRenderer.invoke(CHANNELS.bot.start, payload),
+    stop: (payload) => ipcRenderer.invoke(CHANNELS.bot.stop, payload),
+    status: (payload) => ipcRenderer.invoke(CHANNELS.bot.status, payload),
   },
   publish: {
     bot: (payload) => ipcRenderer.invoke(CHANNELS.publish.bot, payload),

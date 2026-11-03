@@ -64,8 +64,22 @@ async function status(fetchImpl) {
   return request("/studio/status", { method: "GET" }, fetchImpl);
 }
 
-async function startServer(fetchImpl) {
-  return request("/server/start", { method: "POST" }, fetchImpl);
+function jsonPostBody(body) {
+  if (!body || typeof body !== "object") {
+    return { method: "POST" };
+  }
+  return {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  };
+}
+
+async function startServer(settings, fetchImpl = global.fetch) {
+  if (typeof settings === "function") {
+    return request("/server/start", jsonPostBody(undefined), settings);
+  }
+  return request("/server/start", jsonPostBody(settings), fetchImpl);
 }
 
 async function serverStatus(fetchImpl) {
@@ -126,8 +140,29 @@ function subscribeServerStatus(onStatus, { WebSocketImpl = globalThis.WebSocket,
   };
 }
 
-async function startMatch(fetchImpl) {
-  return request("/game/start", { method: "POST" }, fetchImpl);
+async function startMatch(payload, fetchImpl = global.fetch) {
+  if (typeof payload === "function") {
+    return request("/game/start", jsonPostBody(undefined), payload);
+  }
+  return request("/game/start", jsonPostBody(payload), fetchImpl);
+}
+
+function botPath(side, number) {
+  return `/team/${encodeURIComponent(side)}/bots/${encodeURIComponent(String(number))}`;
+}
+
+async function startBot({ side, number, settings }, fetchImpl = global.fetch) {
+  // Settings are applied on server/match start (API session lastSettings). The
+  // body is still sent so main always forwards current prefs on bot calls.
+  return request(botPath(side, number), jsonPostBody(settings), fetchImpl);
+}
+
+async function stopBot({ side, number }, fetchImpl = global.fetch) {
+  return request(botPath(side, number), { method: "DELETE" }, fetchImpl);
+}
+
+async function botStatus({ side, number }, fetchImpl = global.fetch) {
+  return request(botPath(side, number), { method: "GET" }, fetchImpl);
 }
 
 async function setupBot(language, fetchImpl) {
@@ -160,6 +195,9 @@ module.exports = {
   stopServer,
   subscribeServerStatus,
   startMatch,
+  startBot,
+  stopBot,
+  botStatus,
   setupBot,
   publishBot,
 };

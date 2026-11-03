@@ -137,6 +137,30 @@ test("match keys patch round-trips through user.json", () => {
   ]);
 });
 
+test("match settings for api map opponent_team to opponent_mode", () => {
+  assert.deepEqual(
+    store.matchSettingsForApi({
+      team_side: "away",
+      skip_to_golden_goal: true,
+      game_speed: "fast",
+      opponent_team: "kids",
+      saved_positions: [{ name: "x" }],
+    }),
+    {
+      team_side: "away",
+      skip_to_golden_goal: true,
+      game_speed: "fast",
+      opponent_mode: "kids",
+    },
+  );
+  assert.deepEqual(store.matchSettingsForApi({}), {
+    team_side: "home",
+    skip_to_golden_goal: false,
+    game_speed: "normal",
+    opponent_mode: "default",
+  });
+});
+
 test("opening a different bot does not rewrite match preferences", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-match-bot-"));
   const file = store.settingsFile(dir, "linux");

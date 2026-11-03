@@ -118,6 +118,20 @@ function matchPatch(partial) {
   return patch;
 }
 
+/**
+ * Map app-level match prefs to the Studio API request body shape.
+ * user.json stores opponent mode under opponent_team; the API uses opponent_mode.
+ */
+function matchSettingsForApi(data) {
+  const match = matchConfig(data);
+  return {
+    team_side: match.team_side,
+    skip_to_golden_goal: match.skip_to_golden_goal,
+    game_speed: match.game_speed,
+    opponent_mode: match.opponent_team,
+  };
+}
+
 function telemetryEnabled(data) {
   if (!data || !Object.prototype.hasOwnProperty.call(data, "telemetry_enabled")) {
     return true;
@@ -177,6 +191,7 @@ module.exports = {
   applyPatch,
   matchConfig,
   matchPatch,
+  matchSettingsForApi,
   telemetryEnabled,
   projectReady,
   botPaths,

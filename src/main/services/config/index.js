@@ -70,8 +70,45 @@ async function set(patch) {
   return view({ exists: true, data: next });
 }
 
+async function getMatch() {
+  return store.matchConfig(store.read(filePath()).data);
+}
+
+async function setMatch(partial) {
+  const file = filePath();
+  const record = store.read(file);
+  const merged = {
+    ...store.matchConfig(record.data),
+    ...store.matchPatch(partial),
+  };
+  const normalized = store.matchConfig(merged);
+  const next = store.applyPatch(record.data, store.matchPatch(normalized));
+  if (!next.install_unique_id) {
+    next.install_unique_id = crypto.randomUUID();
+  }
+  next.app_version = pkg.version;
+  next.app_path = app.getAppPath();
+  store.write(file, next);
+  return store.matchConfig(next);
+}
+
+/** Current match prefs shaped for server/match/bot Studio API request bodies. */
+async function matchSettingsForApi() {
+  return store.matchSettingsForApi(store.read(filePath()).data);
+}
+
 function projectFileReady(folder) {
   return fs.existsSync(path.join(folder, ".lugo", "info.json"));
 }
 
-module.exports = { get, set, rememberBot, forgetBot, filePath, projectFileReady };
+module.exports = {
+  get,
+  set,
+  getMatch,
+  setMatch,
+  matchSettingsForApi,
+  rememberBot,
+  forgetBot,
+  filePath,
+  projectFileReady,
+};

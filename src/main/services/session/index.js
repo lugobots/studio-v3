@@ -345,6 +345,7 @@ function getServerControls() {
     serverControls = createServerControls({
       ensureReady: ensureStudioApiReady,
       api: studioApi,
+      matchSettings: () => config.matchSettingsForApi(),
       sendStatus: (status) => {
         webContents?.send(CHANNELS.server.statusEvent, status);
       },
@@ -369,13 +370,62 @@ function watchServerStatus(options) {
   return getServerControls().watch(options);
 }
 
-async function startMatch() {
+async function startMatch(options = {}) {
   const ready = await ensureStudioApiReady("Open a bot before starting a match.");
   if (!ready.ok) {
     return ready;
   }
   try {
-    return actionResult(await studioApi.startMatch());
+    const settings = await config.matchSettingsForApi();
+    const payload = { ...settings };
+    if (options && Array.isArray(options.active)) {
+      payload.active = options.active;
+    }
+    return actionResult(await studioApi.startMatch(payload));
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function startBot(slot = {}) {
+  const ready = await ensureStudioApiReady("Open a bot before starting a player.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    const settings = await config.matchSettingsForApi();
+    return actionResult(
+      await studioApi.startBot({
+        side: slot.side,
+        number: slot.number,
+        settings,
+      }),
+    );
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function stopBot(slot) {
+  const ready = await ensureStudioApiReady("Open a bot before stopping a player.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    return actionResult(await studioApi.stopBot(slot));
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function botStatus(slot) {
+  const ready = await ensureStudioApiReady("Open a bot before reading player status.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    const body = await studioApi.botStatus(slot);
+    return { ok: true, body };
   } catch (error) {
     return { ok: false, error: error.message };
   }
@@ -427,6 +477,9 @@ module.exports = {
   serverStatus,
   watchServerStatus,
   startMatch,
+  startBot,
+  stopBot,
+  botStatus,
   publish,
   projectStatus,
 };
