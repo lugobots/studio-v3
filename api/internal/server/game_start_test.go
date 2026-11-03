@@ -75,6 +75,12 @@ func TestGameStartSuccess(t *testing.T) {
 	if match.cfg.OpponentBinary != "/tmp/opp-bot" {
 		t.Fatalf("opponent = %q", match.cfg.OpponentBinary)
 	}
+	if match.cfg.PlayerSide != bots.SideHome {
+		t.Fatalf("default player side = %q", match.cfg.PlayerSide)
+	}
+	if match.cfg.OpponentMode != "" {
+		t.Fatalf("default opponent mode = %q, want empty (manager default)", match.cfg.OpponentMode)
+	}
 }
 
 func TestGameStartAutoStartsServerWithMatchSettings(t *testing.T) {
@@ -87,7 +93,7 @@ func TestGameStartAutoStartsServerWithMatchSettings(t *testing.T) {
 	t.Setenv("LUGO_STUDIO_GAME_SERVER_PORT", "5502")
 	t.Setenv("LUGO_STUDIO_GAME_FRONTEND_PORT", "8802")
 
-	body := `{"team_side":"away","skip_to_golden_goal":true,"game_speed":"fast"}`
+	body := `{"team_side":"away","skip_to_golden_goal":true,"game_speed":"fast","opponent_mode":"zombies"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/game/start", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -100,11 +106,17 @@ func TestGameStartAutoStartsServerWithMatchSettings(t *testing.T) {
 		t.Fatalf("server start calls = %d", starter.calls)
 	}
 	got := starter.lastSettings
-	if got.TeamSide != gameruntime.TeamSideAway || !got.SkipToGoldenGoal || got.GameSpeed != gameruntime.GameSpeedFast {
+	if got.TeamSide != gameruntime.TeamSideAway || !got.SkipToGoldenGoal || got.GameSpeed != gameruntime.GameSpeedFast || got.OpponentMode != gameruntime.OpponentModeZombies {
 		t.Fatalf("settings = %#v", got)
 	}
 	if match.calls != 1 {
 		t.Fatalf("match start calls = %d", match.calls)
+	}
+	if match.cfg.PlayerSide != bots.SideAway {
+		t.Fatalf("player side = %q, want %q", match.cfg.PlayerSide, bots.SideAway)
+	}
+	if match.cfg.OpponentMode != string(gameruntime.OpponentModeZombies) {
+		t.Fatalf("opponent mode = %q", match.cfg.OpponentMode)
 	}
 }
 
@@ -117,7 +129,7 @@ func TestGameStartReusesLastAppliedSettings(t *testing.T) {
 	t.Setenv("LUGO_STUDIO_GAME_SERVER_PORT", "5503")
 	t.Setenv("LUGO_STUDIO_GAME_FRONTEND_PORT", "8803")
 
-	startBody := `{"team_side":"away","skip_to_golden_goal":true,"game_speed":"slow"}`
+	startBody := `{"team_side":"away","skip_to_golden_goal":true,"game_speed":"slow","opponent_mode":"kids"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/server/start", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -149,6 +161,12 @@ func TestGameStartReusesLastAppliedSettings(t *testing.T) {
 	}
 	if starter.lastSettings != want {
 		t.Fatalf("reused settings = %#v want %#v", starter.lastSettings, want)
+	}
+	if match.cfg.PlayerSide != bots.SideAway {
+		t.Fatalf("player side from session = %q", match.cfg.PlayerSide)
+	}
+	if match.cfg.OpponentMode != string(gameruntime.OpponentModeKids) {
+		t.Fatalf("opponent mode from session = %q", match.cfg.OpponentMode)
 	}
 }
 

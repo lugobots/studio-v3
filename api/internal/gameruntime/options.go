@@ -25,6 +25,17 @@ const (
 	GameSpeedFast   GameSpeed = "fast"
 )
 
+// OpponentMode sets Level-1 MODE for non-player bots.
+type OpponentMode string
+
+const (
+	OpponentModeDefault  OpponentMode = "default"
+	OpponentModeZombies  OpponentMode = "zombies"
+	OpponentModeStatues  OpponentMode = "statues"
+	OpponentModeKids     OpponentMode = "kids"
+	OpponentModeDefenses OpponentMode = "defenses"
+)
+
 // Speed multipliers relative to machine.DefaultListeningDuration /
 // machine.PhaseReadyDuration. Documented and locked by unit tests.
 const (
@@ -34,12 +45,13 @@ const (
 )
 
 // MatchSettings are preferences applied when composing server/v2 Configuration
-// on local game-server start. JSON field names match the Studio request body /
-// app-level user.json keys.
+// on local game-server start and when launching match bots. JSON field names
+// match the Studio request body / app-level user.json keys.
 type MatchSettings struct {
-	TeamSide         TeamSide  `json:"team_side"`
-	SkipToGoldenGoal bool      `json:"skip_to_golden_goal"`
-	GameSpeed        GameSpeed `json:"game_speed"`
+	TeamSide         TeamSide     `json:"team_side"`
+	SkipToGoldenGoal bool         `json:"skip_to_golden_goal"`
+	GameSpeed        GameSpeed    `json:"game_speed"`
+	OpponentMode     OpponentMode `json:"opponent_mode"`
 }
 
 // ComposeConfiguration builds a server/v2 Configuration from ports and match

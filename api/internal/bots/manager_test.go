@@ -40,6 +40,8 @@ func TestManagerStartRegistersTwentyTwoBots(t *testing.T) {
 	if err := mgr.Start(Config{
 		ProjectRoot:    root,
 		GRPCURL:        "localhost:5123",
+		PlayerSide:     SideAway,
+		OpponentMode:   "zombies",
 		OpponentBinary: opp,
 	}); err != nil {
 		t.Fatalf("Start: %v", err)
@@ -55,33 +57,23 @@ func TestManagerStartRegistersTwentyTwoBots(t *testing.T) {
 		t.Fatalf("registry len = %d, want 22", reg.Len())
 	}
 
-	var home, away int
+	// Player project on configured side (AWAY); opponents on the other with MODE.
+	var players, opponents int
 	for _, env := range started {
 		if env["BOT_GRPC_URL"] != "localhost:5123" {
 			t.Fatalf("grpc url = %#v", env)
 		}
-		switch env["BOT_TEAM"] {
-		case SideHome:
-			home++
-		case SideAway:
-			away++
+		switch {
+		case env["BOT_TEAM"] == SideAway && env["MODE"] == "":
+			players++
+		case env["BOT_TEAM"] == SideHome && env["MODE"] == "zombies":
+			opponents++
 		default:
-			t.Fatalf("unexpected side %#v", env)
+			t.Fatalf("unexpected bot env %#v", env)
 		}
 	}
-	if home != 11 || away != 11 {
-		t.Fatalf("home=%d away=%d", home, away)
-	}
-
-	// Opponent bots get MODE; player bots do not.
-	var withMode int
-	for _, env := range started {
-		if env["MODE"] == defaultOpponentMode {
-			withMode++
-		}
-	}
-	if withMode != 11 {
-		t.Fatalf("mode set on %d bots, want 11 opponents", withMode)
+	if players != 11 || opponents != 11 {
+		t.Fatalf("players=%d opponents=%d", players, opponents)
 	}
 }
 

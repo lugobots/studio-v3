@@ -180,6 +180,8 @@ func (a *api) handleGameStart(w http.ResponseWriter, r *http.Request) {
 	cfg := bots.Config{
 		ProjectRoot:    projectRoot(),
 		GRPCURL:        fmt.Sprintf("localhost:%d", ports.GameServer),
+		PlayerSide:     playerSideForBots(a.lastSettings.TeamSide),
+		OpponentMode:   string(a.lastSettings.OpponentMode),
 		OpponentBinary: bots.OpponentBinaryFromEnv(),
 	}
 	if err := a.match.Start(cfg); err != nil {
@@ -187,6 +189,15 @@ func (a *api) handleGameStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
+}
+
+// playerSideForBots maps match-settings team_side to the BOT_TEAM value used by
+// the bot manager (HOME/AWAY). Empty defaults to HOME.
+func playerSideForBots(side gameruntime.TeamSide) string {
+	if side == gameruntime.TeamSideAway {
+		return bots.SideAway
+	}
+	return bots.SideHome
 }
 
 func studioStatus() map[string]string {
@@ -253,6 +264,16 @@ func validateMatchSettings(settings gameruntime.MatchSettings) error {
 	case "", gameruntime.GameSpeedSlow, gameruntime.GameSpeedNormal, gameruntime.GameSpeedFast:
 	default:
 		return fmt.Errorf("invalid game_speed %q", settings.GameSpeed)
+	}
+	switch settings.OpponentMode {
+	case "",
+		gameruntime.OpponentModeDefault,
+		gameruntime.OpponentModeZombies,
+		gameruntime.OpponentModeStatues,
+		gameruntime.OpponentModeKids,
+		gameruntime.OpponentModeDefenses:
+	default:
+		return fmt.Errorf("invalid opponent_mode %q", settings.OpponentMode)
 	}
 	return nil
 }
