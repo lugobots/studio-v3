@@ -17,17 +17,19 @@ import (
 )
 
 type fakeMatch struct {
-	mu    sync.Mutex
-	calls int
-	cfg   bots.Config
-	err   error
+	mu     sync.Mutex
+	calls  int
+	cfg    bots.Config
+	active []bots.Slot
+	err    error
 }
 
-func (f *fakeMatch) Start(cfg bots.Config) error {
+func (f *fakeMatch) StartMatch(cfg bots.Config, active []bots.Slot) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
 	f.cfg = cfg
+	f.active = append([]bots.Slot(nil), active...)
 	return f.err
 }
 
@@ -213,7 +215,7 @@ func TestGameStartEnsuresServerBeforeBots(t *testing.T) {
 			return nil
 		},
 	}
-	match := &recordingMatch{onStart: func(cfg bots.Config) error {
+	match := &recordingMatch{onStart: func(cfg bots.Config, active []bots.Slot) error {
 		mu.Lock()
 		order = append(order, "bots")
 		mu.Unlock()
@@ -322,14 +324,14 @@ func TestGameStartIntegrationRegistersBots(t *testing.T) {
 }
 
 type recordingMatch struct {
-	onStart func(bots.Config) error
+	onStart func(bots.Config, []bots.Slot) error
 	calls   int
 }
 
-func (r *recordingMatch) Start(cfg bots.Config) error {
+func (r *recordingMatch) StartMatch(cfg bots.Config, active []bots.Slot) error {
 	r.calls++
 	if r.onStart != nil {
-		return r.onStart(cfg)
+		return r.onStart(cfg, active)
 	}
 	return nil
 }

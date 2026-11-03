@@ -184,7 +184,8 @@ func (a *api) handleGameStart(w http.ResponseWriter, r *http.Request) {
 		OpponentMode:   string(a.lastSettings.OpponentMode),
 		OpponentBinary: bots.OpponentBinaryFromEnv(),
 	}
-	if err := a.match.Start(cfg); err != nil {
+	// Full roster until game-start accepts an explicit active set (task 2.3).
+	if err := a.match.StartMatch(cfg, bots.AllSlots()); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
 		return
 	}

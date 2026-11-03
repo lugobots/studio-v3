@@ -12,7 +12,7 @@ import (
 	"studio-v3/api/internal/procreg"
 )
 
-func TestManagerStartRegistersTwentyTwoBots(t *testing.T) {
+func TestManagerStartMatchRegistersTwentyTwoBots(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module demo\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -37,14 +37,14 @@ func TestManagerStartRegistersTwentyTwoBots(t *testing.T) {
 		return procreg.StartChild("sleep", "60")
 	}
 
-	if err := mgr.Start(Config{
+	if err := mgr.StartMatch(Config{
 		ProjectRoot:    root,
 		GRPCURL:        "localhost:5123",
 		PlayerSide:     SideAway,
 		OpponentMode:   "zombies",
 		OpponentBinary: opp,
-	}); err != nil {
-		t.Fatalf("Start: %v", err)
+	}, AllSlots()); err != nil {
+		t.Fatalf("StartMatch: %v", err)
 	}
 	t.Cleanup(func() { _ = reg.ShutdownAll() })
 
@@ -77,6 +77,103 @@ func TestManagerStartRegistersTwentyTwoBots(t *testing.T) {
 	}
 }
 
+func TestManagerStartMatchPartialActiveSet(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opp := filepath.Join(t.TempDir(), "opp-bot")
+	if err := os.WriteFile(opp, []byte("#!/bin/sh\nexec sleep 60\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	reg := procreg.New()
+	mgr := New(reg)
+
+	var mu sync.Mutex
+	var started []map[string]string
+	mgr.RunSync = func(dir, command string, env map[string]string) error { return nil }
+	mgr.StartProcess = func(dir, command string, env map[string]string) (*procreg.Child, error) {
+		mu.Lock()
+		started = append(started, env)
+		mu.Unlock()
+		return procreg.StartChild("sleep", "60")
+	}
+
+	active := []Slot{
+		{Side: SideHome, Number: 1},
+		{Side: SideHome, Number: 5},
+		{Side: SideAway, Number: 11},
+	}
+	if err := mgr.StartMatch(Config{
+		ProjectRoot:    root,
+		GRPCURL:        "localhost:5123",
+		PlayerSide:     SideHome,
+		OpponentMode:   "kids",
+		OpponentBinary: opp,
+	}, active); err != nil {
+		t.Fatalf("StartMatch: %v", err)
+	}
+	t.Cleanup(func() { _ = reg.ShutdownAll() })
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(started) != 3 {
+		t.Fatalf("started %d bots, want 3", len(started))
+	}
+	if reg.Len() != 3 {
+		t.Fatalf("registry len = %d, want 3", reg.Len())
+	}
+
+	want := map[string]string{
+		SideHome + "/1":  "",
+		SideHome + "/5":  "",
+		SideAway + "/11": "kids",
+	}
+	got := map[string]string{}
+	for _, env := range started {
+		key := env["BOT_TEAM"] + "/" + env["BOT_NUMBER"]
+		got[key] = env["MODE"]
+	}
+	for key, mode := range want {
+		if got[key] != mode {
+			t.Fatalf("slot %s mode = %q, want %q (started %#v)", key, got[key], mode, got)
+		}
+	}
+	for key := range got {
+		if _, ok := want[key]; !ok {
+			t.Fatalf("unexpected started slot %s", key)
+		}
+	}
+}
+
+func TestManagerStartMatchEmptyActiveSet(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reg := procreg.New()
+	mgr := New(reg)
+	started := 0
+	mgr.RunSync = func(dir, command string, env map[string]string) error {
+		t.Fatal("prepare should not run for empty active set")
+		return nil
+	}
+	mgr.StartProcess = func(dir, command string, env map[string]string) (*procreg.Child, error) {
+		started++
+		return nil, fmt.Errorf("should not start")
+	}
+	if err := mgr.StartMatch(Config{
+		ProjectRoot: root,
+		GRPCURL:     "localhost:1",
+	}, nil); err != nil {
+		t.Fatalf("StartMatch empty: %v", err)
+	}
+	if started != 0 || reg.Len() != 0 {
+		t.Fatalf("started=%d registry=%d", started, reg.Len())
+	}
+}
+
 func TestManagerRestartStopsPreviousBots(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{}`), 0o644); err != nil {
@@ -100,15 +197,15 @@ func TestManagerRestartStopsPreviousBots(t *testing.T) {
 		firstPIDs = append(firstPIDs, child.Cmd.Process.Pid)
 		return child, nil
 	}
-	if err := mgr.Start(Config{ProjectRoot: root, GRPCURL: "localhost:1", OpponentBinary: opp}); err != nil {
-		t.Fatalf("first Start: %v", err)
+	if err := mgr.StartMatch(Config{ProjectRoot: root, GRPCURL: "localhost:1", OpponentBinary: opp}, AllSlots()); err != nil {
+		t.Fatalf("first StartMatch: %v", err)
 	}
 
 	mgr.StartProcess = func(dir, command string, env map[string]string) (*procreg.Child, error) {
 		return procreg.StartChild("sleep", "60")
 	}
-	if err := mgr.Start(Config{ProjectRoot: root, GRPCURL: "localhost:1", OpponentBinary: opp}); err != nil {
-		t.Fatalf("second Start: %v", err)
+	if err := mgr.StartMatch(Config{ProjectRoot: root, GRPCURL: "localhost:1", OpponentBinary: opp}, AllSlots()); err != nil {
+		t.Fatalf("second StartMatch: %v", err)
 	}
 	t.Cleanup(func() { _ = reg.ShutdownAll() })
 
@@ -127,11 +224,11 @@ func TestManagerRequiresDetectableProject(t *testing.T) {
 	if err := os.WriteFile(opp, []byte("x"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	err := mgr.Start(Config{
+	err := mgr.StartMatch(Config{
 		ProjectRoot:    t.TempDir(),
 		GRPCURL:        "localhost:5000",
 		OpponentBinary: opp,
-	})
+	}, []Slot{{Side: SideHome, Number: 1}})
 	if err == nil {
 		t.Fatal("expected error for unknown project")
 	}
@@ -143,11 +240,11 @@ func TestManagerMissingOpponentBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 	mgr := New(procreg.New())
-	err := mgr.Start(Config{
+	err := mgr.StartMatch(Config{
 		ProjectRoot:    root,
 		GRPCURL:        "localhost:5000",
 		OpponentBinary: filepath.Join(t.TempDir(), "missing"),
-	})
+	}, []Slot{{Side: SideAway, Number: 1}})
 	if err == nil {
 		t.Fatal("expected missing opponent error")
 	}

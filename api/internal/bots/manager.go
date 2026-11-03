@@ -14,9 +14,15 @@ import (
 
 const defaultOpponentBinary = "/usr/local/lib/lugo/bot-level-1"
 
-// Starter starts all bots required for a local match.
+// Slot identifies one bot process by team side and shirt number.
+type Slot struct {
+	Side   string // HOME or AWAY
+	Number int    // 1..11
+}
+
+// Starter starts the bots listed in an explicit active set for a local match.
 type Starter interface {
-	Start(cfg Config) error
+	StartMatch(cfg Config, active []Slot) error
 }
 
 // Config describes how to launch player and opponent bots for one match.
@@ -34,8 +40,8 @@ type botHandle struct {
 	entry procreg.Entry
 }
 
-// Manager prepares the player project and starts 11 player + 11 opponent bots,
-// registering each OS process with the process registry.
+// Manager prepares the player project once and starts only the requested bot
+// slots, registering each OS process with the process registry.
 type Manager struct {
 	Registry *procreg.Registry
 
@@ -64,9 +70,23 @@ func OpponentBinaryFromEnv() string {
 	return defaultOpponentBinary
 }
 
-// Start prepares the player bots and launches both teams against grpcURL.
+// AllSlots returns HOME and AWAY numbers 1..11 (22 slots). Used by callers that
+// still start a full roster until the game-start payload carries an active set.
+func AllSlots() []Slot {
+	out := make([]Slot, 0, playersPerSide*2)
+	for _, side := range []string{SideHome, SideAway} {
+		for n := 1; n <= playersPerSide; n++ {
+			out = append(out, Slot{Side: side, Number: n})
+		}
+	}
+	return out
+}
+
+// StartMatch prepares the player project (when needed) and launches only the
+// listed slots. Slots on PlayerSide use the project bots; other slots use the
+// opponent binary. An empty active set is allowed (stops prior bots, starts none).
 // A second call stops previously started bots first.
-func (m *Manager) Start(cfg Config) error {
+func (m *Manager) StartMatch(cfg Config, active []Slot) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -92,36 +112,61 @@ func (m *Manager) Start(cfg Config) error {
 		cfg.CacheDir = filepath.Join(cfg.ProjectRoot, ".cache")
 	}
 
-	lang := DetectLanguage(cfg.ProjectRoot)
-	if lang == LangUnknown {
-		return fmt.Errorf("could not detect project language in %s (need go.mod, requirements.txt, or package.json)", cfg.ProjectRoot)
-	}
-	if err := ensureOpponentBinary(cfg.OpponentBinary); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(cfg.CacheDir, 0o755); err != nil {
-		return fmt.Errorf("create cache dir: %w", err)
+	for _, slot := range active {
+		if slot.Side != SideHome && slot.Side != SideAway {
+			return fmt.Errorf("invalid bot side %q", slot.Side)
+		}
+		if slot.Number < 1 || slot.Number > playersPerSide {
+			return fmt.Errorf("invalid bot number %d", slot.Number)
+		}
 	}
 
 	m.stopBotsLocked()
 
-	if err := m.preparePlayer(lang, cfg); err != nil {
-		return fmt.Errorf("prepare player bots: %w", err)
+	if len(active) == 0 {
+		return nil
 	}
 
-	oppSide := SideAway
-	if cfg.PlayerSide == SideAway {
-		oppSide = SideHome
-	}
-
-	for n := 1; n <= playersPerSide; n++ {
-		if err := m.startPlayer(lang, cfg, cfg.PlayerSide, n); err != nil {
-			m.stopBotsLocked()
-			return fmt.Errorf("start player bot %s/%d: %w", cfg.PlayerSide, n, err)
+	needPlayer := false
+	needOpponent := false
+	for _, slot := range active {
+		if slot.Side == cfg.PlayerSide {
+			needPlayer = true
+		} else {
+			needOpponent = true
 		}
-		if err := m.startOpponent(cfg, oppSide, n); err != nil {
+	}
+
+	var lang Language
+	if needPlayer {
+		lang = DetectLanguage(cfg.ProjectRoot)
+		if lang == LangUnknown {
+			return fmt.Errorf("could not detect project language in %s (need go.mod, requirements.txt, or package.json)", cfg.ProjectRoot)
+		}
+		if err := os.MkdirAll(cfg.CacheDir, 0o755); err != nil {
+			return fmt.Errorf("create cache dir: %w", err)
+		}
+		if err := m.preparePlayer(lang, cfg); err != nil {
+			return fmt.Errorf("prepare player bots: %w", err)
+		}
+	}
+	if needOpponent {
+		if err := ensureOpponentBinary(cfg.OpponentBinary); err != nil {
+			return err
+		}
+	}
+
+	for _, slot := range active {
+		if slot.Side == cfg.PlayerSide {
+			if err := m.startPlayer(lang, cfg, slot.Side, slot.Number); err != nil {
+				m.stopBotsLocked()
+				return fmt.Errorf("start player bot %s/%d: %w", slot.Side, slot.Number, err)
+			}
+			continue
+		}
+		if err := m.startOpponent(cfg, slot.Side, slot.Number); err != nil {
 			m.stopBotsLocked()
-			return fmt.Errorf("start opponent bot %s/%d: %w", oppSide, n, err)
+			return fmt.Errorf("start opponent bot %s/%d: %w", slot.Side, slot.Number, err)
 		}
 	}
 	return nil
