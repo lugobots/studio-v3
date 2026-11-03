@@ -157,16 +157,20 @@ export function renderGameControls(parent, { state, onChange, host, dialogs }) {
   }));
   root.append(server);
 
+  const playLocked = !state.serverRunning;
+
   const match = document.createElement("div");
   match.className = "action_block start_stop_buttons game-ctrl-section";
   match.append(heading("Match"));
   match.append(controlButton({
     title: "Starts the match",
+    disabled: playLocked,
     onClick: () => startMatchFromApi(host, dialogs),
     graphic: icon("#22c55e", [["polygon", { points: "8,5 19,12 8,19", fill: "#22c55e", stroke: "#22c55e" }]]),
   }));
   match.append(controlButton({
     title: "Resets the match",
+    disabled: playLocked,
     onClick: () => dispatch(state, onChange, { type: "reset-match" }),
     graphic: icon("#f59e0b", [
       ["path", { d: "M4 12a8 8 0 1 0 2.3-5.7" }],
@@ -178,15 +182,15 @@ export function renderGameControls(parent, { state, onChange, host, dialogs }) {
   const play = document.createElement("div");
   play.className = "game-ctrl-play";
   play.style.opacity = state.serverRunning ? "1" : "0.3";
-  play.append(teamBlock("home", "Home", state, onChange));
-  play.append(teamBlock("away", "Away", state, onChange));
+  play.append(teamBlock("home", "Home", state, onChange, playLocked));
+  play.append(teamBlock("away", "Away", state, onChange, playLocked));
   if (state.home.some((row) => row.logs) || state.away.some((row) => row.logs)) {
     const note = document.createElement("div");
     note.className = "game-ctrl-log-note";
     note.textContent = "Open the terminal on the Editor tab and run logger to watch the logs";
     play.append(note);
   }
-  play.append(positionsBlock(state, onChange));
+  play.append(positionsBlock(state, onChange, playLocked));
   root.append(play);
 
   const settings = document.createElement("div");
@@ -202,7 +206,7 @@ export function renderGameControls(parent, { state, onChange, host, dialogs }) {
   return root;
 }
 
-function teamBlock(team, label, state, onChange) {
+function teamBlock(team, label, state, onChange, disabled = false) {
   const block = document.createElement("div");
   block.className = "bot_actions";
   block.append(heading(label));
@@ -222,16 +226,19 @@ function teamBlock(team, label, state, onChange) {
         title: "Start",
         text: "🟢",
         className: row.running ? "is-running" : "",
+        disabled,
         onClick: () => dispatch(state, onChange, { type: "set-bot", team, number: player, control: "start" }),
       }),
       controlButton({
         title: "Kill",
         text: "💀",
+        disabled,
         onClick: () => dispatch(state, onChange, { type: "set-bot", team, number: player, control: "kill" }),
       }),
       controlButton({
         title: "Ver logs",
         text: row.logs ? "X" : "📄",
+        disabled,
         onClick: () => dispatch(state, onChange, { type: "set-bot", team, number: player, control: "logs" }),
       }),
     );
@@ -241,7 +248,7 @@ function teamBlock(team, label, state, onChange) {
   return block;
 }
 
-function positionsBlock(state, onChange) {
+function positionsBlock(state, onChange, disabled = false) {
   const section = document.createElement("div");
   section.className = "action_block game-ctrl-section game-ctrl-positions";
   section.append(heading("Positions"));
@@ -251,10 +258,16 @@ function positionsBlock(state, onChange) {
     title: "Save positions",
     className: "position-btn position-btn-save",
     text: "Save positions",
+    disabled,
     onClick: () => dispatch(state, onChange, { type: "save-positions" }),
   }));
   const select = document.createElement("select");
   select.setAttribute("aria-label", "Positions");
+  select.disabled = Boolean(disabled);
+  if (disabled) {
+    select.setAttribute("disabled", "true");
+    select.setAttribute("aria-disabled", "true");
+  }
   for (const name of state.positions) {
     const option = document.createElement("option");
     option.value = name;
@@ -266,6 +279,7 @@ function positionsBlock(state, onChange) {
     title: "Apply",
     className: "position-btn position-btn-apply",
     text: "Apply",
+    disabled,
     onClick: () => dispatch(state, onChange, { type: "apply-positions" }),
   }));
   section.append(set);

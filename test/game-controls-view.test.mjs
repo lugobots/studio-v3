@@ -115,9 +115,15 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   const settings = panel.parent.querySelector(".game-ctrl-settings");
   assert.equal(play.style.opacity, "0.3");
   assert.equal(settings.style.opacity, "1");
+  assert.equal(panel.button("Starts the match").disabled, true);
+  assert.equal(panel.button("Resets the match").disabled, true);
+  assert.equal(panel.button("Save positions").disabled, true);
+  assert.equal(panel.button("Apply").disabled, true);
+  assert.equal(panel.parent.querySelector("select").disabled, true);
+  assert.equal(panel.parent.querySelector(".bot_actions").querySelector('button[title="Start"]').disabled, true);
 
   panel.parent.querySelector(".bot_actions").querySelector('button[title="Start"]').click();
-  assert.equal(panel.state().home[0].running, true);
+  assert.equal(panel.state().home[0].running, false);
   assert.equal(panel.state().serverRunning, false);
   assert.equal(panel.calls.server, 0);
   assert.equal(panel.calls.match, 0);
@@ -147,6 +153,14 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   assert.equal(panel.button("Zombies mode").disabled, true);
   assert.equal(panel.parent.querySelector("#team-side-switch").getAttribute("aria-disabled"), "true");
   assert.equal(panel.parent.querySelector("#extra-time-check input").disabled, true);
+  assert.equal(panel.button("Starts the match").disabled, false);
+  assert.equal(panel.button("Resets the match").disabled, false);
+  assert.equal(panel.button("Save positions").disabled, false);
+  assert.equal(panel.button("Apply").disabled, false);
+  assert.equal(panel.parent.querySelector("select").disabled, false);
+
+  panel.parent.querySelector(".bot_actions").querySelector('button[title="Start"]').click();
+  assert.equal(panel.state().home[0].running, true);
 
   panel.parent.querySelectorAll(".bot_actions")[1].querySelector('button[title="Start"]').click();
   assert.equal(panel.state().away[0].running, true);
@@ -210,6 +224,53 @@ test("config, game speed, and opponent mode stay locked while the server is runn
   panel.restore();
 });
 
+test("positions, player actions, and match stay locked while the server is down", async () => {
+  const panel = mountPanel();
+
+  assert.equal(panel.state().serverRunning, false);
+  assert.equal(panel.button("Starts the match").disabled, true);
+  assert.equal(panel.button("Resets the match").disabled, true);
+  assert.equal(panel.button("Save positions").disabled, true);
+  assert.equal(panel.button("Apply").disabled, true);
+  assert.equal(panel.parent.querySelector("select").disabled, true);
+  assert.equal(panel.parent.querySelector(".bot_actions").querySelector('button[title="Start"]').disabled, true);
+  assert.equal(panel.parent.querySelector(".bot_actions").querySelector('button[title="Kill"]').disabled, true);
+  assert.equal(panel.parent.querySelector(".bot_actions").querySelector('button[title="Ver logs"]').disabled, true);
+
+  panel.button("Starts the match").click();
+  panel.button("Resets the match").click();
+  panel.button("Save positions").click();
+  panel.button("Apply").click();
+  panel.parent.querySelector(".bot_actions").querySelector('button[title="Start"]').click();
+  panel.parent.querySelector(".bot_actions").querySelector('button[title="Kill"]').click();
+  panel.parent.querySelector(".bot_actions").querySelector('button[title="Ver logs"]').click();
+  await flush();
+
+  assert.equal(panel.calls.match, 0);
+  assert.equal(panel.state().home[0].running, false);
+  assert.equal(panel.state().home[0].logs, false);
+  assert.equal(panel.parent.querySelector(".game-ctrl-log-note"), null);
+
+  panel.button("Starts the Game Server").click();
+  await flush();
+  assert.equal(panel.state().serverRunning, true);
+  assert.equal(panel.button("Starts the match").disabled, false);
+  assert.equal(panel.button("Resets the match").disabled, false);
+  assert.equal(panel.button("Save positions").disabled, false);
+  assert.equal(panel.button("Apply").disabled, false);
+  assert.equal(panel.parent.querySelector("select").disabled, false);
+  assert.equal(panel.parent.querySelector(".bot_actions").querySelector('button[title="Start"]').disabled, false);
+
+  panel.parent.querySelector(".bot_actions").querySelector('button[title="Start"]').click();
+  assert.equal(panel.state().home[0].running, true);
+
+  panel.button("Starts the match").click();
+  await flush();
+  assert.equal(panel.calls.match, 1);
+  assert.equal(panel.notices.length, 1);
+  panel.restore();
+});
+
 test("canceling server stop confirmation does not call stop", async () => {
   const panel = mountPanel({ confirmAnswer: false });
 
@@ -246,8 +307,9 @@ test("confirming server stop calls the API and updates the power control", async
 });
 
 test("server and match start failures leave local state unchanged", async () => {
+  let serverOk = false;
   const panel = mountPanel({
-    serverStart: async () => ({ ok: false, error: "server down" }),
+    serverStart: async () => (serverOk ? { ok: true } : { ok: false, error: "server down" }),
     matchStart: async () => ({ ok: false, error: "match down" }),
   });
 
@@ -257,6 +319,14 @@ test("server and match start failures leave local state unchanged", async () => 
   assert.equal(panel.state().serverRunning, false);
   assert.equal(panel.button("Starts the Game Server") !== null, true);
   assert.equal(panel.confirms.some((item) => item.body === "server down"), true);
+  assert.equal(panel.button("Starts the match").disabled, true);
+
+  serverOk = true;
+  panel.button("Starts the Game Server").click();
+  await flush();
+  assert.equal(panel.calls.server, 2);
+  assert.equal(panel.state().serverRunning, true);
+  assert.equal(panel.button("Starts the match").disabled, false);
 
   panel.button("Starts the match").click();
   await flush();
