@@ -26,7 +26,7 @@ async function waitFor(predicate, { timeoutMs = 2000 } = {}) {
   throw new Error("timed out waiting for condition");
 }
 
-test("workspace wiring hits API for server and match only, keeps layout placeholders local", async () => {
+test("workspace wiring hits API for server, match, and reset; locked settings and editor stay local", async () => {
   const hits = [];
   const server = http.createServer((req, res) => {
     hits.push(`${req.method} ${req.url}`);
@@ -41,6 +41,11 @@ test("workspace wiring hits API for server and match only, keeps layout placehol
       return;
     }
     if (req.url === "/api/game/start" && req.method === "POST") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "OK" }));
+      return;
+    }
+    if (req.url === "/api/game/reset" && req.method === "POST") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "OK" }));
       return;
@@ -111,10 +116,9 @@ test("workspace wiring hits API for server and match only, keeps layout placehol
     assert.equal(buttonByTitle(outlet, "Zombies mode").disabled, false);
 
     outlet.querySelector(".game-start-control").click();
-    await waitFor(() => hits.length === 1);
+    await waitFor(() => buttonByTitle(outlet, "Stops the Game Server"));
     await flush();
     assert.deepEqual(hits, ["POST /api/server/start"]);
-    assert.ok(buttonByTitle(outlet, "Stops the Game Server"));
     assert.equal(outlet.querySelector(".game-start-overlay"), null);
     assert.equal(outlet.querySelector("#game_frame").src, "http://localhost:8080");
     assert.equal(buttonByTitle(outlet, "Starts the match").disabled, false);
@@ -123,38 +127,50 @@ test("workspace wiring hits API for server and match only, keeps layout placehol
     assert.equal(outlet.querySelector("#team-side-switch").getAttribute("aria-disabled"), "true");
 
     buttonByTitle(outlet, "Starts the match").click();
-    await waitFor(() => hits.length === 2);
+    await waitFor(() => notices.some((item) => item.title === "Match started"));
     await flush();
     assert.deepEqual(hits, ["POST /api/server/start", "POST /api/game/start"]);
-    assert.equal(notices.some((item) => item.title === "Match started"), true);
 
     const beforeLocal = hits.length;
-    const awayStart = outlet.querySelectorAll(".bot_actions")[1].querySelector('button[title="Start"]');
-    assert.equal(awayStart.disabled, false);
-    awayStart.click();
+    const awayActive = outlet.querySelectorAll(".bot_actions")[1].querySelector('button[title="Active"]');
+    assert.equal(awayActive.disabled, false);
+    // Web host has no bot IPC; Active stays local. Locked settings do not write.
+    awayActive.click();
     buttonByTitle(outlet, "Zombies mode").click();
     buttonByTitle(outlet, "Slow speed").click();
-    buttonByTitle(outlet, "Resets the match").click();
-    buttonByTitle(outlet, "Save positions").click();
-    buttonByTitle(outlet, "Apply").click();
     outlet.querySelector("#team-side-switch").click();
+    await flush();
     assert.equal(buttonByTitle(outlet, "Zombies mode").getAttribute("aria-pressed"), "false");
     assert.equal(buttonByTitle(outlet, "Slow speed").getAttribute("aria-pressed"), "false");
     assert.equal(outlet.querySelector("#team-side-switch").getAttribute("aria-disabled"), "true");
+    assert.equal(hits.length, beforeLocal);
+
+    buttonByTitle(outlet, "Resets the match").click();
+    await waitFor(() => notices.some((item) => item.title === "Match reset"));
+    await flush();
+    assert.ok(hits.includes("POST /api/game/reset"));
+
+    // Save/Apply need match config helpers; without them they stay off the wire.
+    const afterReset = hits.length;
+    buttonByTitle(outlet, "Save positions").click();
+    buttonByTitle(outlet, "Apply").click();
+    await flush();
+    assert.equal(hits.length, afterReset);
+
     buttonByTitle(outlet, "Stops the Game Server").click();
     await flush();
-    assert.equal(hits.length, beforeLocal);
+    assert.equal(hits.length, afterReset);
 
     confirmAnswer = true;
     buttonByTitle(outlet, "Stops the Game Server").click();
-    await waitFor(() => hits.includes("POST /api/server/stop"));
+    await waitFor(() => buttonByTitle(outlet, "Starts the Game Server"));
     await flush();
     assert.deepEqual(hits, [
       "POST /api/server/start",
       "POST /api/game/start",
+      "POST /api/game/reset",
       "POST /api/server/stop",
     ]);
-    assert.ok(buttonByTitle(outlet, "Starts the Game Server"));
     assert.ok(outlet.querySelector(".game-start-overlay"));
     assert.equal(outlet.querySelector("#game_frame").hidden, true);
     assert.equal(buttonByTitle(outlet, "Starts the match").disabled, true);
