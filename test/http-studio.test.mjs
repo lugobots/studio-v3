@@ -88,6 +88,33 @@ test("web adapter stop hits the server stop API", async () => {
   assert.equal(calls[0].method, "POST");
 });
 
+test("web adapter server start posts match settings when provided", async () => {
+  const calls = [];
+  const studio = createHttpStudio({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({
+        url,
+        method: options.method || "GET",
+        body: options.body ? JSON.parse(options.body) : null,
+      });
+      return respond(200, { status: "OK" });
+    },
+    storage: null,
+  });
+  const settings = {
+    team_side: "away",
+    skip_to_golden_goal: true,
+    game_speed: "slow",
+    opponent_mode: "zombies",
+  };
+  const started = await studio.server.start(settings);
+  assert.equal(started.ok, true);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /\/api\/server\/start$/);
+  assert.equal(calls[0].method, "POST");
+  assert.deepEqual(calls[0].body, settings);
+});
+
 test("web adapter status reads the server status API", async () => {
   const calls = [];
   const studio = createHttpStudio({

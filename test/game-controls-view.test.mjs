@@ -41,6 +41,7 @@ function mountPanel({
     botStop: 0,
   };
   const matchStarts = [];
+  const serverStarts = [];
   const botStarts = [];
   const botStops = [];
   const matchSets = [];
@@ -74,9 +75,10 @@ function mountPanel({
       },
     },
     server: {
-      start() {
+      start(settings) {
         calls.server += 1;
-        return serverStart();
+        serverStarts.push(settings);
+        return serverStart(settings);
       },
       stop() {
         calls.stop += 1;
@@ -144,6 +146,7 @@ function mountPanel({
     parent,
     calls,
     matchStarts,
+    serverStarts,
     botStarts,
     botStops,
     matchSets,
@@ -236,6 +239,12 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   panel.button("Starts the Game Server").click();
   await flush();
   assert.equal(panel.calls.server, 1);
+  assert.deepEqual(panel.serverStarts[0], {
+    team_side: "away",
+    skip_to_golden_goal: false,
+    game_speed: "fast",
+    opponent_mode: "zombies",
+  });
   assert.equal(panel.button("Stops the Game Server") !== null, true);
   assert.equal(panel.button("Fast speed").disabled, true);
   assert.equal(panel.button("Zombies mode").disabled, true);
@@ -521,6 +530,31 @@ test("match-start IPC includes only active rows", async () => {
       { side: "AWAY", number: 11 },
     ],
   });
+  panel.restore();
+});
+
+test("server start sends current match settings and stop still confirms", async () => {
+  const panel = mountPanel();
+
+  panel.button("Slow speed").click();
+  panel.button("Kids mode").click();
+  panel.parent.querySelector("#team-side-switch").click();
+  panel.parent.querySelector("#extra-time-check input").checked = true;
+  panel.parent.querySelector("#extra-time-check input").listeners.change[0]({ preventDefault() {} });
+  await flush();
+
+  panel.button("Starts the Game Server").click();
+  await flush();
+  assert.equal(panel.calls.server, 1);
+  assert.deepEqual(panel.serverStarts[0], {
+    team_side: "away",
+    skip_to_golden_goal: true,
+    game_speed: "slow",
+    opponent_mode: "kids",
+  });
+  assert.equal(panel.matchSets.length >= 4, true);
+  assert.equal(panel.state().serverRunning, true);
+  assert.equal(panel.button("Stops the Game Server") !== null, true);
   panel.restore();
 });
 

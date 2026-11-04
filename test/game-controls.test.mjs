@@ -7,6 +7,7 @@ import {
   initialGameControls,
   markActiveBotsRunning,
   matchSettingsPatch,
+  matchSettingsForApi,
   persistMatchSettings,
   reduceGameControl,
   upsertPositionPreset,
@@ -158,6 +159,12 @@ test("applyMatchConfig loads side, speed, opponent, golden skip, and position na
     skip_to_golden_goal: true,
     game_speed: "fast",
     opponent_team: "kids",
+  });
+  assert.deepEqual(matchSettingsForApi(loaded), {
+    team_side: "away",
+    skip_to_golden_goal: true,
+    game_speed: "fast",
+    opponent_mode: "kids",
   });
 });
 

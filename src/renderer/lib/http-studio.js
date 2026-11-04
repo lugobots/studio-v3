@@ -135,9 +135,16 @@ export function createHttpStudio({
       remove: async () => desktopOnly(),
     },
     server: {
-      async start() {
+      async start(settings) {
         try {
-          return actionResult(await request("/server/start", { method: "POST" }));
+          const options = settings && typeof settings === "object"
+            ? {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(settings),
+            }
+            : { method: "POST" };
+          return actionResult(await request("/server/start", options));
         } catch (error) {
           return { ok: false, error: error.message };
         }

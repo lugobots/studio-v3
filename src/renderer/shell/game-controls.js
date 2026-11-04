@@ -93,6 +93,16 @@ export function matchSettingsPatch(state) {
   };
 }
 
+/** Match prefs shaped for Studio API server/match/bot start bodies. */
+export function matchSettingsForApi(state) {
+  return {
+    team_side: state.side,
+    skip_to_golden_goal: Boolean(state.skipGolden),
+    game_speed: state.speed,
+    opponent_mode: state.opponent,
+  };
+}
+
 /** Upsert a named position snapshot into the app-level saved_positions list. */
 export function upsertPositionPreset(savedPositions, name, snapshot) {
   const trimmed = typeof name === "string" ? name.trim() : "";

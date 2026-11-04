@@ -4,6 +4,7 @@ import {
   applyMatchConfig,
   findPositionPreset,
   markActiveBotsRunning,
+  matchSettingsForApi,
   persistMatchSettings,
   reduceGameControl,
   upsertPositionPreset,
@@ -104,7 +105,9 @@ export async function startServerFromApi(state, onChange, host, dialogs) {
   if (!host?.server?.start) {
     return;
   }
-  const result = await host.server.start();
+  // Flush app settings first; still pass live UI prefs so start does not race a pending write.
+  await persistMatchSettings(host, state);
+  const result = await host.server.start(matchSettingsForApi(state));
   if (result?.ok) {
     dispatch(state, onChange, { type: "set-server-running", running: true });
     return;

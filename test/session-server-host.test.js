@@ -138,6 +138,21 @@ test("server controls start posts current match settings payload", async () => {
     game_speed: "slow",
     opponent_mode: "zombies",
   });
+
+  const overridden = await controls.start({
+    team_side: "home",
+    skip_to_golden_goal: false,
+    game_speed: "fast",
+    opponent_mode: "kids",
+  });
+  assert.equal(overridden.ok, true);
+  assert.equal(apiCalls.length, 2);
+  assert.deepEqual(apiCalls[1].settings, {
+    team_side: "home",
+    skip_to_golden_goal: false,
+    game_speed: "fast",
+    opponent_mode: "kids",
+  });
 });
 
 test("thin desktop host stop hits session controls and onStatus receives events", async () => {

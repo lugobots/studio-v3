@@ -354,8 +354,8 @@ function getServerControls() {
   return serverControls;
 }
 
-async function startServer() {
-  return getServerControls().start();
+async function startServer(settings) {
+  return getServerControls().start(settings);
 }
 
 async function stopServer() {

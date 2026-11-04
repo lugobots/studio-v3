@@ -10,7 +10,7 @@ function register() {
   ipcMain.handle(CHANNELS.project.open, (_event, folder) => session.open(folder));
   ipcMain.handle(CHANNELS.project.create, (_event, payload) => session.create(payload));
   ipcMain.handle(CHANNELS.project.remove, (_event, folder) => session.remove(folder));
-  ipcMain.handle(CHANNELS.server.start, () => session.startServer());
+  ipcMain.handle(CHANNELS.server.start, (_event, settings) => session.startServer(settings));
   ipcMain.handle(CHANNELS.server.stop, () => session.stopServer());
   ipcMain.handle(CHANNELS.server.status, () => session.serverStatus());
   ipcMain.handle(CHANNELS.server.watchStatus, () => session.watchServerStatus());

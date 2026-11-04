@@ -19,13 +19,16 @@ function createServerControls({ ensureReady, api, sendStatus, matchSettings }) {
     }
   }
 
-  async function start() {
+  async function start(overrideSettings) {
     const ready = await ensureReady("Open a bot before starting the game server.");
     if (!ready.ok) {
       return ready;
     }
     try {
-      const settings = typeof matchSettings === "function" ? await matchSettings() : undefined;
+      let settings = overrideSettings;
+      if (!settings || typeof settings !== "object") {
+        settings = typeof matchSettings === "function" ? await matchSettings() : undefined;
+      }
       return actionResult(await api.startServer(settings));
     } catch (error) {
       return { ok: false, error: error.message };
