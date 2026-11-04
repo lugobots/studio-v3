@@ -147,6 +147,18 @@ async function startMatch(payload, fetchImpl = global.fetch) {
   return request("/game/start", jsonPostBody(payload), fetchImpl);
 }
 
+async function resetMatch(fetchImpl = global.fetch) {
+  return request("/game/reset", { method: "POST" }, fetchImpl);
+}
+
+async function getPositions(fetchImpl = global.fetch) {
+  return request("/game/positions", { method: "GET" }, fetchImpl);
+}
+
+async function applyPositions(snapshot, fetchImpl = global.fetch) {
+  return request("/game/positions", jsonPostBody(snapshot), fetchImpl);
+}
+
 function botPath(side, number) {
   return `/team/${encodeURIComponent(side)}/bots/${encodeURIComponent(String(number))}`;
 }
@@ -195,6 +207,9 @@ module.exports = {
   stopServer,
   subscribeServerStatus,
   startMatch,
+  resetMatch,
+  getPositions,
+  applyPositions,
   startBot,
   stopBot,
   botStatus,

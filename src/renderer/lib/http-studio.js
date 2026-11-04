@@ -204,6 +204,32 @@ export function createHttpStudio({
         const body = await request("/studio/status");
         return { ok: true, body };
       },
+      async reset() {
+        try {
+          return actionResult(await request("/game/reset", { method: "POST" }));
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
+      },
+      async getPositions() {
+        try {
+          const body = await request("/game/positions", { method: "GET" });
+          return { ok: true, body };
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
+      },
+      async applyPositions(snapshot) {
+        try {
+          return actionResult(await request("/game/positions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(snapshot || {}),
+          }));
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
+      },
     },
     publish: {
       async bot({ botUri, tag }) {

@@ -93,6 +93,44 @@ export function matchSettingsPatch(state) {
   };
 }
 
+/** Upsert a named position snapshot into the app-level saved_positions list. */
+export function upsertPositionPreset(savedPositions, name, snapshot) {
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  if (!trimmed || !snapshot || typeof snapshot !== "object") {
+    return Array.isArray(savedPositions) ? savedPositions.slice() : [];
+  }
+  const entry = {
+    name: trimmed,
+    ball: snapshot.ball,
+    homeTeam: snapshot.homeTeam,
+    awayTeam: snapshot.awayTeam,
+  };
+  const list = Array.isArray(savedPositions) ? savedPositions.slice() : [];
+  const index = list.findIndex((item) => item && item.name === trimmed);
+  if (index >= 0) {
+    list[index] = entry;
+  } else {
+    list.push(entry);
+  }
+  return list;
+}
+
+/** Snapshot payload for apply (ball/homeTeam/awayTeam) from a named preset. */
+export function findPositionPreset(savedPositions, name) {
+  if (!name || !Array.isArray(savedPositions)) {
+    return null;
+  }
+  const found = savedPositions.find((item) => item && item.name === name);
+  if (!found || typeof found !== "object") {
+    return null;
+  }
+  return {
+    ball: found.ball,
+    homeTeam: found.homeTeam,
+    awayTeam: found.awayTeam,
+  };
+}
+
 /**
  * Persist Config / speed / opponent while the server is down.
  * No-op when locked (server running) or when matchSet is unavailable.

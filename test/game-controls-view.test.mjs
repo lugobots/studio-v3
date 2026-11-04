@@ -11,52 +11,105 @@ function mountPanel({
   serverStart = async () => ({ ok: true }),
   serverStop = async () => ({ ok: true }),
   matchStart = async () => ({ ok: true }),
+  matchReset = async () => ({ ok: true }),
+  getPositions = async () => ({
+    ok: true,
+    body: { ball: { x: 0, y: 0 }, homeTeam: {}, awayTeam: {} },
+  }),
+  applyPositions = async () => ({ ok: true }),
   botStart = async () => ({ ok: true }),
   botStop = async () => ({ ok: true }),
   confirmAnswer = true,
+  promptAnswer = null,
   initialState = null,
+  initialSavedPositions = [],
 } = {}) {
   const installed = installDocument();
+  const previousPrompt = globalThis.prompt;
+  globalThis.prompt = () => promptAnswer;
   const parent = installed.document.createElement("div");
   let state = initialState || initialGameControls();
-  const calls = { server: 0, stop: 0, match: 0, botStart: 0, botStop: 0 };
+  let savedPositions = initialSavedPositions.slice();
+  const calls = {
+    server: 0,
+    stop: 0,
+    match: 0,
+    reset: 0,
+    getPositions: 0,
+    applyPositions: 0,
+    botStart: 0,
+    botStop: 0,
+  };
   const matchStarts = [];
   const botStarts = [];
   const botStops = [];
   const matchSets = [];
+  const appliedSnapshots = [];
   const notices = [];
   const confirms = [];
   const host = {
     config: {
-      async matchSet(patch) {
+      matchGet() {
+        return Promise.resolve({
+          team_side: state.side,
+          skip_to_golden_goal: state.skipGolden,
+          game_speed: state.speed,
+          opponent_team: state.opponent,
+          saved_positions: savedPositions.slice(),
+        });
+      },
+      matchSet(patch) {
         matchSets.push(patch);
-        return patch;
+        if (Object.prototype.hasOwnProperty.call(patch, "saved_positions")) {
+          savedPositions = Array.isArray(patch.saved_positions) ? patch.saved_positions.slice() : [];
+        }
+        return Promise.resolve({
+          team_side: state.side,
+          skip_to_golden_goal: state.skipGolden,
+          game_speed: state.speed,
+          opponent_team: state.opponent,
+          saved_positions: savedPositions.slice(),
+          ...patch,
+        });
       },
     },
     server: {
-      async start() {
+      start() {
         calls.server += 1;
         return serverStart();
       },
-      async stop() {
+      stop() {
         calls.stop += 1;
         return serverStop();
       },
     },
     match: {
-      async start(payload) {
+      start(payload) {
         calls.match += 1;
         matchStarts.push(payload);
         return matchStart(payload);
       },
+      reset() {
+        calls.reset += 1;
+        return matchReset();
+      },
+      getPositions() {
+        calls.getPositions += 1;
+        return getPositions();
+      },
+      applyPositions(snapshot) {
+        calls.applyPositions += 1;
+        appliedSnapshots.push(snapshot);
+        return applyPositions(snapshot);
+      },
     },
     bot: {
-      async start(payload) {
+      start(payload) {
         calls.botStart += 1;
         botStarts.push(payload);
         return botStart(payload);
       },
-      async stop(payload) {
+      stop(payload) {
         calls.botStop += 1;
         botStops.push(payload);
         return botStop(payload);
@@ -94,10 +147,15 @@ function mountPanel({
     botStarts,
     botStops,
     matchSets,
+    appliedSnapshots,
     notices,
     confirms,
+    savedPositions: () => savedPositions.slice(),
     state: () => state,
-    restore: installed.restore,
+    restore() {
+      globalThis.prompt = previousPrompt;
+      installed.restore();
+    },
     button(title) {
       return parent.querySelector(`button[title="${title}"]`);
     },
@@ -105,9 +163,9 @@ function mountPanel({
 }
 
 async function flush() {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let i = 0; i < 8; i += 1) {
+    await Promise.resolve();
+  }
 }
 
 test("workspace game panel shows the v2 sections and local controls", async () => {
@@ -206,8 +264,10 @@ test("workspace game panel shows the v2 sections and local controls", async () =
 
   panel.button("Save positions").click();
   panel.button("Apply").click();
-  panel.button("Resets the match").click();
+  await flush();
   assert.equal(panel.parent.querySelector("select").querySelectorAll("option").length, 0);
+  assert.equal(panel.calls.getPositions, 0);
+  assert.equal(panel.calls.applyPositions, 0);
   assert.equal(panel.calls.match, 0);
 
   panel.button("Starts the match").click();
@@ -223,6 +283,44 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   assert.equal(panel.state().away[0].running, true);
   assert.equal(panel.notices.length, 1);
   assert.equal(panel.calls.stop, 0);
+  panel.restore();
+});
+
+test("save adds a list entry; apply and reset call host methods while the server is running", async () => {
+  const snapshot = {
+    ball: { x: 100, y: 200 },
+    homeTeam: { 1: { x: 1, y: 2 } },
+    awayTeam: { 1: { x: 3, y: 4 } },
+  };
+  const panel = mountPanel({
+    promptAnswer: "corner",
+    getPositions: async () => ({ ok: true, body: snapshot }),
+  });
+
+  panel.button("Starts the Game Server").click();
+  await flush();
+  assert.equal(panel.state().serverRunning, true);
+
+  panel.button("Save positions").click();
+  await flush();
+  assert.equal(panel.calls.getPositions, 1);
+  assert.equal(panel.matchSets.some((patch) => Array.isArray(patch.saved_positions)), true);
+  assert.deepEqual(panel.state().positions, ["corner"]);
+  assert.deepEqual(panel.savedPositions(), [{ name: "corner", ...snapshot }]);
+  assert.equal(panel.parent.querySelector("select").querySelectorAll("option").length, 1);
+  assert.equal(panel.parent.querySelector("select").value, "corner");
+  assert.equal(panel.notices.some((item) => item.title === "Positions saved"), true);
+
+  panel.button("Apply").click();
+  await flush();
+  assert.equal(panel.calls.applyPositions, 1);
+  assert.deepEqual(panel.appliedSnapshots[0], snapshot);
+  assert.equal(panel.notices.some((item) => item.title === "Positions applied"), true);
+
+  panel.button("Resets the match").click();
+  await flush();
+  assert.equal(panel.calls.reset, 1);
+  assert.equal(panel.notices.some((item) => item.title === "Match reset"), true);
   panel.restore();
 });
 
@@ -328,6 +426,9 @@ test("positions and match stay locked while the server is down; active switch st
   await flush();
 
   assert.equal(panel.calls.match, 0);
+  assert.equal(panel.calls.reset, 0);
+  assert.equal(panel.calls.getPositions, 0);
+  assert.equal(panel.calls.applyPositions, 0);
   assert.equal(panel.calls.botStart, 0);
   assert.equal(panel.calls.botStop, 0);
   assert.equal(panel.state().home[0].active, true);

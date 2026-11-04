@@ -1,9 +1,12 @@
 import { reportResult } from "../lib/dialogs.js";
 import {
   activeBotSlots,
+  applyMatchConfig,
+  findPositionPreset,
   markActiveBotsRunning,
   persistMatchSettings,
   reduceGameControl,
+  upsertPositionPreset,
 } from "./game-controls.js";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -147,6 +150,95 @@ async function startMatchFromApi(state, onChange, host, dialogs) {
   }
 }
 
+async function resetMatchFromApi(state, host, dialogs) {
+  if (!state.serverRunning || !host?.match?.reset) {
+    return;
+  }
+  const result = await host.match.reset();
+  if (result?.ok) {
+    dialogs?.notify?.({ title: "Match reset", body: "Player positions were reset." });
+    return;
+  }
+  if (dialogs) {
+    await reportResult(dialogs, result || { ok: false, error: "The match failed to reset." });
+  }
+}
+
+async function savePositionsFromApi(state, onChange, host, dialogs) {
+  if (
+    !state.serverRunning
+    || !host?.match?.getPositions
+    || !host?.config?.matchGet
+    || !host?.config?.matchSet
+  ) {
+    return;
+  }
+  const rawName = typeof globalThis.prompt === "function" ? globalThis.prompt("Pick a name:") : null;
+  const name = typeof rawName === "string" ? rawName.trim() : "";
+  if (!name) {
+    return;
+  }
+  const snapshotResult = await host.match.getPositions();
+  if (!snapshotResult?.ok) {
+    if (dialogs) {
+      await reportResult(
+        dialogs,
+        snapshotResult || { ok: false, error: "Failed to read current positions." },
+      );
+    }
+    return;
+  }
+  let match;
+  try {
+    match = await host.config.matchGet();
+  } catch (error) {
+    if (dialogs) {
+      await reportResult(dialogs, { ok: false, error: error.message || "Failed to load match settings." });
+    }
+    return;
+  }
+  const saved = upsertPositionPreset(match?.saved_positions, name, snapshotResult.body);
+  try {
+    const written = await host.config.matchSet({ saved_positions: saved });
+    onChange(applyMatchConfig(state, written || { ...match, saved_positions: saved }));
+    dialogs?.notify?.({ title: "Positions saved", body: `Saved "${name}".` });
+  } catch (error) {
+    if (dialogs) {
+      await reportResult(dialogs, { ok: false, error: error.message || "Failed to save positions." });
+    }
+  }
+}
+
+async function applyPositionsFromApi(state, host, dialogs, selectedName) {
+  if (!state.serverRunning || !host?.match?.applyPositions || !host?.config?.matchGet) {
+    return;
+  }
+  if (!selectedName) {
+    return;
+  }
+  let match;
+  try {
+    match = await host.config.matchGet();
+  } catch (error) {
+    if (dialogs) {
+      await reportResult(dialogs, { ok: false, error: error.message || "Failed to load match settings." });
+    }
+    return;
+  }
+  const snapshot = findPositionPreset(match?.saved_positions, selectedName);
+  if (!snapshot) {
+    return;
+  }
+  const result = await host.match.applyPositions(snapshot);
+  if (result?.ok) {
+    dialogs?.notify?.({ title: "Positions applied", body: `Applied "${selectedName}".` });
+    return;
+  }
+  if (dialogs) {
+    await reportResult(dialogs, result || { ok: false, error: "Failed to apply positions." });
+  }
+}
+
 async function toggleBotActive(state, onChange, host, dialogs, team, number) {
   const index = Number(number) - 1;
   const row = state[team]?.[index];
@@ -248,7 +340,7 @@ export function renderGameControls(parent, { state, onChange, host, dialogs }) {
   match.append(controlButton({
     title: "Resets the match",
     disabled: playLocked,
-    onClick: () => dispatch(state, onChange, { type: "reset-match" }),
+    onClick: () => resetMatchFromApi(state, host, dialogs),
     graphic: icon("#f59e0b", [
       ["path", { d: "M4 12a8 8 0 1 0 2.3-5.7" }],
       ["path", { d: "M4 4v5h5" }],
@@ -267,7 +359,7 @@ export function renderGameControls(parent, { state, onChange, host, dialogs }) {
     note.textContent = "Open the terminal on the Editor tab and run logger to watch the logs";
     play.append(note);
   }
-  play.append(positionsBlock(state, onChange, playLocked));
+  play.append(positionsBlock(state, onChange, host, dialogs, playLocked));
   root.append(play);
 
   const settings = document.createElement("div");
@@ -336,7 +428,7 @@ function teamBlock(team, label, state, onChange, host, dialogs) {
   return block;
 }
 
-function positionsBlock(state, onChange, disabled = false) {
+function positionsBlock(state, onChange, host, dialogs, disabled = false) {
   const section = document.createElement("div");
   section.className = "action_block game-ctrl-section game-ctrl-positions";
   section.append(heading("Positions"));
@@ -347,7 +439,7 @@ function positionsBlock(state, onChange, disabled = false) {
     className: "position-btn position-btn-save",
     text: "Save positions",
     disabled,
-    onClick: () => dispatch(state, onChange, { type: "save-positions" }),
+    onClick: () => savePositionsFromApi(state, onChange, host, dialogs),
   }));
   const select = document.createElement("select");
   select.setAttribute("aria-label", "Positions");
@@ -362,13 +454,16 @@ function positionsBlock(state, onChange, disabled = false) {
     option.textContent = name;
     select.append(option);
   }
+  if (state.positions.length) {
+    select.value = state.positions[0];
+  }
   set.append(select);
   set.append(controlButton({
     title: "Apply",
     className: "position-btn position-btn-apply",
     text: "Apply",
     disabled,
-    onClick: () => dispatch(state, onChange, { type: "apply-positions" }),
+    onClick: () => applyPositionsFromApi(state, host, dialogs, select.value),
   }));
   section.append(set);
   return section;

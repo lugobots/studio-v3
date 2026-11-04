@@ -99,6 +99,9 @@ test("ipc channels expose server stop, status, watch, and status events", () => 
 test("ipc channels expose match config get/set and bot lifecycle", () => {
   assert.equal(CHANNELS.config.matchGet, "config:match-get");
   assert.equal(CHANNELS.config.matchSet, "config:match-set");
+  assert.equal(CHANNELS.match.reset, "match:reset");
+  assert.equal(CHANNELS.match.getPositions, "match:get-positions");
+  assert.equal(CHANNELS.match.applyPositions, "match:apply-positions");
   assert.equal(CHANNELS.bot.start, "bot:start");
   assert.equal(CHANNELS.bot.stop, "bot:stop");
   assert.equal(CHANNELS.bot.status, "bot:status");

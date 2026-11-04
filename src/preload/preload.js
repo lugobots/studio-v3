@@ -59,6 +59,9 @@ contextBridge.exposeInMainWorld("studio", {
   match: {
     start: (payload) => ipcRenderer.invoke(CHANNELS.match.start, payload),
     status: () => ipcRenderer.invoke(CHANNELS.match.status),
+    reset: () => ipcRenderer.invoke(CHANNELS.match.reset),
+    getPositions: () => ipcRenderer.invoke(CHANNELS.match.getPositions),
+    applyPositions: (snapshot) => ipcRenderer.invoke(CHANNELS.match.applyPositions, snapshot),
   },
   bot: {
     start: (payload) => ipcRenderer.invoke(CHANNELS.bot.start, payload),

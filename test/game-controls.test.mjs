@@ -3,11 +3,13 @@ import assert from "node:assert/strict";
 import {
   activeBotSlots,
   applyMatchConfig,
+  findPositionPreset,
   initialGameControls,
   markActiveBotsRunning,
   matchSettingsPatch,
   persistMatchSettings,
   reduceGameControl,
+  upsertPositionPreset,
 } from "../src/renderer/shell/game-controls.js";
 
 function stopped(rows) {
@@ -157,6 +159,30 @@ test("applyMatchConfig loads side, speed, opponent, golden skip, and position na
     game_speed: "fast",
     opponent_team: "kids",
   });
+});
+
+test("upsertPositionPreset adds or replaces a named snapshot", () => {
+  const snapshot = {
+    ball: { x: 1, y: 2 },
+    homeTeam: { 1: { x: 3, y: 4 } },
+    awayTeam: {},
+  };
+  const first = upsertPositionPreset([], "corner", snapshot);
+  assert.deepEqual(first, [{ name: "corner", ...snapshot }]);
+  const replaced = upsertPositionPreset(first, "corner", {
+    ball: { x: 9, y: 9 },
+    homeTeam: {},
+    awayTeam: {},
+  });
+  assert.equal(replaced.length, 1);
+  assert.equal(replaced[0].ball.x, 9);
+  assert.deepEqual(findPositionPreset(replaced, "corner"), {
+    ball: { x: 9, y: 9 },
+    homeTeam: {},
+    awayTeam: {},
+  });
+  assert.equal(findPositionPreset(replaced, "missing"), null);
+  assert.deepEqual(upsertPositionPreset(first, "  ", snapshot), first);
 });
 
 test("persistMatchSettings writes while stopped and skips while the server is running", async () => {

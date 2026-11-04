@@ -103,6 +103,40 @@ test("studio api client posts match settings on server match and bot routes", as
   assert.deepEqual(calls[2].body, settings);
 });
 
+test("studio api client reset and positions hit game routes", async () => {
+  const calls = [];
+  const snapshot = {
+    ball: { x: 1, y: 2 },
+    homeTeam: { 1: { x: 3, y: 4 } },
+    awayTeam: {},
+  };
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({
+      url,
+      method: options.method || "GET",
+      body: options.body ? JSON.parse(options.body) : null,
+    });
+    if (String(url).endsWith("/game/positions") && (options.method || "GET") === "GET") {
+      return respond(200, snapshot);
+    }
+    return respond(200, { status: "OK" });
+  };
+
+  await studioApi.resetMatch(fetchImpl);
+  const got = await studioApi.getPositions(fetchImpl);
+  await studioApi.applyPositions(snapshot, fetchImpl);
+
+  assert.equal(got.ball.x, 1);
+  assert.equal(calls.length, 3);
+  assert.match(calls[0].url, /\/api\/game\/reset$/);
+  assert.equal(calls[0].method, "POST");
+  assert.match(calls[1].url, /\/api\/game\/positions$/);
+  assert.equal(calls[1].method, "GET");
+  assert.match(calls[2].url, /\/api\/game\/positions$/);
+  assert.equal(calls[2].method, "POST");
+  assert.deepEqual(calls[2].body, snapshot);
+});
+
 test("studio api client gets server status and posts stop", async () => {
   const calls = [];
   const fetchImpl = async (url, options = {}) => {

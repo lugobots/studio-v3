@@ -387,6 +387,43 @@ async function startMatch(options = {}) {
   }
 }
 
+async function resetMatch() {
+  const ready = await ensureStudioApiReady("Open a bot before resetting a match.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    return actionResult(await studioApi.resetMatch());
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function getPositions() {
+  const ready = await ensureStudioApiReady("Open a bot before reading positions.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    const body = await studioApi.getPositions();
+    return { ok: true, body };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function applyPositions(snapshot) {
+  const ready = await ensureStudioApiReady("Open a bot before applying positions.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    return actionResult(await studioApi.applyPositions(snapshot));
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
 async function startBot(slot = {}) {
   const ready = await ensureStudioApiReady("Open a bot before starting a player.");
   if (!ready.ok) {
@@ -477,6 +514,9 @@ module.exports = {
   serverStatus,
   watchServerStatus,
   startMatch,
+  resetMatch,
+  getPositions,
+  applyPositions,
   startBot,
   stopBot,
   botStatus,

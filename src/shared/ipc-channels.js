@@ -43,6 +43,9 @@ const CHANNELS = {
   match: {
     start: "match:start",
     status: "match:status",
+    reset: "match:reset",
+    getPositions: "match:get-positions",
+    applyPositions: "match:apply-positions",
   },
   bot: {
     start: "bot:start",
