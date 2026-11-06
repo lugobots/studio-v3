@@ -97,6 +97,14 @@ async function matchSettingsForApi() {
   return store.matchSettingsForApi(store.read(filePath()).data);
 }
 
+/**
+ * Resolved Level-1 image:tag plus host cache / container binary paths for
+ * Docker pull-extract and API container mounts.
+ */
+async function getLevel1() {
+  return store.level1Resolved(store.read(filePath()).data, app.getPath("appData"), process.platform);
+}
+
 function projectFileReady(folder) {
   return fs.existsSync(path.join(folder, ".lugo", "info.json"));
 }
@@ -107,6 +115,7 @@ module.exports = {
   getMatch,
   setMatch,
   matchSettingsForApi,
+  getLevel1,
   rememberBot,
   forgetBot,
   filePath,

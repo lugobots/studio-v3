@@ -1,5 +1,6 @@
 "use strict";
 
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -71,6 +72,11 @@ const IMAGE_DEFAULTS = {
   bot_setup_version: "latest",
 };
 
+/** In-image path of the official Level-1 bot binary (docker cp source). */
+const LEVEL1_IMAGE_BINARY_PATH = "/bin/my-bot";
+/** Path the Studio API bot manager expects inside the API container. */
+const LEVEL1_CONTAINER_BINARY_PATH = "/usr/local/lib/lugo/bot-level-1";
+
 function settingsFile(appData, platform = process.platform) {
   const joiner = platform === "win32" ? path.win32 : path;
   return joiner.join(appData, ".LugoStudio", "user.json");
@@ -102,6 +108,37 @@ function imageConfig(data) {
     out[key] = filled[key];
   }
   return out;
+}
+
+/**
+ * Stable short digest of an image:tag used as the Level-1 host cache key.
+ */
+function level1CacheKey(imageRef) {
+  return crypto.createHash("sha256").update(String(imageRef || "")).digest("hex").slice(0, 16);
+}
+
+/**
+ * Resolved Level-1 image:tag and host/container binary paths for Docker/session startup.
+ * Missing image keys use IMAGE_DEFAULTS; cache path is keyed by image:tag under .LugoStudio.
+ */
+function level1Resolved(data, appData, platform = process.platform) {
+  const images = imageConfig(data);
+  const image = images.bot_level_1_image;
+  const tag = images.bot_level_1_version;
+  const ref = `${image}:${tag}`;
+  const cacheKey = level1CacheKey(ref);
+  const joiner = platform === "win32" ? path.win32 : path;
+  const cacheDir = joiner.join(appData, ".LugoStudio", "cache", "level-1", cacheKey);
+  return {
+    image,
+    tag,
+    ref,
+    cacheKey,
+    cacheDir,
+    hostBinaryPath: joiner.join(cacheDir, "my-bot"),
+    imageBinaryPath: LEVEL1_IMAGE_BINARY_PATH,
+    containerBinaryPath: LEVEL1_CONTAINER_BINARY_PATH,
+  };
 }
 
 function read(file, fsImpl = fs) {
@@ -239,6 +276,8 @@ module.exports = {
   MATCH_DEFAULTS,
   IMAGE_KEYS,
   IMAGE_DEFAULTS,
+  LEVEL1_IMAGE_BINARY_PATH,
+  LEVEL1_CONTAINER_BINARY_PATH,
   TEAM_SIDES,
   GAME_SPEEDS,
   OPPONENT_MODES,
@@ -248,6 +287,8 @@ module.exports = {
   applyPatch,
   withImageDefaults,
   imageConfig,
+  level1CacheKey,
+  level1Resolved,
   matchConfig,
   matchPatch,
   matchSettingsForApi,

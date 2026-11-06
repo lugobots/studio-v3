@@ -258,3 +258,31 @@ test("existing Level-1 image keys are preserved on read and write", () => {
   assert.equal(saved.game_server_image, "lugobots/server");
   assert.equal(saved.bot_setup_image, "lugobots/bot-setup");
 });
+
+test("resolved Level-1 image:tag uses bot_level_1_version from user.json", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-level1-resolved-"));
+  const file = store.settingsFile(dir, "linux");
+  store.write(file, {
+    project_path: "/bots/demo",
+    bot_level_1_image: "custom/level-1",
+    bot_level_1_version: "v99",
+  });
+  const resolved = store.level1Resolved(store.read(file).data, dir, "linux");
+  assert.equal(resolved.image, "custom/level-1");
+  assert.equal(resolved.tag, "v99");
+  assert.equal(resolved.ref, "custom/level-1:v99");
+  assert.equal(resolved.cacheKey, store.level1CacheKey("custom/level-1:v99"));
+  assert.equal(
+    resolved.cacheDir,
+    path.join(dir, ".LugoStudio", "cache", "level-1", resolved.cacheKey),
+  );
+  assert.equal(resolved.hostBinaryPath, path.join(resolved.cacheDir, "my-bot"));
+  assert.equal(resolved.imageBinaryPath, store.LEVEL1_IMAGE_BINARY_PATH);
+  assert.equal(resolved.containerBinaryPath, store.LEVEL1_CONTAINER_BINARY_PATH);
+  assert.equal(store.LEVEL1_IMAGE_BINARY_PATH, "/bin/my-bot");
+  assert.equal(store.LEVEL1_CONTAINER_BINARY_PATH, "/usr/local/lib/lugo/bot-level-1");
+
+  const defaults = store.level1Resolved({}, dir, "linux");
+  assert.equal(defaults.ref, `${store.IMAGE_DEFAULTS.bot_level_1_image}:${store.IMAGE_DEFAULTS.bot_level_1_version}`);
+  assert.notEqual(defaults.cacheKey, resolved.cacheKey);
+});
