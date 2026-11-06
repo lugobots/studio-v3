@@ -4,6 +4,7 @@ const { execFile, spawn } = require("node:child_process");
 const { CHANNELS } = require("../../../shared/ipc-channels");
 const { DEFAULTS, imageFrom } = require("../../../shared/ports");
 const { editorRunArgs, runArgs } = require("./args");
+const { ensureLevel1Binary } = require("./level1");
 const { removeOk, stopStudioContainers } = require("./stop");
 
 let webContents = null;
@@ -96,6 +97,17 @@ async function ensureImage() {
   return { ok: true, imagePresent: status.imagePresent, pull: pullState };
 }
 
+/**
+ * Pull (if needed) and extract the Level-1 opponent binary into the host cache.
+ * Does not wire into startup by itself — callers decide when to await this.
+ */
+async function ensureLevel1(resolved) {
+  return ensureLevel1Binary({
+    resolved,
+    execDocker: (args, timeout) => exec("docker", args, timeout),
+  });
+}
+
 async function containerIsRunning(name = DEFAULTS.containerName) {
   const running = await exec("docker", ["inspect", "-f", "{{.State.Running}}", name]);
   return running.ok && running.stdout.trim() === "true";
@@ -181,6 +193,7 @@ module.exports = {
   getStatus,
   startPull,
   ensureImage,
+  ensureLevel1,
   containerIsRunning,
   ensureContainer,
   ensureEditor,
