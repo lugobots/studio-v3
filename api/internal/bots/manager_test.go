@@ -1,9 +1,11 @@
 package bots
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -234,19 +236,91 @@ func TestManagerRequiresDetectableProject(t *testing.T) {
 	}
 }
 
+func TestOpponentBinaryFromEnv(t *testing.T) {
+	t.Setenv("LUGO_STUDIO_OPPONENT_BOT", "")
+	if got := OpponentBinaryFromEnv(); got != defaultOpponentBinary {
+		t.Fatalf("default = %q, want %q", got, defaultOpponentBinary)
+	}
+	t.Setenv("LUGO_STUDIO_OPPONENT_BOT", "/mounted/level-1")
+	if got := OpponentBinaryFromEnv(); got != "/mounted/level-1" {
+		t.Fatalf("env override = %q", got)
+	}
+}
+
+func TestEnsureOpponentBinaryMissingPath(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "no-such-bot")
+	err := ensureOpponentBinary(missing)
+	if err == nil {
+		t.Fatal("expected missing path error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, missing) {
+		t.Fatalf("error should name path %q, got %q", missing, msg)
+	}
+	if !strings.Contains(msg, "opponent bot binary") {
+		t.Fatalf("error should identify opponent binary, got %q", msg)
+	}
+	if !strings.Contains(msg, "no such file") && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("error should indicate missing file, got %q", msg)
+	}
+}
+
+func TestManagerStartMatchUsesConfiguredOpponentBinary(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opp := filepath.Join(t.TempDir(), "opp-bot")
+	if err := os.WriteFile(opp, []byte("#!/bin/sh\nexec sleep 60\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	reg := procreg.New()
+	mgr := New(reg)
+	mgr.RunSync = func(dir, command string, env map[string]string) error { return nil }
+
+	var commands []string
+	mgr.StartProcess = func(dir, command string, env map[string]string) (*procreg.Child, error) {
+		commands = append(commands, command)
+		return procreg.StartChild("sleep", "60")
+	}
+
+	if err := mgr.StartMatch(Config{
+		ProjectRoot:    root,
+		GRPCURL:        "localhost:5123",
+		PlayerSide:     SideHome,
+		OpponentBinary: opp,
+	}, []Slot{{Side: SideAway, Number: 1}}); err != nil {
+		t.Fatalf("StartMatch: %v", err)
+	}
+	t.Cleanup(func() { _ = reg.ShutdownAll() })
+
+	if len(commands) != 1 {
+		t.Fatalf("started %d processes, want 1", len(commands))
+	}
+	if !strings.Contains(commands[0], opp) {
+		t.Fatalf("opponent command %q does not use configured binary %q", commands[0], opp)
+	}
+}
+
 func TestManagerMissingOpponentBinary(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "requirements.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	missing := filepath.Join(t.TempDir(), "missing")
 	mgr := New(procreg.New())
 	err := mgr.StartMatch(Config{
 		ProjectRoot:    root,
 		GRPCURL:        "localhost:5000",
-		OpponentBinary: filepath.Join(t.TempDir(), "missing"),
+		OpponentBinary: missing,
 	}, []Slot{{Side: SideAway, Number: 1}})
 	if err == nil {
 		t.Fatal("expected missing opponent error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, missing) || !strings.Contains(msg, "opponent bot binary") {
+		t.Fatalf("unclear missing-binary error: %q", msg)
 	}
 }
 

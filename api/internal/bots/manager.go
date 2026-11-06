@@ -12,6 +12,9 @@ import (
 	"studio-v3/api/internal/procreg"
 )
 
+// defaultOpponentBinary is the in-container mount path where the Electron host
+// bind-mounts the extracted Level-1 binary. The API image does not ship this file;
+// LUGO_STUDIO_OPPONENT_BOT overrides the path when needed.
 const defaultOpponentBinary = "/usr/local/lib/lugo/bot-level-1"
 
 // Slot identifies one bot process by team side and shirt number.
@@ -65,8 +68,9 @@ func New(reg *procreg.Registry) *Manager {
 	return &Manager{Registry: reg, bots: make(map[string]botHandle)}
 }
 
-// OpponentBinaryFromEnv reads LUGO_STUDIO_OPPONENT_BOT (default
-// /usr/local/lib/lugo/bot-level-1).
+// OpponentBinaryFromEnv reads LUGO_STUDIO_OPPONENT_BOT, falling back to the
+// host-mounted Level-1 path (defaultOpponentBinary). Callers must not assume
+// an image-baked binary exists at that path.
 func OpponentBinaryFromEnv() string {
 	if v := os.Getenv("LUGO_STUDIO_OPPONENT_BOT"); v != "" {
 		return v
@@ -370,6 +374,9 @@ func validateSlot(slot Slot) error {
 	return nil
 }
 
+// ensureOpponentBinary verifies the configured/mounted opponent executable
+// exists before launch. A missing path returns a clear error so match start
+// does not fail later with an opaque exec error.
 func ensureOpponentBinary(path string) error {
 	st, err := os.Stat(path)
 	if err != nil {
