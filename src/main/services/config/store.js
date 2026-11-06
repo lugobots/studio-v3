@@ -19,6 +19,8 @@ const V1_KEYS = [
   "bot_level_0_version",
   "bot_level_1_image",
   "bot_level_1_version",
+  "bot_setup_image",
+  "bot_setup_version",
   "app_path",
   "app_version",
 ];
@@ -30,6 +32,18 @@ const MATCH_KEYS = [
   "game_speed",
   "opponent_team",
   "saved_positions",
+];
+
+/** Runtime Docker image name/tag keys (V1-compatible + bot_setup_*). */
+const IMAGE_KEYS = [
+  "game_server_image",
+  "game_server_version",
+  "bot_level_0_image",
+  "bot_level_0_version",
+  "bot_level_1_image",
+  "bot_level_1_version",
+  "bot_setup_image",
+  "bot_setup_version",
 ];
 
 const TEAM_SIDES = ["home", "away"];
@@ -45,29 +59,70 @@ const MATCH_DEFAULTS = {
   saved_positions: [],
 };
 
+/** Studio V1 defaults for runtime image settings (level-1 is consumed now; others reserved). */
+const IMAGE_DEFAULTS = {
+  game_server_image: "lugobots/server",
+  game_server_version: "v2",
+  bot_level_0_image: "lugobots/level-0",
+  bot_level_0_version: "v2",
+  bot_level_1_image: "lugobots/level-1",
+  bot_level_1_version: "v4",
+  bot_setup_image: "lugobots/bot-setup",
+  bot_setup_version: "latest",
+};
+
 function settingsFile(appData, platform = process.platform) {
   const joiner = platform === "win32" ? path.win32 : path;
   return joiner.join(appData, ".LugoStudio", "user.json");
+}
+
+/**
+ * Fill missing runtime image keys with V1-compatible defaults.
+ * Existing non-empty string values are preserved.
+ */
+function withImageDefaults(data) {
+  const next = data && typeof data === "object" && !Array.isArray(data) ? { ...data } : {};
+  for (const key of IMAGE_KEYS) {
+    const value = next[key];
+    if (typeof value !== "string" || value.length === 0) {
+      next[key] = IMAGE_DEFAULTS[key];
+    }
+  }
+  return next;
+}
+
+/**
+ * Resolved runtime image settings from user.json data.
+ * Missing or empty keys use IMAGE_DEFAULTS.
+ */
+function imageConfig(data) {
+  const filled = withImageDefaults(data);
+  const out = {};
+  for (const key of IMAGE_KEYS) {
+    out[key] = filled[key];
+  }
+  return out;
 }
 
 function read(file, fsImpl = fs) {
   try {
     const parsed = JSON.parse(fsImpl.readFileSync(file, "utf8"));
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { exists: true, data: {} };
+      return { exists: true, data: withImageDefaults({}) };
     }
-    return { exists: true, data: parsed };
+    return { exists: true, data: withImageDefaults(parsed) };
   } catch (error) {
     if (error && error.code === "ENOENT") {
-      return { exists: false, data: {} };
+      return { exists: false, data: withImageDefaults({}) };
     }
     throw error;
   }
 }
 
 function write(file, data, fsImpl = fs) {
+  const filled = withImageDefaults(data);
   fsImpl.mkdirSync(path.dirname(file), { recursive: true });
-  fsImpl.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
+  fsImpl.writeFileSync(file, `${JSON.stringify(filled, null, 2)}\n`);
 }
 
 function applyPatch(current, patch) {
@@ -182,6 +237,8 @@ module.exports = {
   V1_KEYS,
   MATCH_KEYS,
   MATCH_DEFAULTS,
+  IMAGE_KEYS,
+  IMAGE_DEFAULTS,
   TEAM_SIDES,
   GAME_SPEEDS,
   OPPONENT_MODES,
@@ -189,6 +246,8 @@ module.exports = {
   read,
   write,
   applyPatch,
+  withImageDefaults,
+  imageConfig,
   matchConfig,
   matchPatch,
   matchSettingsForApi,

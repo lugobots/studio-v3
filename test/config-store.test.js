@@ -185,3 +185,76 @@ test("opening a different bot does not rewrite match preferences", () => {
   assert.equal(saved.custom_flag, true);
   assert.deepEqual(store.matchConfig(saved), match);
 });
+
+test("unset user.json resolves runtime image settings to documented defaults", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-image-defaults-"));
+  const file = store.settingsFile(dir, "linux");
+  const missing = store.read(file);
+  assert.equal(missing.exists, false);
+  assert.deepEqual(store.imageConfig(missing.data), store.IMAGE_DEFAULTS);
+  assert.deepEqual(store.imageConfig({}), store.IMAGE_DEFAULTS);
+  assert.deepEqual(store.imageConfig(undefined), store.IMAGE_DEFAULTS);
+  assert.equal(store.IMAGE_DEFAULTS.bot_level_1_image, "lugobots/level-1");
+  assert.equal(store.IMAGE_DEFAULTS.bot_level_1_version, "v4");
+  assert.equal(store.IMAGE_DEFAULTS.game_server_image, "lugobots/server");
+  assert.equal(store.IMAGE_DEFAULTS.game_server_version, "v2");
+  assert.equal(store.IMAGE_DEFAULTS.bot_level_0_image, "lugobots/level-0");
+  assert.equal(store.IMAGE_DEFAULTS.bot_level_0_version, "v2");
+  assert.equal(store.IMAGE_DEFAULTS.bot_setup_image, "lugobots/bot-setup");
+  assert.equal(store.IMAGE_DEFAULTS.bot_setup_version, "latest");
+  assert.ok(store.V1_KEYS.includes("bot_setup_image"));
+  assert.ok(store.V1_KEYS.includes("bot_setup_version"));
+  assert.deepEqual(store.IMAGE_KEYS, [
+    "game_server_image",
+    "game_server_version",
+    "bot_level_0_image",
+    "bot_level_0_version",
+    "bot_level_1_image",
+    "bot_level_1_version",
+    "bot_setup_image",
+    "bot_setup_version",
+  ]);
+
+  store.write(file, { project_path: "/bots/demo", custom_flag: true });
+  const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.deepEqual(store.imageConfig(raw), store.IMAGE_DEFAULTS);
+  assert.equal(raw.project_path, "/bots/demo");
+  assert.equal(raw.custom_flag, true);
+  for (const key of store.IMAGE_KEYS) {
+    assert.equal(raw[key], store.IMAGE_DEFAULTS[key]);
+  }
+});
+
+test("existing Level-1 image keys are preserved on read and write", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-image-preserve-"));
+  const file = store.settingsFile(dir, "linux");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(
+    file,
+    `${JSON.stringify(
+      {
+        project_path: "/bots/demo",
+        bot_level_1_image: "custom/level-1",
+        bot_level_1_version: "v99",
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  const loaded = store.read(file).data;
+  assert.equal(loaded.bot_level_1_image, "custom/level-1");
+  assert.equal(loaded.bot_level_1_version, "v99");
+  assert.equal(loaded.game_server_image, store.IMAGE_DEFAULTS.game_server_image);
+  assert.equal(loaded.bot_setup_version, store.IMAGE_DEFAULTS.bot_setup_version);
+
+  store.write(file, {
+    project_path: "/bots/demo",
+    bot_level_1_image: "custom/level-1",
+    bot_level_1_version: "v99",
+  });
+  const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.equal(saved.bot_level_1_image, "custom/level-1");
+  assert.equal(saved.bot_level_1_version, "v99");
+  assert.equal(saved.game_server_image, "lugobots/server");
+  assert.equal(saved.bot_setup_image, "lugobots/bot-setup");
+});
