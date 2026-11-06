@@ -99,7 +99,8 @@ async function ensureImage() {
 
 /**
  * Pull (if needed) and extract the Level-1 opponent binary into the host cache.
- * Does not wire into startup by itself — callers decide when to await this.
+ * Session kicks this after the Docker gate (background) and awaits it before
+ * match start / API container start.
  */
 async function ensureLevel1(resolved) {
   return ensureLevel1Binary({

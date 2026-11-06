@@ -9,6 +9,7 @@ const { checkBotCompatibility } = require("../bots/compatibility");
 const config = require("../config");
 const docker = require("../docker");
 const { openRuntime } = require("../docker/runtime");
+const notifications = require("../notifications");
 const studioApi = require("../studio-api");
 const {
   HEALTH_DEADLINE_MS,
@@ -18,6 +19,7 @@ const {
   decideStartup,
   routeForStatus,
 } = require("./gate");
+const { createLevel1Ready } = require("./level1-ready");
 const { createServerControls } = require("./server-controls");
 const { describeStartup } = require("../../../shared/startup-progress");
 
@@ -29,6 +31,13 @@ let lastProgress = describeStartup({
   detail: "Checking Docker and your bot.",
 });
 let lastProgressKey = "";
+
+const level1Ready = createLevel1Ready({
+  getResolved: () => config.getLevel1(),
+  ensureLevel1: (resolved) => docker.ensureLevel1(resolved),
+  onProgress: (input) => emitProgress(input),
+  notify: (payload) => notifications.show(payload),
+});
 
 function attach(contents) {
   webContents = contents;
@@ -155,9 +164,17 @@ function startWatch(projectPath, forcedRoute = "", flow = "startup") {
   tick();
 }
 
+async function ensureApiContainer(projectPath, hostProjectPath = "") {
+  const level1 = await level1Ready.awaitReady();
+  if (!level1.ok) {
+    return level1;
+  }
+  return docker.ensureContainer(projectPath, hostProjectPath);
+}
+
 async function startApi(saved) {
   const paths = launchPaths(saved);
-  const started = await docker.ensureContainer(paths.mount, paths.host);
+  const started = await ensureApiContainer(paths.mount, paths.host);
   if (!started.ok) {
     return { ok: false, route: "/api-error", message: started.error, error: started.error };
   }
@@ -172,6 +189,10 @@ async function next() {
   emitProgress({ phase: "docker", detail: "Checking that Docker is running." });
   const status = await docker.getStatus();
   const saved = await config.get();
+  if (status.running) {
+    // Non-blocking: shell entry must not wait on Level-1 pull/extract.
+    level1Ready.kick();
+  }
   return decideStartup({
     dockerRunning: status.running,
     botPaths: saved.bot_paths,
@@ -203,7 +224,7 @@ async function open(folder) {
     check: checkBotCompatibility,
     remember: (dir) => config.rememberBot(dir),
     stop: () => docker.stopContainer(),
-    start: (dir) => docker.ensureContainer(dir, dir),
+    start: (dir) => ensureApiContainer(dir, dir),
     watch: (dir, route) => {
       watchGeneration += 1;
       startWatch(dir, route);
@@ -245,6 +266,15 @@ async function create({ folder, language, overwrite }) {
       const image = await docker.ensureImage();
       if (!image.ok) {
         return image;
+      }
+      emitProgress({
+        flow,
+        phase: "image",
+        detail: "Preparing the Level-1 opponent binary.",
+      });
+      const level1 = await level1Ready.awaitReady();
+      if (!level1.ok) {
+        return level1;
       }
       emitProgress({
         flow,
@@ -329,7 +359,7 @@ async function ensureStudioApiReady(missingBotError) {
   if (!saved.project_path) {
     return { ok: false, error: missingBotError };
   }
-  const container = await docker.ensureContainer(saved.project_path, saved.project_path);
+  const container = await ensureApiContainer(saved.project_path, saved.project_path);
   if (!container.ok) {
     return container;
   }
@@ -371,6 +401,10 @@ function watchServerStatus(options) {
 }
 
 async function startMatch(options = {}) {
+  const level1 = await level1Ready.awaitReady();
+  if (!level1.ok) {
+    return level1;
+  }
   const ready = await ensureStudioApiReady("Open a bot before starting a match.");
   if (!ready.ok) {
     return ready;
