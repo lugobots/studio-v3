@@ -169,7 +169,7 @@ async function ensureApiContainer(projectPath, hostProjectPath = "") {
   if (!level1.ok) {
     return level1;
   }
-  return docker.ensureContainer(projectPath, hostProjectPath);
+  return docker.ensureContainer(projectPath, hostProjectPath, level1);
 }
 
 async function startApi(saved) {
@@ -281,7 +281,7 @@ async function create({ folder, language, overwrite }) {
         phase: "container",
         detail: creating ? "Starting the API that will create the bot." : "Starting the Studio API.",
       });
-      const container = await docker.ensureContainer(dir, dir);
+      const container = await docker.ensureContainer(dir, dir, level1);
       if (!container.ok) {
         return container;
       }

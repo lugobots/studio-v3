@@ -129,9 +129,18 @@ async function ensureNamedContainer(name, args) {
   return { ok: true, name };
 }
 
-async function runningHostPath(name = DEFAULTS.containerName) {
+function envValue(lines, prefix) {
+  const line = lines.find((item) => item.startsWith(prefix));
+  return line ? line.slice(prefix.length) : "";
+}
+
+/**
+ * Inspect a running Studio API container for recreate decisions.
+ * Compares LUGO_HOST_PROJECT_PATH and LUGO_HOST_OPPONENT_BOT (Level-1 cache path).
+ */
+async function runningContainerState(name = DEFAULTS.containerName) {
   if (!(await containerIsRunning(name))) {
-    return { running: false, hostPath: "" };
+    return { running: false, hostPath: "", opponentHostPath: "" };
   }
   const inspected = await exec("docker", [
     "inspect",
@@ -140,16 +149,24 @@ async function runningHostPath(name = DEFAULTS.containerName) {
     name,
   ]);
   if (!inspected.ok) {
-    return { running: true, hostPath: null };
+    return { running: true, hostPath: null, opponentHostPath: null };
   }
-  const prefix = "LUGO_HOST_PROJECT_PATH=";
-  const line = inspected.stdout.split("\n").find((item) => item.startsWith(prefix));
-  return { running: true, hostPath: line ? line.slice(prefix.length) : "" };
+  const lines = inspected.stdout.split("\n");
+  return {
+    running: true,
+    hostPath: envValue(lines, "LUGO_HOST_PROJECT_PATH="),
+    opponentHostPath: envValue(lines, "LUGO_HOST_OPPONENT_BOT="),
+  };
 }
 
-async function ensureContainer(projectPath, hostProjectPath = "") {
-  const current = await runningHostPath();
-  if (current.running && current.hostPath === hostProjectPath) {
+async function ensureContainer(projectPath, hostProjectPath = "", level1 = null) {
+  const expectedOpponent = (level1 && level1.hostBinaryPath) || "";
+  const current = await runningContainerState();
+  if (
+    current.running &&
+    current.hostPath === hostProjectPath &&
+    current.opponentHostPath === expectedOpponent
+  ) {
     return { ok: true, name: DEFAULTS.containerName };
   }
   if (current.running) {
@@ -157,7 +174,7 @@ async function ensureContainer(projectPath, hostProjectPath = "") {
   }
   return ensureNamedContainer(
     DEFAULTS.containerName,
-    runArgs(projectPath, process.env, hostProjectPath),
+    runArgs(projectPath, process.env, hostProjectPath, level1),
   );
 }
 

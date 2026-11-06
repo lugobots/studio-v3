@@ -89,6 +89,7 @@ async function ensureLevel1Binary({
     return {
       ok: true,
       hostBinaryPath,
+      containerBinaryPath: resolved.containerBinaryPath,
       ref: resolved.ref,
       cached: true,
       pulled: false,
@@ -163,6 +164,7 @@ async function ensureLevel1Binary({
   return {
     ok: true,
     hostBinaryPath,
+    containerBinaryPath: resolved.containerBinaryPath,
     ref: resolved.ref,
     cached: false,
     pulled,

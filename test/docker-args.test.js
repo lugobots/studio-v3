@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { LEVEL1_CONTAINER_BINARY_PATH } = require("../src/main/services/config/store");
 const { editorRunArgs, runArgs } = require("../src/main/services/docker/args");
 
 test("studio container runs the api command and does not publish the editor port", () => {
@@ -24,6 +25,37 @@ test("studio image can be overridden with LUGO_STUDIO_IMAGE", () => {
   const args = runArgs("/bots/demo", { LUGO_STUDIO_IMAGE: "example/studio-api:dev" });
   assert.equal(args.at(-2), "example/studio-api:dev");
   assert.equal(args.at(-1), "api");
+});
+
+test("studio container bind-mounts the Level-1 opponent binary at the API path", () => {
+  const hostBinary =
+    "/home/user/.LugoStudio/cache/level-1/abcd1234efgh5678/my-bot";
+  const args = runArgs("/bots/demo", {}, "/bots/demo", {
+    hostBinaryPath: hostBinary,
+    containerBinaryPath: LEVEL1_CONTAINER_BINARY_PATH,
+  });
+
+  const mount = `${hostBinary}:${LEVEL1_CONTAINER_BINARY_PATH}`;
+  assert.ok(args.includes("-v"), "includes volume flags");
+  assert.ok(args.includes(mount), `bind mount ${mount}`);
+  assert.ok(args.includes(`LUGO_STUDIO_OPPONENT_BOT=${LEVEL1_CONTAINER_BINARY_PATH}`));
+  assert.ok(args.includes(`LUGO_HOST_OPPONENT_BOT=${hostBinary}`));
+  assert.equal(args.at(-1), "api");
+
+  // Mount appears after project volume and before the image name.
+  const projectMountIdx = args.indexOf("/bots/demo:/home/coder/project");
+  const opponentMountIdx = args.indexOf(mount);
+  const imageIdx = args.indexOf("lugobots/studio-v3-api:latest");
+  assert.ok(projectMountIdx > 0);
+  assert.ok(opponentMountIdx > projectMountIdx);
+  assert.ok(imageIdx > opponentMountIdx);
+});
+
+test("studio container defaults container binary path when only host path is set", () => {
+  const hostBinary = "/tmp/cache/my-bot";
+  const args = runArgs("/bots/demo", {}, "", { hostBinaryPath: hostBinary });
+  assert.ok(args.includes(`${hostBinary}:${LEVEL1_CONTAINER_BINARY_PATH}`));
+  assert.ok(args.includes(`LUGO_STUDIO_OPPONENT_BOT=${LEVEL1_CONTAINER_BINARY_PATH}`));
 });
 
 test("editor container publishes only the editor port", () => {
