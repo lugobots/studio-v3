@@ -226,6 +226,12 @@ h1 {
   padding: 0 10px 8px;
 }
 
+.process-log-waiting {
+  color: #9aa3b2;
+  padding: 8px 0;
+  font-style: italic;
+}
+
 .process-log-line {
   display: grid;
   grid-template-columns: 72px 1fr;

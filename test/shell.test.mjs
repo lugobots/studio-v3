@@ -152,7 +152,9 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   assert.equal(labels().includes("Open bot"), false);
   assert.equal(labels().includes("Start match"), false);
   assert.equal(labels().includes("Publish bot"), false);
-  assert.ok(outlet.querySelector('[aria-label="Bot URI"]'));
+  assert.equal(outlet.querySelector(".workspace-meta"), null);
+  assert.equal(outlet.querySelector(".publish-form"), null);
+  assert.equal(outlet.querySelector('[aria-label="Bot URI"]'), null);
   assert.equal(outlet.querySelector(".game-ctrl") !== null, true);
   const overlay = outlet.querySelector(".game-start-overlay");
   assert.ok(overlay);
@@ -175,7 +177,7 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   const runningFrame = outlet.querySelector("#game_frame");
   assert.ok(runningFrame);
   assert.equal(runningFrame.src, "http://localhost:8080");
-  assert.equal(runningFrame.hidden, undefined);
+  assert.equal(Boolean(runningFrame.hidden), false);
 
   outlet.querySelectorAll("button").find((button) => button.textContent === "Editor").click();
   const editorPane = outlet.querySelector(".editor-main");
@@ -336,7 +338,7 @@ test("workspace hydrates power control from already-running API/live status", as
   const upFrame = outlet.querySelector("#game_frame");
   assert.ok(upFrame);
   assert.equal(upFrame.src, "http://localhost:8080");
-  assert.equal(upFrame.hidden, undefined);
+  assert.equal(Boolean(upFrame.hidden), false);
 
   for (const listener of statusListeners) {
     listener({ running: false });

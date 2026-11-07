@@ -51,6 +51,8 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   const processLogHost = document.createElement("div");
   processLogHost.className = "process-log-drawer-host";
   processLogs.mount(processLogHost);
+  // Reuse across paint() so log toggles / control refreshes do not reload the match frontend.
+  let gameFrame = null;
 
   function applyServerStatus(payload) {
     const running = statusRunning(payload);
@@ -269,6 +271,40 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     return section;
   }
 
+  function ensureGameFrame() {
+    if (gameFrame) {
+      return gameFrame;
+    }
+    gameFrame = document.createElement("iframe");
+    gameFrame.className = "game-frame";
+    gameFrame.id = "game_frame";
+    gameFrame.title = "Game";
+    return gameFrame;
+  }
+
+  function clearGameFrameSrc(frame) {
+    // Real DOM NamedNodeMap props are not deletable in strict mode; use removeAttribute.
+    if (typeof frame.removeAttribute === "function") {
+      frame.removeAttribute("src");
+    } else if (frame.attributes && Object.prototype.hasOwnProperty.call(frame.attributes, "src")) {
+      delete frame.attributes.src;
+    }
+    if (Object.prototype.hasOwnProperty.call(frame, "src")) {
+      delete frame.src;
+    }
+  }
+
+  function showGameFrame(frame) {
+    frame.hidden = false;
+    if (typeof frame.removeAttribute === "function") {
+      frame.removeAttribute("hidden");
+      frame.removeAttribute("aria-hidden");
+    } else if (frame.attributes) {
+      delete frame.attributes.hidden;
+      delete frame.attributes["aria-hidden"];
+    }
+  }
+
   function workspaceView(config) {
     const section = document.createElement("section");
     section.dataset.window = "workspace";
@@ -277,18 +313,21 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     const panel = document.createElement("div");
     panel.className = "game-panel";
 
-    const frame = document.createElement("iframe");
-    frame.className = "game-frame";
-    frame.id = "game_frame";
-    frame.title = "Game";
+    const frame = ensureGameFrame();
+    const nextUrl = config?.game_frontend_url || gameFrontendUrl();
 
     if (state.game.serverRunning) {
-      frame.src = config?.game_frontend_url || gameFrontendUrl();
+      showGameFrame(frame);
+      const currentSrc = frame.getAttribute("src") || "";
+      if (currentSrc !== nextUrl) {
+        frame.src = nextUrl;
+      }
       panel.append(frame);
     } else {
       // Unload the frontend while down so authors are not left on a white/failed document.
       frame.hidden = true;
       frame.setAttribute("aria-hidden", "true");
+      clearGameFrameSrc(frame);
       const overlay = document.createElement("div");
       overlay.className = "game-start-overlay";
       const start = document.createElement("button");
@@ -307,36 +346,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       panel.append(overlay, frame);
     }
 
-    const meta = document.createElement("div");
-    meta.className = "workspace-meta";
-    const path = document.createElement("p");
-    path.textContent = config?.project_path || "No bot open";
-    const form = document.createElement("form");
-    form.className = "publish-form";
-    const uri = document.createElement("input");
-    uri.name = "botUri";
-    uri.placeholder = "repo.lugobots.ai/team/bot";
-    uri.setAttribute("aria-label", "Bot URI");
-    const tag = document.createElement("input");
-    tag.name = "tag";
-    tag.placeholder = "latest";
-    tag.setAttribute("aria-label", "Image tag");
-    const submit = document.createElement("button");
-    submit.type = "submit";
-    submit.className = "button";
-    submit.textContent = "Publish";
-    form.append(uri, tag, submit);
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const result = await host.publish.bot({ botUri: uri.value, tag: tag.value });
-      if (result.ok) {
-        dialogs.notify({ title: "Publish finished", body: "The bot image was published." });
-      } else {
-        await reportResult(dialogs, result);
-      }
-    });
-    meta.append(path, form);
-    section.append(panel, processLogHost, meta);
+    section.append(panel, processLogHost);
     return section;
   }
 

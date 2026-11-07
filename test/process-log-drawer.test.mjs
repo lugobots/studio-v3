@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createProcessLogDrawer } from "../src/renderer/shell/process-log-drawer.js";
+import { createProcessLogDrawer, WAITING_FOR_LOGS } from "../src/renderer/shell/process-log-drawer.js";
 import { installDocument } from "./dom-stub.mjs";
 
 function createHost() {
@@ -104,5 +104,33 @@ test("clear empties retained drawer lines", () => {
   assert.equal(drawer.snapshot().lines.length, 1);
   drawer.clear();
   assert.equal(drawer.snapshot().lines.length, 0);
+  installed.restore();
+});
+
+test("open empty drawer shows waiting feedback until lines arrive and after clear", () => {
+  const installed = installDocument();
+  const fake = createHost();
+  const drawer = createProcessLogDrawer({ host: fake.host });
+  const parent = installed.document.createElement("div");
+  drawer.mount(parent);
+
+  drawer.openDrawer("home/3");
+  const root = parent.querySelector(".process-log-drawer");
+  assert.ok(root);
+  const waiting = () => root.querySelector(".process-log-waiting");
+  assert.ok(waiting());
+  assert.equal(waiting().textContent, WAITING_FOR_LOGS);
+  assert.equal(root.querySelectorAll(".process-log-line").length, 0);
+
+  fake.push([{ source: "home/3", text: "first", ts: 1 }]);
+  assert.equal(waiting(), null);
+  assert.equal(root.querySelectorAll(".process-log-line").length, 1);
+  assert.equal(root.querySelector(".process-log-line-text").textContent, "first");
+
+  drawer.clear();
+  assert.ok(waiting());
+  assert.equal(waiting().textContent, WAITING_FOR_LOGS);
+  assert.equal(root.querySelectorAll(".process-log-line").length, 0);
+
   installed.restore();
 });

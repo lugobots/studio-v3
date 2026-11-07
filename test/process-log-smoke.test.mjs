@@ -170,3 +170,38 @@ test("process log smoke: defaults stay quiet, arming shows tagged lines, and rel
   assert.equal(reloaded.subscriptions(), 0);
   reloadedDoc.restore();
 });
+
+test("workspace omits project path publish strip and keeps game iframe across log toggles", async () => {
+  const installed = installDocument();
+  const outlet = installed.document.createElement("div");
+  const session = createSession();
+  session.host.server.status = async () => ({ ok: true, running: true });
+  const dialogs = { notify() {}, confirm() { return Promise.resolve(false); } };
+
+  renderAppFrame(outlet, { host: session.host, dialogs });
+  await flush();
+
+  assert.equal(outlet.querySelector(".workspace-meta"), null);
+  assert.equal(outlet.querySelector(".publish-form"), null);
+  assert.equal(outlet.querySelector('[aria-label="Bot URI"]'), null);
+
+  const frameBefore = outlet.querySelector("#game_frame");
+  assert.ok(frameBefore);
+  assert.equal(frameBefore.src, "http://localhost:8080");
+
+  outlet.querySelector('button[title="Server logs"]').click();
+  outlet.querySelector('button[title="Ver logs"]').click();
+  await flush();
+
+  const frameAfter = outlet.querySelector("#game_frame");
+  assert.equal(frameAfter, frameBefore);
+  assert.equal(frameAfter.src, "http://localhost:8080");
+  assert.equal(outlet.querySelector(".process-log-waiting") !== null, true);
+
+  outlet.querySelector('button[title="Server logs"]').click();
+  await flush();
+  assert.equal(outlet.querySelector("#game_frame"), frameBefore);
+  assert.equal(outlet.querySelector("#game_frame").src, "http://localhost:8080");
+
+  installed.restore();
+});

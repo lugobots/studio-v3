@@ -198,19 +198,53 @@ func TestManagerOneSlotIsolationAndDefaultOff(t *testing.T) {
 	waitForLine(t, sink, "home/3", "armed-only")
 	time.Sleep(200 * time.Millisecond)
 	if got := sink.forSource("home/4"); len(got) != 0 {
-		t.Fatalf("disarmed slot captured lines %v", got)
+		t.Fatalf("disarmed slot retained lines %v", got)
 	}
-	// Quiet slot should not use capture pipes: Stdout/Stderr unset (inherit).
-	quietChild := mgr.bots[slotKey(quiet)].child
-	if quietChild.Cmd.Stdout != nil || quietChild.Cmd.Stderr != nil {
-		t.Fatal("disarmed slot should not attach capture pipes")
-	}
+	// Quiet slot still pipes stdout, but Append drops lines until armed.
+	_ = mgr.bots[slotKey(quiet)].child
 	armedChild := mgr.bots[slotKey(armed)].child
 	if armedChild.Cmd.Stdout == nil && armedChild.Cmd.Stderr == nil {
 		// After Start, pipe fields may be nilled by os/exec once started; check
 		// that we at least captured output as evidence pipes were used.
 		t.Log("pipe fields cleared after start (ok if lines captured)")
 	}
+}
+
+func TestManagerMidRunArmRetainsAfterStart(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opp := filepath.Join(t.TempDir(), "opp-bot")
+	script := "#!/bin/sh\nwhile true; do echo mid-run-line; sleep 0.1; done\n"
+	if err := os.WriteFile(opp, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	sink := &memLogSink{}
+	reg := procreg.New()
+	mgr := New(reg)
+	mgr.Logs = sink
+	mgr.RunSync = func(dir, command string, env map[string]string) error { return nil }
+
+	cfg := Config{
+		ProjectRoot:    root,
+		GRPCURL:        "localhost:5123",
+		PlayerSide:     SideAway,
+		OpponentBinary: opp,
+	}
+	slot := Slot{Side: SideHome, Number: 1}
+	if err := mgr.StartBot(cfg, slot); err != nil {
+		t.Fatalf("StartBot: %v", err)
+	}
+	t.Cleanup(func() { _ = reg.ShutdownAll() })
+
+	time.Sleep(250 * time.Millisecond)
+	if got := sink.forSource("home/1"); len(got) != 0 {
+		t.Fatalf("expected no retained lines before arm, got %v", got)
+	}
+	sink.Arm("home/1")
+	waitForLine(t, sink, "home/1", "mid-run-line")
 }
 
 func TestSlotLogSourceLowercasesSide(t *testing.T) {

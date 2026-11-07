@@ -2,6 +2,8 @@ const MAX_DRAWER_LINES = 2000;
 
 const FILTER_ALL = "all";
 
+const WAITING_FOR_LOGS = "Waiting for logs…";
+
 function sourceLabel(source) {
   if (source === "api") {
     return "API";
@@ -177,7 +179,15 @@ export function createProcessLogDrawer({ host } = {}) {
 
     function paintBody() {
       body.replaceChildren();
-      for (const line of visibleLines()) {
+      const visible = visibleLines();
+      if (!visible.length) {
+        const empty = document.createElement("div");
+        empty.className = "process-log-waiting";
+        empty.textContent = WAITING_FOR_LOGS;
+        body.append(empty);
+        return;
+      }
+      for (const line of visible) {
         const row = document.createElement("div");
         row.className = "process-log-line";
         row.dataset.source = line.source || "";
@@ -225,4 +235,4 @@ export function createProcessLogDrawer({ host } = {}) {
   };
 }
 
-export { sourceLabel, FILTER_ALL, MAX_DRAWER_LINES };
+export { sourceLabel, FILTER_ALL, MAX_DRAWER_LINES, WAITING_FOR_LOGS };

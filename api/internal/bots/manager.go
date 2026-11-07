@@ -58,8 +58,9 @@ type botHandle struct {
 // slots, registering each OS process with the process registry.
 type Manager struct {
 	Registry *procreg.Registry
-	// Logs, when set, captures stdout/stderr for slots whose hub source is armed
-	// at process start (home/N or away/N). Mid-run arming applies on next start.
+	// Logs, when set, pipes stdout/stderr for every bot slot into the hub.
+	// Hub Append still no-ops until the source is armed, so mid-run Ver logs work
+	// without restarting the process.
 	Logs LogSink
 
 	// Optional test hooks. When nil, real shell/process helpers are used.
@@ -301,14 +302,10 @@ func (m *Manager) launch(slot Slot, dir, command string, env map[string]string) 
 
 func (m *Manager) startSlotProcess(slot Slot, dir, command string, env map[string]string) (*procreg.Child, error) {
 	tag := slotLogSource(slot)
-	if m.Logs != nil && m.Logs.Armed(tag) {
-		// Capture path for the UI hub. Custom StartProcess hooks skip pipes
-		// (tests that override StartProcess are not exercising capture).
-		if m.StartProcess == nil {
-			return procreg.StartShellCapture(dir, command, env, func(line string) {
-				m.Logs.Append(tag, line)
-			})
-		}
+	if m.Logs != nil && m.StartProcess == nil {
+		return procreg.StartShellCapture(dir, command, env, func(line string) {
+			m.Logs.Append(tag, line)
+		})
 	}
 	return m.startProcessFn()(dir, command, env)
 }
