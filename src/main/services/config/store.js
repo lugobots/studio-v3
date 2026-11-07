@@ -33,6 +33,8 @@ const MATCH_KEYS = [
   "game_speed",
   "opponent_team",
   "saved_positions",
+  "home_bots_active",
+  "away_bots_active",
 ];
 
 /** Runtime Docker image name/tag keys (V1-compatible + bot_setup_*). */
@@ -51,6 +53,8 @@ const TEAM_SIDES = ["home", "away"];
 const GAME_SPEEDS = ["slow", "normal", "fast"];
 /** Values stored under opponent_team — opponent Level-1 MODE strings used today. */
 const OPPONENT_MODES = ["default", "zombies", "statues", "kids", "defenses"];
+/** Roster size for Home/Away desired-active arrays. */
+const BOT_ROSTER_SIZE = 11;
 
 const MATCH_DEFAULTS = {
   team_side: "home",
@@ -58,6 +62,8 @@ const MATCH_DEFAULTS = {
   game_speed: "normal",
   opponent_team: "default",
   saved_positions: [],
+  home_bots_active: Array.from({ length: BOT_ROSTER_SIZE }, () => true),
+  away_bots_active: Array.from({ length: BOT_ROSTER_SIZE }, () => true),
 };
 
 /** Studio V1 defaults for runtime image settings (level-1 is consumed now; others reserved). */
@@ -177,8 +183,19 @@ function pickAllowed(value, allowed, fallback) {
 }
 
 /**
+ * Normalize a Home/Away desired-active array to exactly BOT_ROSTER_SIZE booleans.
+ * Missing, wrong type, or wrong length falls back to all true.
+ */
+function normalizeBotsActive(value) {
+  if (!Array.isArray(value) || value.length !== BOT_ROSTER_SIZE) {
+    return Array.from({ length: BOT_ROSTER_SIZE }, () => true);
+  }
+  return value.map((entry) => entry === true);
+}
+
+/**
  * Normalized app-level match prefs from user.json data.
- * Missing or invalid keys use defaults (home, no golden skip, normal, default, []).
+ * Missing or invalid keys use defaults (home, no golden skip, normal, default, [], all bots active).
  * opponent_team holds opponent mode values (default/zombies/statues/kids/defenses).
  */
 function matchConfig(data) {
@@ -190,6 +207,8 @@ function matchConfig(data) {
     game_speed: pickAllowed(source.game_speed, GAME_SPEEDS, MATCH_DEFAULTS.game_speed),
     opponent_team: pickAllowed(source.opponent_team, OPPONENT_MODES, MATCH_DEFAULTS.opponent_team),
     saved_positions: positions,
+    home_bots_active: normalizeBotsActive(source.home_bots_active),
+    away_bots_active: normalizeBotsActive(source.away_bots_active),
   };
 }
 
@@ -274,6 +293,7 @@ module.exports = {
   V1_KEYS,
   MATCH_KEYS,
   MATCH_DEFAULTS,
+  BOT_ROSTER_SIZE,
   IMAGE_KEYS,
   IMAGE_DEFAULTS,
   LEVEL1_IMAGE_BINARY_PATH,
@@ -289,6 +309,7 @@ module.exports = {
   imageConfig,
   level1CacheKey,
   level1Resolved,
+  normalizeBotsActive,
   matchConfig,
   matchPatch,
   matchSettingsForApi,

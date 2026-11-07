@@ -214,12 +214,14 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   assert.equal(panel.parent.querySelector("#team-side-switch").getAttribute("aria-disabled"), "false");
 
   panel.parent.querySelector(".bot_actions").querySelector('button[title="Active"]').click();
-  assert.equal(panel.state().home[0].active, true);
+  await flush();
+  assert.equal(panel.state().home[0].active, false);
   assert.equal(panel.state().home[0].running, false);
   assert.equal(panel.state().serverRunning, false);
   assert.equal(panel.calls.server, 0);
   assert.equal(panel.calls.match, 0);
   assert.equal(panel.calls.botStart, 0);
+  assert.equal(panel.matchSets.some((patch) => patch.home_bots_active && patch.home_bots_active[0] === false), true);
   assert.equal(panel.button("Starts the match").disabled, true);
 
   panel.button("Fast speed").click();
@@ -256,7 +258,13 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   assert.equal(panel.button("Apply").disabled, false);
   assert.equal(panel.parent.querySelector("select").disabled, false);
 
-  assert.equal(panel.state().home[0].active, true);
+  assert.equal(panel.state().home[0].active, false);
+  // Off→on while the server is up starts only that slot.
+  panel.parent.querySelectorAll(".bot_actions")[1].querySelector('button[title="Active"]').click();
+  await flush();
+  assert.equal(panel.state().away[0].active, false);
+  assert.equal(panel.calls.botStart, 0);
+  assert.equal(panel.calls.botStop, 0);
   panel.parent.querySelectorAll(".bot_actions")[1].querySelector('button[title="Active"]').click();
   await flush();
   assert.equal(panel.state().away[0].active, true);
@@ -265,6 +273,7 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   assert.equal(panel.state().away[0].running, true);
   assert.equal(panel.calls.server, 1);
   assert.equal(panel.calls.match, 0);
+  assert.equal(panel.matchSets.some((patch) => patch.away_bots_active && patch.away_bots_active[0] === true), true);
 
   panel.parent.querySelectorAll('button[title="Ver logs"]')[0].click();
   const note = panel.parent.querySelector(".game-ctrl-log-note");
@@ -282,13 +291,10 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   panel.button("Starts the match").click();
   await flush();
   assert.equal(panel.calls.match, 1);
-  assert.deepEqual(panel.matchStarts[0], {
-    active: [
-      { side: "HOME", number: 1 },
-      { side: "AWAY", number: 1 },
-    ],
-  });
-  assert.equal(panel.state().home[0].running, true);
+  assert.equal(panel.matchStarts[0].active.length, 21);
+  assert.equal(panel.matchStarts[0].active.some((slot) => slot.side === "HOME" && slot.number === 1), false);
+  assert.equal(panel.matchStarts[0].active.some((slot) => slot.side === "AWAY" && slot.number === 1), true);
+  assert.equal(panel.state().home[0].running, false);
   assert.equal(panel.state().away[0].running, true);
   assert.equal(panel.notices.length, 1);
   assert.equal(panel.calls.stop, 0);
@@ -414,7 +420,7 @@ test("toggling side or speed while the server is down writes match settings", as
   panel.restore();
 });
 
-test("positions and match stay locked while the server is down; active switch stays local", async () => {
+test("positions and match stay locked while the server is down; active switch persists locally", async () => {
   const panel = mountPanel();
 
   assert.equal(panel.state().serverRunning, false);
@@ -440,9 +446,10 @@ test("positions and match stay locked while the server is down; active switch st
   assert.equal(panel.calls.applyPositions, 0);
   assert.equal(panel.calls.botStart, 0);
   assert.equal(panel.calls.botStop, 0);
-  assert.equal(panel.state().home[0].active, true);
+  assert.equal(panel.state().home[0].active, false);
   assert.equal(panel.state().home[0].running, false);
   assert.equal(panel.state().home[0].logs, true);
+  assert.equal(panel.matchSets.some((patch) => patch.home_bots_active && patch.home_bots_active[0] === false), true);
   assert.equal(panel.parent.querySelector(".game-ctrl-log-note") !== null, true);
 
   panel.button("Starts the Game Server").click();
@@ -457,10 +464,10 @@ test("positions and match stay locked while the server is down; active switch st
   panel.button("Starts the match").click();
   await flush();
   assert.equal(panel.calls.match, 1);
-  assert.deepEqual(panel.matchStarts[0], {
-    active: [{ side: "HOME", number: 1 }],
-  });
-  assert.equal(panel.state().home[0].running, true);
+  assert.equal(panel.matchStarts[0].active.some((slot) => slot.side === "HOME" && slot.number === 1), false);
+  assert.equal(panel.matchStarts[0].active.length, 21);
+  assert.equal(panel.state().home[0].running, false);
+  assert.equal(panel.state().home[1].running, true);
   assert.equal(panel.notices.length, 1);
   panel.restore();
 });
@@ -470,32 +477,45 @@ test("active switch starts and stops a bot only while the server is up", async (
 
   panel.parent.querySelector(".bot_actions").querySelector('button[title="Active"]').click();
   await flush();
-  assert.equal(panel.state().home[0].active, true);
+  assert.equal(panel.state().home[0].active, false);
   assert.equal(panel.calls.botStart, 0);
+  assert.equal(panel.matchSets.some((patch) => patch.home_bots_active && patch.home_bots_active[0] === false), true);
 
   panel.button("Starts the Game Server").click();
   await flush();
 
-  panel.parent.querySelectorAll(".bot_actions")[1].querySelectorAll('button[title="Active"]')[2].click();
+  // Off→on starts AWAY/3; on→off stops it. Preference persists in both states.
+  const awayActive = () => panel.parent
+    .querySelectorAll(".bot_actions")[1]
+    .querySelectorAll('button[title="Active"]')[2];
+
+  awayActive().click();
+  await flush();
+  assert.equal(panel.state().away[2].active, false);
+  assert.equal(panel.calls.botStart, 0);
+  assert.equal(panel.calls.botStop, 0);
+
+  awayActive().click();
   await flush();
   assert.equal(panel.state().away[2].active, true);
   assert.equal(panel.calls.botStart, 1);
   assert.deepEqual(panel.botStarts[0], { side: "AWAY", number: 3 });
   assert.equal(panel.state().away[2].running, true);
+  assert.equal(panel.matchSets.some((patch) => patch.away_bots_active && patch.away_bots_active[2] === true), true);
 
-  panel.parent.querySelectorAll(".bot_actions")[1].querySelectorAll('button[title="Active"]')[2].click();
+  awayActive().click();
   await flush();
   assert.equal(panel.state().away[2].active, false);
   assert.equal(panel.calls.botStop, 1);
   assert.deepEqual(panel.botStops[0], { side: "AWAY", number: 3 });
   assert.equal(panel.state().away[2].running, false);
+  assert.equal(panel.matchSets.some((patch) => patch.away_bots_active && patch.away_bots_active[2] === false), true);
 
   panel.button("Starts the match").click();
   await flush();
-  assert.deepEqual(panel.matchStarts[0], {
-    active: [{ side: "HOME", number: 1 }],
-  });
-  assert.equal(panel.state().home[0].running, true);
+  assert.equal(panel.matchStarts[0].active.some((slot) => slot.side === "HOME" && slot.number === 1), false);
+  assert.equal(panel.matchStarts[0].active.some((slot) => slot.side === "AWAY" && slot.number === 3), false);
+  assert.equal(panel.state().home[0].running, false);
   assert.equal(panel.state().away[2].running, false);
   panel.restore();
 });
@@ -509,13 +529,20 @@ test("match-start IPC includes only active rows", async () => {
       .querySelectorAll('button[title="Active"]')[playerIndex];
   }
 
-  activeButton(0, 0).click();
-  activeButton(0, 4).click();
-  activeButton(1, 10).click();
+  // Defaults are all active; turn off every slot except HOME/1, HOME/5, AWAY/11.
+  for (let index = 0; index < 11; index += 1) {
+    if (index !== 0 && index !== 4) {
+      activeButton(0, index).click();
+    }
+    if (index !== 10) {
+      activeButton(1, index).click();
+    }
+  }
   await flush();
   assert.equal(panel.state().home[0].active, true);
   assert.equal(panel.state().home[4].active, true);
   assert.equal(panel.state().away[10].active, true);
+  assert.equal(panel.state().home[1].active, false);
 
   panel.button("Starts the Game Server").click();
   await flush();
@@ -618,7 +645,7 @@ test("server and match start failures leave local state unchanged", async () => 
   panel.button("Starts the match").click();
   await flush();
   assert.equal(panel.calls.match, 1);
-  assert.deepEqual(panel.matchStarts[0], { active: [] });
+  assert.equal(panel.matchStarts[0].active.length, 22);
   assert.equal(panel.confirms.some((item) => item.body === "match down"), true);
   panel.restore();
 });

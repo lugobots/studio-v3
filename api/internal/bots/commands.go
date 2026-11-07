@@ -3,6 +3,7 @@ package bots
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -59,18 +60,33 @@ func pythonVenvPython(projectRoot string) string {
 	return ""
 }
 
-func pythonPrepareCommands(projectRoot string) []string {
-	if pythonVenvPython(projectRoot) != "" {
-		return nil
+// pythonVenvHealthy reports whether the project venv can run and has pip.
+// Rejects host/Alpine/Debian-broken venvs that Stat as files but cannot
+// `python -m pip` (Debian's ensurepip-less `python3 -m venv` case).
+func pythonVenvHealthy(projectRoot string) bool {
+	py := pythonVenvPython(projectRoot)
+	if py == "" {
+		return false
 	}
-	// Host/Studio-V2 venvs often symlink to /usr/local/bin/python3.9 which is
-	// absent here; --clear replaces that broken tree with a container-local venv.
+	cmd := exec.Command(py, "-c", "import pip")
+	cmd.Dir = projectRoot
+	return cmd.Run() == nil
+}
+
+func pythonPrepareCommands(projectRoot string) []string {
 	venv := filepath.Join(projectRoot, ".studio", "venv-lugo")
+	pipInstall := fmt.Sprintf("%s -m pip install --no-compile -r requirements.txt",
+		shellQuote(filepath.Join(venv, "bin", "python3")))
+	if pythonVenvHealthy(projectRoot) {
+		// Interpreter + pip work; packages may still be missing.
+		return []string{pipInstall}
+	}
+	// Recreate with virtualenv (always ships pip). Debian `python3 -m venv`
+	// often yields an interpreter with no pip module.
 	return []string{
 		fmt.Sprintf("mkdir -p %s", shellQuote(filepath.Join(projectRoot, ".studio"))),
-		fmt.Sprintf("python3 -m venv --clear %s", shellQuote(venv)),
-		fmt.Sprintf("%s -m pip install --no-compile -r requirements.txt",
-			shellQuote(filepath.Join(venv, "bin", "python3"))),
+		fmt.Sprintf("virtualenv --clear %s", shellQuote(venv)),
+		pipInstall,
 	}
 }
 

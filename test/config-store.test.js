@@ -93,12 +93,22 @@ test("match config defaults when keys are unset", () => {
     game_speed: "normal",
     opponent_team: "default",
     saved_positions: [],
+    home_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, () => true),
+    away_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, () => true),
   });
   assert.equal(store.matchConfig({ skip_to_golden_goal: "yes" }).skip_to_golden_goal, false);
   assert.equal(store.matchConfig({ team_side: "left" }).team_side, "home");
   assert.equal(store.matchConfig({ game_speed: 1 }).game_speed, "normal");
   assert.equal(store.matchConfig({ opponent_team: "level-0" }).opponent_team, "default");
   assert.deepEqual(store.matchConfig({ saved_positions: "opaque" }).saved_positions, []);
+  assert.deepEqual(
+    store.matchConfig({ home_bots_active: [false], away_bots_active: "nope" }).home_bots_active,
+    Array.from({ length: store.BOT_ROSTER_SIZE }, () => true),
+  );
+  assert.deepEqual(
+    store.matchConfig({ home_bots_active: [false], away_bots_active: "nope" }).away_bots_active,
+    Array.from({ length: store.BOT_ROSTER_SIZE }, () => true),
+  );
 });
 
 test("match keys patch round-trips through user.json", () => {
@@ -110,6 +120,8 @@ test("match keys patch round-trips through user.json", () => {
     homeTeam: { 1: { x: 1, y: 2 } },
     awayTeam: { 1: { x: 3, y: 4 } },
   };
+  const homeActive = Array.from({ length: store.BOT_ROSTER_SIZE }, (_, i) => i !== 2);
+  const awayActive = Array.from({ length: store.BOT_ROSTER_SIZE }, (_, i) => i === 10);
   const patched = store.applyPatch(
     store.read(file).data,
     store.matchPatch({
@@ -118,6 +130,8 @@ test("match keys patch round-trips through user.json", () => {
       game_speed: "fast",
       opponent_team: "zombies",
       saved_positions: [preset],
+      home_bots_active: homeActive,
+      away_bots_active: awayActive,
     }),
   );
   store.write(file, patched);
@@ -127,6 +141,8 @@ test("match keys patch round-trips through user.json", () => {
   assert.equal(saved.game_speed, "fast");
   assert.equal(saved.opponent_team, "zombies");
   assert.deepEqual(saved.saved_positions, [preset]);
+  assert.deepEqual(saved.home_bots_active, homeActive);
+  assert.deepEqual(saved.away_bots_active, awayActive);
   assert.ok(store.V1_KEYS.includes("skip_to_golden_goal"));
   assert.deepEqual(store.MATCH_KEYS, [
     "team_side",
@@ -134,10 +150,13 @@ test("match keys patch round-trips through user.json", () => {
     "game_speed",
     "opponent_team",
     "saved_positions",
+    "home_bots_active",
+    "away_bots_active",
   ]);
 });
 
 test("match settings for api map opponent_team to opponent_mode", () => {
+  const homeActive = Array.from({ length: store.BOT_ROSTER_SIZE }, (_, i) => i < 3);
   assert.deepEqual(
     store.matchSettingsForApi({
       team_side: "away",
@@ -145,6 +164,8 @@ test("match settings for api map opponent_team to opponent_mode", () => {
       game_speed: "fast",
       opponent_team: "kids",
       saved_positions: [{ name: "x" }],
+      home_bots_active: homeActive,
+      away_bots_active: homeActive,
     }),
     {
       team_side: "away",
@@ -159,6 +180,7 @@ test("match settings for api map opponent_team to opponent_mode", () => {
     game_speed: "normal",
     opponent_mode: "default",
   });
+  assert.equal(Object.hasOwn(store.matchSettingsForApi({ home_bots_active: homeActive }), "home_bots_active"), false);
 });
 
 test("opening a different bot does not rewrite match preferences", () => {
@@ -170,6 +192,8 @@ test("opening a different bot does not rewrite match preferences", () => {
     game_speed: "slow",
     opponent_team: "kids",
     saved_positions: [{ name: "corner", ball: { x: 10, y: 20 }, homeTeam: {}, awayTeam: {} }],
+    home_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, (_, i) => i !== 2),
+    away_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, (_, i) => i < 5),
   };
   store.write(file, {
     project_path: "/bots/first",

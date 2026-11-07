@@ -12,17 +12,23 @@ COPY api/ ./
 # Use vendored modules so the image build does not need GitHub auth for private deps.
 RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -ldflags="-w -s" -o /out/studio-v3-api ./cmd/api
 
-FROM alpine:3.20
+# Debian (glibc) runtime so `pip install` can use manylinux wheels for pinned
+# bot deps (grpcio/lugo4py). Alpine/musl forces a source build that fails.
+FROM debian:bookworm-slim
 
 # Player bots prepare/start inside this container (python3 -m venv / go build / npm).
 # Keep these toolchains in the runtime image; do not rely on host or Studio V2 venvs.
-RUN apk add --no-cache \
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
     ca-certificates \
     python3 \
-    py3-pip \
-    go \
+    python3-pip \
+    python3-venv \
+    python3-virtualenv \
+    golang-go \
     nodejs \
     npm \
+  && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /home/coder/project
 
 COPY --from=build /out/studio-v3-api /usr/local/bin/studio-v3-api

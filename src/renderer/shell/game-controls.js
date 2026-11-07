@@ -1,10 +1,35 @@
 const SPEEDS = ["slow", "normal", "fast"];
 const OPPONENTS = ["default", "zombies", "statues", "kids", "defenses"];
+const BOT_ROSTER_SIZE = 11;
 
 function rows() {
   // Default all roster slots on so “Starts the match” launches a full 11v11
   // unless the author toggles rows off.
-  return Array.from({ length: 11 }, () => ({ active: true, running: false, logs: false }));
+  return Array.from({ length: BOT_ROSTER_SIZE }, () => ({ active: true, running: false, logs: false }));
+}
+
+/** Normalize a Home/Away desired-active array; invalid → all true. */
+function normalizeBotsActive(value) {
+  if (!Array.isArray(value) || value.length !== BOT_ROSTER_SIZE) {
+    return Array.from({ length: BOT_ROSTER_SIZE }, () => true);
+  }
+  return value.map((entry) => entry === true);
+}
+
+/** Desired-active flags for one team from game-control rows. */
+function botsActiveFromRows(teamRows) {
+  const rowsForTeam = Array.isArray(teamRows) ? teamRows : [];
+  return Array.from({ length: BOT_ROSTER_SIZE }, (_, index) => Boolean(rowsForTeam[index]?.active));
+}
+
+/** Apply a desired-active array onto team rows (preserves running/logs). */
+function applyBotsActive(teamRows, activeFlags) {
+  const flags = normalizeBotsActive(activeFlags);
+  return teamRows.map((row, index) => ({
+    active: flags[index],
+    running: Boolean(row.running),
+    logs: Boolean(row.logs),
+  }));
 }
 
 function positionNames(saved) {
@@ -82,6 +107,12 @@ export function applyMatchConfig(state, match) {
   if (Object.prototype.hasOwnProperty.call(match, "saved_positions")) {
     next.positions = positionNames(match.saved_positions);
   }
+  if (Object.prototype.hasOwnProperty.call(match, "home_bots_active")) {
+    next.home = applyBotsActive(next.home, match.home_bots_active);
+  }
+  if (Object.prototype.hasOwnProperty.call(match, "away_bots_active")) {
+    next.away = applyBotsActive(next.away, match.away_bots_active);
+  }
   return next;
 }
 
@@ -92,6 +123,14 @@ export function matchSettingsPatch(state) {
     skip_to_golden_goal: Boolean(state.skipGolden),
     game_speed: state.speed,
     opponent_team: state.opponent,
+  };
+}
+
+/** Patch with only Home/Away desired-active arrays (safe while the server is running). */
+export function botActiveSettingsPatch(state) {
+  return {
+    home_bots_active: botsActiveFromRows(state.home),
+    away_bots_active: botsActiveFromRows(state.away),
   };
 }
 
@@ -152,6 +191,17 @@ export function persistMatchSettings(host, state) {
     return undefined;
   }
   return host.config.matchSet(matchSettingsPatch(state));
+}
+
+/**
+ * Persist Home/Away desired-active preferences.
+ * Writes whether or not the game server is running (unlike match settings lock).
+ */
+export function persistBotActiveSettings(host, state) {
+  if (!host?.config?.matchSet) {
+    return undefined;
+  }
+  return host.config.matchSet(botActiveSettingsPatch(state));
 }
 
 /** Active rows as match-start IPC slots (HOME/AWAY + number). */

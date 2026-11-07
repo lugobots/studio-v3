@@ -2,8 +2,10 @@ package procreg
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -18,6 +20,8 @@ type Child struct {
 }
 
 // Alive reports whether the OS process appears to still be running.
+// Zombies (exited but not yet reaped) are treated as not alive so bot status
+// and restart paths do not get stuck on a dead PID.
 func (c *Child) Alive() bool {
 	if c == nil || c.Cmd == nil || c.Cmd.Process == nil {
 		return false
@@ -25,7 +29,27 @@ func (c *Child) Alive() bool {
 	if c.Cmd.ProcessState != nil {
 		return false
 	}
-	return syscall.Kill(c.Cmd.Process.Pid, 0) == nil
+	pid := c.Cmd.Process.Pid
+	if processZombie(pid) {
+		return false
+	}
+	return syscall.Kill(pid, 0) == nil
+}
+
+// processZombie reports Linux /proc state 'Z' (zombie). Other platforms fall
+// back to Kill-based liveness only.
+func processZombie(pid int) bool {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return false
+	}
+	// /proc/<pid>/stat: pid (comm) state ...
+	s := string(data)
+	idx := strings.LastIndex(s, ") ")
+	if idx < 0 || idx+2 >= len(s) {
+		return false
+	}
+	return s[idx+2] == 'Z'
 }
 
 // Shutdown implements Entry. It sends SIGTERM (to the process group when

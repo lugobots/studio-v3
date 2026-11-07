@@ -5,6 +5,7 @@ import {
   findPositionPreset,
   markActiveBotsRunning,
   matchSettingsForApi,
+  persistBotActiveSettings,
   persistMatchSettings,
   reduceGameControl,
   upsertPositionPreset,
@@ -257,6 +258,7 @@ async function toggleBotActive(state, onChange, host, dialogs, team, number) {
     active: nextActive,
   });
   onChange(next);
+  persistBotActiveSettings(host, next);
 
   if (!state.serverRunning) {
     return;
