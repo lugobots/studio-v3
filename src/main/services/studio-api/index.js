@@ -13,6 +13,10 @@ function statusWsUrl(base = apiBase()) {
   return `${base.replace(/^http/, "ws")}/server/status/ws`;
 }
 
+function logsWsUrl(base = apiBase()) {
+  return `${base.replace(/^http/, "ws")}/logs/ws`;
+}
+
 async function request(pathname, options, fetchImpl = global.fetch) {
   const response = await fetchImpl(`${apiBase()}${pathname}`, options);
   const text = await response.text();
@@ -195,9 +199,68 @@ async function publishBot({ botUri, tag }, fetchImpl) {
   );
 }
 
+async function armLogSource(source, fetchImpl = global.fetch) {
+  return request("/logs/arm", jsonPostBody({ source }), fetchImpl);
+}
+
+async function disarmLogSource(source, fetchImpl = global.fetch) {
+  return request("/logs/disarm", jsonPostBody({ source }), fetchImpl);
+}
+
+function parseProcessLogPayload(raw) {
+  let data = raw;
+  if (typeof data === "string") {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+  if (!data || typeof data !== "object" || !Array.isArray(data.lines)) {
+    return null;
+  }
+  return { lines: data.lines };
+}
+
+function subscribeProcessLogs(onLines, { WebSocketImpl = globalThis.WebSocket, url } = {}) {
+  if (typeof onLines !== "function") {
+    throw new TypeError("subscribeProcessLogs requires an onLines callback");
+  }
+  if (typeof WebSocketImpl !== "function") {
+    throw new Error("WebSocket is not available");
+  }
+  const ws = new WebSocketImpl(url || logsWsUrl());
+  const handleMessage = (event) => {
+    const payload = parseProcessLogPayload(event && event.data);
+    if (payload) {
+      onLines(payload);
+    }
+  };
+  if (typeof ws.addEventListener === "function") {
+    ws.addEventListener("message", handleMessage);
+  } else {
+    ws.onmessage = handleMessage;
+  }
+  return () => {
+    if (typeof ws.removeEventListener === "function") {
+      ws.removeEventListener("message", handleMessage);
+    } else if (ws.onmessage === handleMessage) {
+      ws.onmessage = null;
+    }
+    if (typeof ws.close === "function") {
+      try {
+        ws.close();
+      } catch {
+        // ignore close errors on teardown
+      }
+    }
+  };
+}
+
 module.exports = {
   apiBase,
   statusWsUrl,
+  logsWsUrl,
   request,
   healthy,
   waitUntilReady,
@@ -215,4 +278,7 @@ module.exports = {
   botStatus,
   setupBot,
   publishBot,
+  armLogSource,
+  disarmLogSource,
+  subscribeProcessLogs,
 };

@@ -68,6 +68,18 @@ contextBridge.exposeInMainWorld("studio", {
     stop: (payload) => ipcRenderer.invoke(CHANNELS.bot.stop, payload),
     status: (payload) => ipcRenderer.invoke(CHANNELS.bot.status, payload),
   },
+  logs: {
+    arm: (source) => ipcRenderer.invoke(CHANNELS.logs.arm, source),
+    disarm: (source) => ipcRenderer.invoke(CHANNELS.logs.disarm, source),
+    subscribe: (callback) => {
+      const unsubscribe = subscribe(CHANNELS.logs.event, callback);
+      void ipcRenderer.invoke(CHANNELS.logs.watch);
+      return () => {
+        unsubscribe();
+        void ipcRenderer.invoke(CHANNELS.logs.unwatch);
+      };
+    },
+  },
   publish: {
     bot: (payload) => ipcRenderer.invoke(CHANNELS.publish.bot, payload),
   },

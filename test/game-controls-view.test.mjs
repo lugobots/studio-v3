@@ -39,6 +39,8 @@ function mountPanel({
     applyPositions: 0,
     botStart: 0,
     botStop: 0,
+    logArm: 0,
+    logDisarm: 0,
   };
   const matchStarts = [];
   const serverStarts = [];
@@ -48,6 +50,9 @@ function mountPanel({
   const appliedSnapshots = [];
   const notices = [];
   const confirms = [];
+  const logArms = [];
+  const logDisarms = [];
+  const openLogs = [];
   const host = {
     config: {
       matchGet() {
@@ -117,6 +122,21 @@ function mountPanel({
         return botStop(payload);
       },
     },
+    logs: {
+      arm(source) {
+        calls.logArm += 1;
+        logArms.push(source);
+        return Promise.resolve({ ok: true });
+      },
+      disarm(source) {
+        calls.logDisarm += 1;
+        logDisarms.push(source);
+        return Promise.resolve({ ok: true });
+      },
+      subscribe() {
+        return () => {};
+      },
+    },
   };
   const dialogs = {
     notify(payload) {
@@ -138,6 +158,9 @@ function mountPanel({
         state = next;
         paint();
       },
+      onOpenLogs(source) {
+        openLogs.push(source);
+      },
     });
   }
 
@@ -153,6 +176,9 @@ function mountPanel({
     appliedSnapshots,
     notices,
     confirms,
+    logArms,
+    logDisarms,
+    openLogs,
     savedPositions: () => savedPositions.slice(),
     state: () => state,
     restore() {
@@ -276,9 +302,11 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   assert.equal(panel.matchSets.some((patch) => patch.away_bots_active && patch.away_bots_active[0] === true), true);
 
   panel.parent.querySelectorAll('button[title="Ver logs"]')[0].click();
-  const note = panel.parent.querySelector(".game-ctrl-log-note");
-  assert.equal(note.textContent.includes("logger"), true);
-  assert.equal(note.textContent.includes("Editor tab"), true);
+  await flush();
+  assert.equal(panel.parent.querySelector(".game-ctrl-log-note"), null);
+  assert.equal(panel.state().home[0].logs, true);
+  assert.deepEqual(panel.logArms, ["home/1"]);
+  assert.deepEqual(panel.openLogs, ["home/1"]);
 
   panel.button("Save positions").click();
   panel.button("Apply").click();
@@ -450,7 +478,10 @@ test("positions and match stay locked while the server is down; active switch pe
   assert.equal(panel.state().home[0].running, false);
   assert.equal(panel.state().home[0].logs, true);
   assert.equal(panel.matchSets.some((patch) => patch.home_bots_active && patch.home_bots_active[0] === false), true);
-  assert.equal(panel.parent.querySelector(".game-ctrl-log-note") !== null, true);
+  assert.equal(panel.parent.querySelector(".game-ctrl-log-note"), null);
+  assert.deepEqual(panel.logArms, ["home/1"]);
+  assert.deepEqual(panel.openLogs, ["home/1"]);
+  assert.equal(Object.hasOwn(panel.matchSets.find((patch) => patch.home_bots_active) || {}, "home_bots_logs"), false);
 
   panel.button("Starts the Game Server").click();
   await flush();

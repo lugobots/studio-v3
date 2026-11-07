@@ -183,3 +183,39 @@ test("studio api client subscribe delivers status updates", () => {
   ws.emit({ running: false });
   assert.equal(updates.length, 2);
 });
+
+test("studio api client arms logs and subscribe delivers snapshot lines", async () => {
+  FakeWebSocket.instances = [];
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({
+      url,
+      method: options.method || "GET",
+      body: options.body ? JSON.parse(options.body) : null,
+    });
+    return respond(200, { status: "OK", source: "home/1", armed: true });
+  };
+
+  await studioApi.armLogSource("home/1", fetchImpl);
+  await studioApi.disarmLogSource("home/1", fetchImpl);
+  assert.match(calls[0].url, /\/api\/logs\/arm$/);
+  assert.deepEqual(calls[0].body, { source: "home/1" });
+  assert.match(calls[1].url, /\/api\/logs\/disarm$/);
+
+  const batches = [];
+  const unsubscribe = studioApi.subscribeProcessLogs(
+    (payload) => {
+      batches.push(payload);
+    },
+    { WebSocketImpl: FakeWebSocket },
+  );
+  const ws = FakeWebSocket.instances[0];
+  assert.match(ws.url, /\/api\/logs\/ws$/);
+  ws.emit({ lines: [{ source: "home/1", text: "hi", ts: 1 }] });
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].lines[0].text, "hi");
+  unsubscribe();
+  assert.equal(ws.closed, true);
+  ws.emit({ lines: [{ source: "home/1", text: "late", ts: 2 }] });
+  assert.equal(batches.length, 1);
+});

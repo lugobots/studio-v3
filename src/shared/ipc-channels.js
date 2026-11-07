@@ -52,6 +52,13 @@ const CHANNELS = {
     stop: "bot:stop",
     status: "bot:status",
   },
+  logs: {
+    arm: "logs:arm",
+    disarm: "logs:disarm",
+    watch: "logs:watch",
+    unwatch: "logs:unwatch",
+    event: "logs:event",
+  },
   publish: {
     bot: "publish:bot",
   },

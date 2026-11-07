@@ -3,6 +3,7 @@ import { applyTelemetry } from "../lib/telemetry.js";
 import { reportResult } from "../lib/dialogs.js";
 import { applyMatchConfig, initialGameControls, reduceGameControl } from "./game-controls.js";
 import { renderGameControls, startServerFromApi } from "./game-controls-view.js";
+import { createProcessLogDrawer } from "./process-log-drawer.js";
 import { gameFrontendUrl } from "./game-frontend.js";
 import { editorUrl } from "./editor-url.js";
 
@@ -45,6 +46,11 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   outlet.append(frame);
 
   const state = { tab: "workspace", view: "tab", config: null, game: initialGameControls() };
+  // Mount once; the drawer redraws itself on subscribe/filter/clear without a full frame paint.
+  const processLogs = createProcessLogDrawer({ host });
+  const processLogHost = document.createElement("div");
+  processLogHost.className = "process-log-drawer-host";
+  processLogs.mount(processLogHost);
 
   function applyServerStatus(payload) {
     const running = statusRunning(payload);
@@ -139,6 +145,9 @@ export function renderAppFrame(outlet, { host, dialogs }) {
         onChange(next) {
           state.game = next;
           paint();
+        },
+        onOpenLogs(source) {
+          processLogs.openDrawer(source);
         },
       });
     }
@@ -285,7 +294,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       }
     });
     meta.append(path, form);
-    section.append(panel, meta);
+    section.append(panel, processLogHost, meta);
     return section;
   }
 

@@ -1,8 +1,10 @@
 package procreg
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -115,6 +117,19 @@ func StartShell(dir, command string, extraEnv map[string]string) (*Child, error)
 	return StartCmd(cmd)
 }
 
+// StartShellCapture is StartShell with stdout/stderr line capture. onLine is
+// called for each newline-delimited chunk from either stream. When onLine is
+// nil, behavior matches StartShell (inherit container fds).
+func StartShellCapture(dir, command string, extraEnv map[string]string, onLine func(string)) (*Child, error) {
+	if onLine == nil {
+		return StartShell(dir, command, extraEnv)
+	}
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Dir = dir
+	cmd.Env = mergeEnv(extraEnv)
+	return StartCmdCapture(cmd, onLine)
+}
+
 // StartCmd starts cmd in a new process group and returns a Child ready to
 // register. The caller owns registration with the Registry.
 func StartCmd(cmd *exec.Cmd) (*Child, error) {
@@ -129,6 +144,41 @@ func StartCmd(cmd *exec.Cmd) (*Child, error) {
 		return nil, err
 	}
 	return &Child{Cmd: cmd, ProcessGroup: true}, nil
+}
+
+// StartCmdCapture starts cmd like StartCmd but pipes stdout and stderr into
+// onLine (one call per scanned line). Pipes are attached before Start.
+func StartCmdCapture(cmd *exec.Cmd, onLine func(string)) (*Child, error) {
+	if cmd == nil {
+		return nil, errors.New("procreg: StartCmdCapture(nil)")
+	}
+	if onLine == nil {
+		return StartCmd(cmd)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("procreg: stdout pipe: %w", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("procreg: stderr pipe: %w", err)
+	}
+	child, err := StartCmd(cmd)
+	if err != nil {
+		return nil, err
+	}
+	go scanLines(stdout, onLine)
+	go scanLines(stderr, onLine)
+	return child, nil
+}
+
+func scanLines(r io.Reader, onLine func(string)) {
+	scanner := bufio.NewScanner(r)
+	// Bots can emit long JSON-ish lines; raise the default token limit a bit.
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		onLine(scanner.Text())
+	}
 }
 
 func mergeEnv(extra map[string]string) []string {

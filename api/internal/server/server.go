@@ -56,6 +56,13 @@ func NewMuxWith(deps Deps) http.Handler {
 	if deps.Logs == nil {
 		deps.Logs = newProcessLogHub()
 	}
+	// Share the session-only hub with concrete producers when they have no sink yet.
+	if local, ok := deps.Starter.(*gameruntime.Local); ok && local.Logs == nil {
+		local.Logs = deps.Logs
+	}
+	if mgr, ok := deps.Match.(*bots.Manager); ok && mgr.Logs == nil {
+		mgr.Logs = deps.Logs
+	}
 	api := &api{
 		starter:  deps.Starter,
 		match:    deps.Match,

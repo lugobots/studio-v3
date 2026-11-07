@@ -173,6 +173,72 @@ h1 {
   min-width: 12rem;
 }
 
+.process-log-drawer-host {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.process-log-drawer {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border, #2a2f3a);
+  background: #10141c;
+  color: #e8eaed;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.process-log-drawer-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+}
+
+.process-log-drawer-toggle,
+.process-log-drawer-clear,
+.process-log-filter-chip {
+  appearance: none;
+  border: 1px solid #3a4150;
+  background: #1a2030;
+  color: inherit;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.process-log-filter-chip[aria-pressed="true"] {
+  border-color: #60a5f8;
+  background: #243044;
+}
+
+.process-log-drawer-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1;
+}
+
+.process-log-drawer-body {
+  max-height: 180px;
+  overflow: auto;
+  padding: 0 10px 8px;
+}
+
+.process-log-line {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.process-log-line-source {
+  color: #93c5fd;
+}
+
 .editor-placeholder {
   flex: 1;
   display: flex;

@@ -21,11 +21,13 @@ const {
 } = require("./gate");
 const { createLevel1Ready } = require("./level1-ready");
 const { createServerControls } = require("./server-controls");
+const { createLogControls } = require("./log-controls");
 const { describeStartup } = require("../../../shared/startup-progress");
 
 let webContents = null;
 let watchGeneration = 0;
 let serverControls = null;
+let logControls = null;
 let lastProgress = describeStartup({
   phase: "docker",
   detail: "Checking Docker and your bot.",
@@ -400,6 +402,35 @@ function watchServerStatus(options) {
   return getServerControls().watch(options);
 }
 
+function getLogControls() {
+  if (!logControls) {
+    logControls = createLogControls({
+      ensureReady: ensureStudioApiReady,
+      api: studioApi,
+      sendLines: (payload) => {
+        webContents?.send(CHANNELS.logs.event, payload);
+      },
+    });
+  }
+  return logControls;
+}
+
+async function armLogs(source) {
+  return getLogControls().arm(source);
+}
+
+async function disarmLogs(source) {
+  return getLogControls().disarm(source);
+}
+
+function watchProcessLogs(options) {
+  return getLogControls().watch(options);
+}
+
+function unwatchProcessLogs() {
+  return getLogControls().unwatch();
+}
+
 async function startMatch(options = {}) {
   const level1 = await level1Ready.awaitReady();
   if (!level1.ok) {
@@ -547,6 +578,10 @@ module.exports = {
   stopServer,
   serverStatus,
   watchServerStatus,
+  armLogs,
+  disarmLogs,
+  watchProcessLogs,
+  unwatchProcessLogs,
   startMatch,
   resetMatch,
   getPositions,

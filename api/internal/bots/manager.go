@@ -7,10 +7,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"studio-v3/api/internal/procreg"
 )
+
+// LogSink receives armed process-log lines (implemented by the Studio API hub).
+type LogSink interface {
+	Armed(source string) bool
+	Append(source, text string)
+}
 
 // defaultOpponentBinary is the in-container mount path where the Electron host
 // bind-mounts the extracted Level-1 binary. The API image does not ship this file;
@@ -51,6 +58,9 @@ type botHandle struct {
 // slots, registering each OS process with the process registry.
 type Manager struct {
 	Registry *procreg.Registry
+	// Logs, when set, captures stdout/stderr for slots whose hub source is armed
+	// at process start (home/N or away/N). Mid-run arming applies on next start.
+	Logs LogSink
 
 	// Optional test hooks. When nil, real shell/process helpers are used.
 	RunSync      func(dir, command string, env map[string]string) error
@@ -92,6 +102,11 @@ func AllSlots() []Slot {
 
 func slotKey(s Slot) string {
 	return fmt.Sprintf("%s/%d", s.Side, s.Number)
+}
+
+// slotLogSource maps a manager slot (HOME/3) to the process-log hub tag (home/3).
+func slotLogSource(s Slot) string {
+	return fmt.Sprintf("%s/%d", strings.ToLower(s.Side), s.Number)
 }
 
 // StartMatch prepares the player project (when needed) and launches only the
@@ -272,7 +287,7 @@ func (m *Manager) startOpponent(cfg Config, slot Slot) error {
 }
 
 func (m *Manager) launch(slot Slot, dir, command string, env map[string]string) error {
-	child, err := m.startProcessFn()(dir, command, env)
+	child, err := m.startSlotProcess(slot, dir, command, env)
 	if err != nil {
 		return err
 	}
@@ -282,6 +297,20 @@ func (m *Manager) launch(slot Slot, dir, command string, env map[string]string) 
 	}
 	m.bots[slotKey(slot)] = botHandle{id: id, child: child}
 	return nil
+}
+
+func (m *Manager) startSlotProcess(slot Slot, dir, command string, env map[string]string) (*procreg.Child, error) {
+	tag := slotLogSource(slot)
+	if m.Logs != nil && m.Logs.Armed(tag) {
+		// Capture path for the UI hub. Custom StartProcess hooks skip pipes
+		// (tests that override StartProcess are not exercising capture).
+		if m.StartProcess == nil {
+			return procreg.StartShellCapture(dir, command, env, func(line string) {
+				m.Logs.Append(tag, line)
+			})
+		}
+	}
+	return m.startProcessFn()(dir, command, env)
 }
 
 func (m *Manager) stopBotsLocked() {

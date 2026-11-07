@@ -305,7 +305,34 @@ async function toggleBotActive(state, onChange, host, dialogs, team, number) {
   }
 }
 
-export function renderGameControls(parent, { state, onChange, host, dialogs }) {
+async function toggleBotLogs(state, onChange, host, team, number, onOpenLogs) {
+  const index = Number(number) - 1;
+  const row = state[team]?.[index];
+  if (!row) {
+    return;
+  }
+  const nextOn = !row.logs;
+  const next = reduceGameControl(state, {
+    type: "set-bot",
+    team,
+    number,
+    control: "logs",
+  });
+  onChange(next);
+  const source = `${team}/${number}`;
+  if (nextOn) {
+    if (typeof host?.logs?.arm === "function") {
+      await host.logs.arm(source);
+    }
+    onOpenLogs?.(source);
+    return;
+  }
+  if (typeof host?.logs?.disarm === "function") {
+    await host.logs.disarm(source);
+  }
+}
+
+export function renderGameControls(parent, { state, onChange, host, dialogs, onOpenLogs }) {
   const root = document.createElement("div");
   root.className = "game-ctrl";
 
@@ -356,14 +383,8 @@ export function renderGameControls(parent, { state, onChange, host, dialogs }) {
   const play = document.createElement("div");
   play.className = "game-ctrl-play";
   play.style.opacity = state.serverRunning ? "1" : "0.3";
-  play.append(teamBlock("home", "Home", state, onChange, host, dialogs));
-  play.append(teamBlock("away", "Away", state, onChange, host, dialogs));
-  if (state.home.some((row) => row.logs) || state.away.some((row) => row.logs)) {
-    const note = document.createElement("div");
-    note.className = "game-ctrl-log-note";
-    note.textContent = "Open the terminal on the Editor tab and run logger to watch the logs";
-    play.append(note);
-  }
+  play.append(teamBlock("home", "Home", state, onChange, host, dialogs, onOpenLogs));
+  play.append(teamBlock("away", "Away", state, onChange, host, dialogs, onOpenLogs));
   play.append(positionsBlock(state, onChange, host, dialogs, playLocked));
   root.append(play);
 
@@ -392,7 +413,7 @@ export function renderGameControls(parent, { state, onChange, host, dialogs }) {
   return root;
 }
 
-function teamBlock(team, label, state, onChange, host, dialogs) {
+function teamBlock(team, label, state, onChange, host, dialogs, onOpenLogs) {
   const block = document.createElement("div");
   block.className = "bot_actions";
   block.append(heading(label));
@@ -424,7 +445,9 @@ function teamBlock(team, label, state, onChange, host, dialogs) {
       controlButton({
         title: "Ver logs",
         text: row.logs ? "X" : "📄",
-        onClick: () => dispatch(state, onChange, { type: "set-bot", team, number: player, control: "logs" }),
+        onClick: () => {
+          void toggleBotLogs(state, onChange, host, team, player, onOpenLogs);
+        },
       }),
     );
     list.append(line);

@@ -38,6 +38,9 @@ type Starter interface {
 type Local struct {
 	Registry *procreg.Registry
 	Logger   *zap.SugaredLogger
+	// Logs, when set, sinks game-server zap output into the process log hub
+	// while the "server" source is armed (live arm/disarm via level gate).
+	Logs LogSink
 
 	mu      sync.Mutex
 	started bool
@@ -111,6 +114,13 @@ func (l *Local) Start(ports Ports, settings MatchSettings) error {
 	cfg, err := ComposeConfiguration(ports, settings)
 	if err != nil {
 		return err
+	}
+	// Prefer a live-gated hub sink over Quiet/Nop so arming mid-session admits
+	// new server lines without restarting the embedded runtime.
+	if l.Logs != nil {
+		cfg.Quiet = false
+		cfg.VerboseLog = true
+		logger = newServerHubLogger(l.Logs)
 	}
 
 	frontMgr := srvmgr.NewManager(logger.Named("game-frontend"), managerStopTimeout)

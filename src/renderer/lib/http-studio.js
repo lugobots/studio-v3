@@ -2,6 +2,25 @@ function statusWsUrl(baseUrl) {
   return `${baseUrl.replace(/^http/, "ws")}/server/status/ws`;
 }
 
+function logsWsUrl(baseUrl) {
+  return `${baseUrl.replace(/^http/, "ws")}/logs/ws`;
+}
+
+function parseProcessLogPayload(raw) {
+  let data = raw;
+  if (typeof data === "string") {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+  if (!data || typeof data !== "object" || !Array.isArray(data.lines)) {
+    return null;
+  }
+  return { lines: data.lines };
+}
+
 function parseStatusPayload(raw) {
   let data = raw;
   if (typeof data === "string") {
@@ -236,6 +255,64 @@ export function createHttpStudio({
         } catch (error) {
           return { ok: false, error: error.message };
         }
+      },
+    },
+    logs: {
+      async arm(source) {
+        try {
+          return actionResult(await request("/logs/arm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ source }),
+          }));
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
+      },
+      async disarm(source) {
+        try {
+          return actionResult(await request("/logs/disarm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ source }),
+          }));
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
+      },
+      subscribe(callback) {
+        if (typeof callback !== "function") {
+          throw new TypeError("logs.subscribe requires a callback");
+        }
+        if (typeof WebSocketImpl !== "function") {
+          throw new Error("WebSocket is not available");
+        }
+        const ws = new WebSocketImpl(logsWsUrl(baseUrl));
+        const handleMessage = (event) => {
+          const payload = parseProcessLogPayload(event && event.data);
+          if (payload) {
+            callback(payload);
+          }
+        };
+        if (typeof ws.addEventListener === "function") {
+          ws.addEventListener("message", handleMessage);
+        } else {
+          ws.onmessage = handleMessage;
+        }
+        return () => {
+          if (typeof ws.removeEventListener === "function") {
+            ws.removeEventListener("message", handleMessage);
+          } else if (ws.onmessage === handleMessage) {
+            ws.onmessage = null;
+          }
+          if (typeof ws.close === "function") {
+            try {
+              ws.close();
+            } catch {
+              // ignore close errors on teardown
+            }
+          }
+        };
       },
     },
     publish: {

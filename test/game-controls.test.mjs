@@ -197,6 +197,12 @@ test("applyMatchConfig loads side, speed, opponent, golden skip, positions, and 
     home_bots_active: homeActive,
     away_bots_active: awayActive,
   });
+  assert.equal(Object.hasOwn(botActiveSettingsPatch(loaded), "home_bots_logs"), false);
+  assert.equal(Object.hasOwn(matchSettingsForApi(loaded), "server_logs"), false);
+  const withLogs = reduceGameControl(loaded, { type: "set-bot", team: "home", number: 1, control: "logs" });
+  assert.equal(withLogs.home[0].logs, true);
+  assert.deepEqual(botActiveSettingsPatch(withLogs).home_bots_active, homeActive);
+  assert.equal(Object.hasOwn(botActiveSettingsPatch(withLogs), "logs"), false);
   assert.deepEqual(matchSettingsForApi(loaded), {
     team_side: "away",
     skip_to_golden_goal: true,
