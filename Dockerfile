@@ -14,7 +14,16 @@ RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -ldflags="-w -s" -o /out/studi
 
 FROM alpine:3.20
 
-RUN mkdir -p /home/coder/project
+# Player bots prepare/start inside this container (python3 -m venv / go build / npm).
+# Keep these toolchains in the runtime image; do not rely on host or Studio V2 venvs.
+RUN apk add --no-cache \
+    ca-certificates \
+    python3 \
+    py3-pip \
+    go \
+    nodejs \
+    npm \
+  && mkdir -p /home/coder/project
 
 COPY --from=build /out/studio-v3-api /usr/local/bin/studio-v3-api
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

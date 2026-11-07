@@ -13,23 +13,23 @@ import {
   upsertPositionPreset,
 } from "../src/renderer/shell/game-controls.js";
 
-function stopped(rows) {
-  return rows.every((row) => row.active === false && row.running === false && row.logs === false);
+function idleActive(rows) {
+  return rows.every((row) => row.active === true && row.running === false && row.logs === false);
 }
 
-test("initial game controls are a stopped local match", () => {
+test("initial game controls are a stopped local match with all bots active", () => {
   const state = initialGameControls();
   assert.equal(state.serverRunning, false);
   assert.equal(state.home.length, 11);
   assert.equal(state.away.length, 11);
-  assert.equal(stopped(state.home), true);
-  assert.equal(stopped(state.away), true);
+  assert.equal(idleActive(state.home), true);
+  assert.equal(idleActive(state.away), true);
   assert.equal(state.side, "home");
   assert.equal(state.skipGolden, false);
   assert.equal(state.speed, "normal");
   assert.equal(state.opponent, "default");
   assert.deepEqual(state.positions, []);
-  assert.deepEqual(activeBotSlots(state), []);
+  assert.equal(activeBotSlots(state).length, 22);
 });
 
 test("active switch is desired-active; running is separate process state", () => {
@@ -37,23 +37,32 @@ test("active switch is desired-active; running is separate process state", () =>
   const server = reduceGameControl(initial, { type: "set-server-running", running: true });
   assert.equal(server.serverRunning, true);
   assert.equal(server.speed, initial.speed);
-  assert.equal(server.home[0].active, false);
+  assert.equal(server.home[0].active, true);
   assert.equal(server.home[0].running, false);
 
   const apiStop = reduceGameControl(server, { type: "set-server-running", running: false });
   assert.equal(apiStop.serverRunning, false);
 
-  const activated = reduceGameControl(server, {
+  const deactivatedOne = reduceGameControl(server, {
     type: "set-bot",
     team: "home",
     number: 2,
     control: "active",
   });
+  assert.equal(deactivatedOne.home[1].active, false);
+  assert.equal(deactivatedOne.home[1].running, false);
+  assert.equal(deactivatedOne.home[0].active, true);
+  assert.equal(deactivatedOne.away[1].active, true);
+  assert.equal(deactivatedOne.home[1].logs, false);
+
+  const activated = reduceGameControl(deactivatedOne, {
+    type: "set-bot",
+    team: "home",
+    number: 2,
+    control: "active",
+    active: true,
+  });
   assert.equal(activated.home[1].active, true);
-  assert.equal(activated.home[1].running, false);
-  assert.equal(activated.home[0].active, false);
-  assert.equal(activated.away[1].active, false);
-  assert.equal(activated.home[1].logs, false);
 
   const running = reduceGameControl(activated, {
     type: "set-bot",
@@ -96,9 +105,23 @@ test("active switch is desired-active; running is separate process state", () =>
 
 test("activeBotSlots lists only desired-active rows as HOME/AWAY slots", () => {
   let state = initialGameControls();
-  state = reduceGameControl(state, { type: "set-bot", team: "home", number: 1, control: "active" });
-  state = reduceGameControl(state, { type: "set-bot", team: "away", number: 11, control: "active" });
-  state = reduceGameControl(state, { type: "set-bot", team: "home", number: 5, control: "active" });
+  // Start from all-active defaults, then leave only HOME/1, HOME/5, AWAY/11 on.
+  for (let number = 1; number <= 11; number += 1) {
+    state = reduceGameControl(state, {
+      type: "set-bot",
+      team: "home",
+      number,
+      control: "active",
+      active: number === 1 || number === 5,
+    });
+    state = reduceGameControl(state, {
+      type: "set-bot",
+      team: "away",
+      number,
+      control: "active",
+      active: number === 11,
+    });
+  }
   state = reduceGameControl(state, {
     type: "set-bot",
     team: "home",

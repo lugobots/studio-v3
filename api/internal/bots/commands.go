@@ -63,10 +63,12 @@ func pythonPrepareCommands(projectRoot string) []string {
 	if pythonVenvPython(projectRoot) != "" {
 		return nil
 	}
+	// Host/Studio-V2 venvs often symlink to /usr/local/bin/python3.9 which is
+	// absent here; --clear replaces that broken tree with a container-local venv.
 	venv := filepath.Join(projectRoot, ".studio", "venv-lugo")
 	return []string{
 		fmt.Sprintf("mkdir -p %s", shellQuote(filepath.Join(projectRoot, ".studio"))),
-		fmt.Sprintf("python3 -m venv %s", shellQuote(venv)),
+		fmt.Sprintf("python3 -m venv --clear %s", shellQuote(venv)),
 		fmt.Sprintf("%s -m pip install --no-compile -r requirements.txt",
 			shellQuote(filepath.Join(venv, "bin", "python3"))),
 	}

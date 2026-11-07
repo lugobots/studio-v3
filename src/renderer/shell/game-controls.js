@@ -2,7 +2,9 @@ const SPEEDS = ["slow", "normal", "fast"];
 const OPPONENTS = ["default", "zombies", "statues", "kids", "defenses"];
 
 function rows() {
-  return Array.from({ length: 11 }, () => ({ active: false, running: false, logs: false }));
+  // Default all roster slots on so “Starts the match” launches a full 11v11
+  // unless the author toggles rows off.
+  return Array.from({ length: 11 }, () => ({ active: true, running: false, logs: false }));
 }
 
 function positionNames(saved) {
