@@ -51,6 +51,7 @@ export function mountDialogs(documentRef, controller = dialogs, onAction) {
     for (const notice of notices) {
       const item = documentRef.createElement("section");
       item.className = "notice";
+      item.dataset.noticeId = String(notice.id);
       const title = documentRef.createElement("strong");
       title.textContent = notice.title;
       const body = documentRef.createElement("p");
@@ -67,6 +68,10 @@ export function mountDialogs(documentRef, controller = dialogs, onAction) {
       const close = button("Dismiss", "button");
       close.addEventListener("click", () => controller.dismiss(notice.id));
       item.append(close);
+      const progress = documentRef.createElement("div");
+      progress.className = "notice-progress";
+      progress.setAttribute("aria-hidden", "true");
+      item.append(progress);
       stack.append(item);
     }
   }

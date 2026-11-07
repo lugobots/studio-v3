@@ -7,6 +7,7 @@ const path = require("node:path");
 const store = require("./store");
 const pkg = require("../../../../package.json");
 const { editorUrl, gameFrontendUrl } = require("../../../shared/ports");
+const studioApi = require("../studio-api");
 
 function filePath() {
   return store.settingsFile(app.getPath("appData"), process.platform);
@@ -14,20 +15,31 @@ function filePath() {
 
 function view(record) {
   const data = record.data;
+  // Studio API build version (e.g. "dev" or "v1.0.1"), not the V3 product generation.
+  const apiVersion = studioApi.apiVersion() || "dev";
   return {
     ...data,
     bot_paths: store.botPaths(data),
     projectCreated: store.projectReady(data, fs.existsSync),
     telemetryEnabled: store.telemetryEnabled(data),
+    appearance: store.appearance(data),
     debugMode: store.apiDebugEnabled(data),
     measurementId: process.env.STUDIO_GA_MEASUREMENT_ID || "",
     appVersion: pkg.version,
+    apiVersion,
+    studio_api_version: apiVersion,
     game_frontend_url: gameFrontendUrl(),
     editor_url: editorUrl(),
   };
 }
 
 async function get() {
+  // Refresh the Studio API build version from /api/health when the container is up.
+  try {
+    await studioApi.healthy();
+  } catch {
+    // Keep the last known / default "dev" label when health is unreachable.
+  }
   return view(store.read(filePath()));
 }
 

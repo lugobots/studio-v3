@@ -41,10 +41,32 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Last version string from a successful GET /api/health (null until known). */
+let cachedApiVersion = null;
+
+function rememberHealthVersion(body) {
+  if (body && typeof body.version === "string" && body.version) {
+    cachedApiVersion = body.version;
+  }
+}
+
+function apiVersion() {
+  return cachedApiVersion;
+}
+
+/** Test helper: clear the cached health version. */
+function resetApiVersionCache() {
+  cachedApiVersion = null;
+}
+
 async function healthy(fetchImpl) {
   try {
     const body = await request("/health", { method: "GET" }, fetchImpl);
-    return Boolean(body && body.status === "OK");
+    if (body && body.status === "OK") {
+      rememberHealthVersion(body);
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -54,7 +76,8 @@ async function waitUntilReady(fetchImpl, attempts = 20) {
   let last = "Studio API is not ready";
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      await request("/health", { method: "GET" }, fetchImpl);
+      const body = await request("/health", { method: "GET" }, fetchImpl);
+      rememberHealthVersion(body);
       return { ok: true };
     } catch (error) {
       last = error.message;
@@ -263,6 +286,8 @@ module.exports = {
   logsWsUrl,
   request,
   healthy,
+  apiVersion,
+  resetApiVersionCache,
   waitUntilReady,
   status,
   startServer,

@@ -16,6 +16,7 @@ import (
 
 	"studio-v3/api/internal/bots"
 	"studio-v3/api/internal/bottemplate"
+	"studio-v3/api/internal/buildinfo"
 	"studio-v3/api/internal/gameremote"
 	"studio-v3/api/internal/gameruntime"
 	"studio-v3/api/internal/procreg"
@@ -103,7 +104,10 @@ type api struct {
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":  "OK",
+		"version": buildinfo.Version,
+	})
 }
 
 func handleStudioStatus(w http.ResponseWriter, r *http.Request) {

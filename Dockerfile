@@ -1,16 +1,25 @@
-# Studio V3 API image (tag: lugobots/studio-v3-api:latest).
+# Studio V3 API image.
+# Development builds: docker build -t lugobots/studio-v3-api:latest .
+#   (VERSION defaults to "dev" in the binary.)
+# Release builds: inject and tag the same version string, e.g.
+#   docker build --build-arg VERSION=1.2.3 -t lugobots/studio-v3-api:1.2.3 .
 # Electron starts this container with command `api`
 # (see src/main/services/docker/args.js), mounts the bot at /home/coder/project,
 # and sets LUGO_STUDIO_API_PORT / LUGO_HOST_PROJECT_PATH.
 
 FROM golang:1.24-alpine AS build
 
+ARG VERSION=dev
+
 RUN apk add --no-cache git ca-certificates
 
 WORKDIR /src
 COPY api/ ./
 # Use vendored modules so the image build does not need GitHub auth for private deps.
-RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -ldflags="-w -s" -o /out/studio-v3-api ./cmd/api
+# VERSION is injected into buildinfo.Version (default "dev") for GET /api/health.
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor \
+  -ldflags="-w -s -X studio-v3/api/internal/buildinfo.Version=${VERSION}" \
+  -o /out/studio-v3-api ./cmd/api
 
 # Debian (glibc) runtime so `pip install` can use manylinux wheels for pinned
 # bot deps (grpcio/lugo4py). Alpine/musl forces a source build that fails.

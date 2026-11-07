@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"studio-v3/api/internal/bottemplate"
+	"studio-v3/api/internal/buildinfo"
 )
 
 func TestHealth(t *testing.T) {
@@ -27,6 +28,30 @@ func TestHealth(t *testing.T) {
 	}
 	if body["status"] != "OK" {
 		t.Fatalf("status = %#v", body["status"])
+	}
+	if body["version"] != "dev" {
+		t.Fatalf("version = %#v, want %q for default builds", body["version"], "dev")
+	}
+}
+
+func TestHealthReportsInjectedVersion(t *testing.T) {
+	prev := buildinfo.Version
+	buildinfo.Version = "1.2.3"
+	t.Cleanup(func() { buildinfo.Version = prev })
+
+	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	rec := httptest.NewRecorder()
+	NewMux().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["version"] != "1.2.3" {
+		t.Fatalf("version = %#v, want injected %q", body["version"], "1.2.3")
 	}
 }
 

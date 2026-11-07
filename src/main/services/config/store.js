@@ -251,6 +251,14 @@ function telemetryEnabled(data) {
 }
 
 /**
+ * Shell appearance preference in user.json (`appearance`).
+ * Only "light" selects light mode; missing/invalid values default to dark.
+ */
+function appearance(data) {
+  return data && data.appearance === "light" ? "light" : "dark";
+}
+
+/**
  * Persisted Studio API debug preference (user.json `debug_mode`).
  * Only boolean true is on. This does not arm game-server or per-bot capture.
  * The game frontend's live `debug_mode` event field is a different document.
@@ -323,6 +331,7 @@ module.exports = {
   matchPatch,
   matchSettingsForApi,
   telemetryEnabled,
+  appearance,
   apiDebugEnabled,
   projectReady,
   botPaths,

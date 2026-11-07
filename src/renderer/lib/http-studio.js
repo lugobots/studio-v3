@@ -87,6 +87,13 @@ export function createHttpStudio({
     return saved !== "off";
   }
 
+  function appearance() {
+    if (!storage) {
+      return "dark";
+    }
+    return storage.getItem("lugo-studio-appearance") === "light" ? "light" : "dark";
+  }
+
   return {
     host: "web",
     versions: { node: "", chrome: "", electron: "" },
@@ -99,18 +106,37 @@ export function createHttpStudio({
     },
     config: {
       async get() {
+        // Studio API build version (e.g. "dev" or "v1.0.1"), not the V3 product generation.
+        let apiVersion = "dev";
+        try {
+          const health = await request("/health");
+          if (health && typeof health.version === "string" && health.version) {
+            apiVersion = health.version;
+          }
+        } catch {
+          // Shell may load before the API is up; keep the development default.
+        }
         return {
           projectCreated: false,
           telemetryEnabled: telemetryEnabled(),
           telemetry_enabled: telemetryEnabled(),
+          appearance: appearance(),
           measurementId: "",
           appVersion: "web",
           app_version: "web",
+          apiVersion,
+          studio_api_version: apiVersion,
         };
       },
       async set(patch) {
         if (storage && Object.prototype.hasOwnProperty.call(patch, "telemetry_enabled")) {
           storage.setItem("lugo-studio-telemetry", patch.telemetry_enabled === false ? "off" : "on");
+        }
+        if (storage && Object.prototype.hasOwnProperty.call(patch, "appearance")) {
+          storage.setItem(
+            "lugo-studio-appearance",
+            patch.appearance === "light" ? "light" : "dark",
+          );
         }
         return this.get();
       },

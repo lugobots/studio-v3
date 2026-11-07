@@ -57,6 +57,33 @@ test("web adapter opens the shell when health and status succeed", async () => {
   assert.equal(next.route, "/main");
 });
 
+test("web adapter config.get forwards API health build version", async () => {
+  const studioDev = createHttpStudio({
+    fetchImpl: async (url) => {
+      assert.match(url, /\/health$/);
+      return respond(200, { status: "OK", version: "dev" });
+    },
+    storage: null,
+  });
+  const devConfig = await studioDev.config.get();
+  assert.equal(devConfig.apiVersion, "dev");
+  assert.equal(devConfig.studio_api_version, "dev");
+
+  const studioRelease = createHttpStudio({
+    fetchImpl: async () => respond(200, { status: "OK", version: "v1.0.1" }),
+    storage: null,
+  });
+  const releaseConfig = await studioRelease.config.get();
+  assert.equal(releaseConfig.apiVersion, "v1.0.1");
+
+  const studioMissing = createHttpStudio({
+    fetchImpl: async () => respond(200, { status: "OK" }),
+    storage: null,
+  });
+  const missingConfig = await studioMissing.config.get();
+  assert.equal(missingConfig.apiVersion, "dev");
+});
+
 test("web adapter treats stub server, match and publish calls as failures", async () => {
   const studio = createHttpStudio({
     fetchImpl: async () => respond(200, { implemented: false, message: "not implemented" }),

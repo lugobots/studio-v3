@@ -255,3 +255,51 @@ test("workspace omits project path publish strip and keeps game iframe across lo
 
   installed.restore();
 });
+
+test("bot active and log toggles keep game and editor iframes mounted", async () => {
+  const installed = installDocument();
+  const outlet = installed.document.createElement("div");
+  const session = createSession();
+  session.host.server.status = async () => ({ ok: true, running: true });
+  session.host.server.onStatus = () => () => {};
+  session.host.config.matchSet = async () => ({});
+  session.host.bot = {
+    async start() { return { ok: true }; },
+    async stop() { return { ok: true }; },
+  };
+  session.host.docker = {
+    async ensureEditor() { return { ok: true, url: "http://localhost:8082" }; },
+    async stopEditor() { return { ok: true }; },
+  };
+  const dialogs = { notify() {}, confirm() { return Promise.resolve(true); } };
+
+  renderAppFrame(outlet, { host: session.host, dialogs });
+  await flush();
+
+  buttonByText(outlet, "Open editor").click();
+  await flush();
+
+  const gameBefore = outlet.querySelector("#game_frame");
+  const editorBefore = outlet.querySelector("#editor_frame");
+  assert.ok(gameBefore);
+  assert.ok(editorBefore);
+  assert.equal(gameBefore.src, "http://localhost:8080");
+  assert.equal(editorBefore.src, "http://localhost:8082");
+
+  outlet.querySelector('button[title="Ver logs"]').click();
+  await flush();
+  assert.equal(outlet.querySelector("#game_frame"), gameBefore);
+  assert.equal(outlet.querySelector("#editor_frame"), editorBefore);
+  assert.equal(outlet.querySelector("#editor_frame").src, "http://localhost:8082");
+
+  const activeSwitch = outlet.querySelector(".bot-active-switch");
+  assert.ok(activeSwitch);
+  activeSwitch.click();
+  await flush();
+  assert.equal(outlet.querySelector("#game_frame"), gameBefore);
+  assert.equal(outlet.querySelector("#editor_frame"), editorBefore);
+  assert.equal(outlet.querySelector("#game_frame").src, "http://localhost:8080");
+  assert.equal(outlet.querySelector("#editor_frame").src, "http://localhost:8082");
+
+  installed.restore();
+});

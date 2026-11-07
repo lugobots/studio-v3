@@ -50,6 +50,21 @@ class FakeWebSocket {
 
 FakeWebSocket.instances = [];
 
+test("healthy caches API version from health response", async () => {
+  studioApi.resetApiVersionCache();
+  assert.equal(studioApi.apiVersion(), null);
+
+  const fetchDev = async () => respond(200, { status: "OK", version: "dev" });
+  assert.equal(await studioApi.healthy(fetchDev), true);
+  assert.equal(studioApi.apiVersion(), "dev");
+
+  const fetchRelease = async () => respond(200, { status: "OK", version: "1.2.3" });
+  assert.equal(await studioApi.healthy(fetchRelease), true);
+  assert.equal(studioApi.apiVersion(), "1.2.3");
+
+  studioApi.resetApiVersionCache();
+});
+
 test("studio api client posts server and match start routes", async () => {
   const calls = [];
   const fetchImpl = async (url, options = {}) => {

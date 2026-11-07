@@ -24,6 +24,19 @@ test("round-trip keeps unknown keys and defaults telemetry on", () => {
   assert.equal(store.telemetryEnabled(saved), false);
 });
 
+test("appearance defaults to dark and remembers light", () => {
+  assert.equal(store.appearance({}), "dark");
+  assert.equal(store.appearance({ appearance: "weird" }), "dark");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-appearance-"));
+  const file = store.settingsFile(dir, "linux");
+  store.write(file, store.applyPatch({}, { appearance: "light" }));
+  const saved = store.read(file).data;
+  assert.equal(saved.appearance, "light");
+  assert.equal(store.appearance(saved), "light");
+  store.write(file, store.applyPatch(saved, { appearance: "dark" }));
+  assert.equal(store.appearance(store.read(file).data), "dark");
+});
+
 test("a missing bot list is seeded from project_path", () => {
   assert.deepEqual(store.botPaths({ project_path: "/bots/demo" }), ["/bots/demo"]);
   assert.deepEqual(store.botPaths({ project_path: "" }), []);

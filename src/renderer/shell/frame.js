@@ -1,4 +1,5 @@
 import { PINNED, TABS, tabById } from "./model.js";
+import { applyAppearance, normalizeAppearance } from "../lib/appearance.js";
 import { applyTelemetry } from "../lib/telemetry.js";
 import { reportResult } from "../lib/dialogs.js";
 import { applyMatchConfig, initialGameControls, reduceGameControl } from "./game-controls.js";
@@ -60,14 +61,13 @@ export function renderAppFrame(outlet, { host, dialogs }) {
           state.config = await host.config.set({ debug_mode: false });
         }
         apiDebugApplied = false;
-        paint();
+        paintChrome();
       })();
       return;
     }
     if (source === "server") {
       if (state.game.serverLogs) {
-        state.game = reduceGameControl(state.game, { type: "toggle-server-logs" });
-        paint();
+        applyGameControlUpdate(reduceGameControl(state.game, { type: "toggle-server-logs" }));
       }
       return;
     }
@@ -79,13 +79,12 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     const number = match[2];
     const index = Number(number) - 1;
     if (state.game[team]?.[index]?.logs) {
-      state.game = reduceGameControl(state.game, {
+      applyGameControlUpdate(reduceGameControl(state.game, {
         type: "set-bot",
         team,
         number,
         control: "logs",
-      });
-      paint();
+      }));
     }
   }
 
@@ -171,6 +170,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
 
   async function refreshConfig() {
     state.config = await host.config.get();
+    applyAppearance(document, state.config?.appearance);
     paint();
     await syncApiDebug(state.config);
     if (state.view === "settings") {
@@ -194,7 +194,21 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     }
   }
 
-  function paint() {
+  /**
+   * Game-control updates that only change menu/control state must not rebuild
+   * the Workspace window (reparenting iframes reloads them in Chromium).
+   */
+  function applyGameControlUpdate(next) {
+    const mediaChanged = Boolean(state.game.serverRunning) !== Boolean(next.serverRunning);
+    state.game = next;
+    if (mediaChanged || state.view !== "tab" || state.tab !== "workspace") {
+      paint();
+      return;
+    }
+    paintChrome();
+  }
+
+  function paintChrome() {
     tabs.replaceChildren();
     for (const tab of TABS) {
       const button = document.createElement("button");
@@ -224,10 +238,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
         state: state.game,
         host,
         dialogs,
-        onChange(next) {
-          state.game = next;
-          paint();
-        },
+        onChange: applyGameControlUpdate,
         onOpenLogs(source) {
           processLogs.noteArmed(source);
           processLogs.openDrawer(source);
@@ -281,7 +292,21 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       });
       pinned.append(button);
     }
+    // Build version from the Studio API (compile-time), e.g. "dev" or "v1.0.1".
+    // This is not the "V3" product generation name.
+    const buildVersion = state.config?.apiVersion
+      || state.config?.studio_api_version
+      || "dev";
+    const versionLabel = document.createElement("p");
+    versionLabel.className = "side-menu-version";
+    versionLabel.dataset.studioVersion = buildVersion;
+    versionLabel.title = "Studio build version";
+    versionLabel.setAttribute("aria-label", `Studio build version ${buildVersion}`);
+    versionLabel.textContent = buildVersion;
+    pinned.append(versionLabel);
+  }
 
+  function paintWindow() {
     windowPane.replaceChildren();
     if (state.view === "profile") {
       windowPane.append(profileView(state.config));
@@ -292,6 +317,11 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     } else {
       windowPane.append(workspaceView(state.config));
     }
+  }
+
+  function paint() {
+    paintChrome();
+    paintWindow();
   }
 
   function profileView(config) {
@@ -312,6 +342,24 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     section.dataset.window = "settings";
     const title = document.createElement("h1");
     title.textContent = "Settings";
+    const themeLabel = document.createElement("label");
+    themeLabel.className = "setting-row";
+    const themeSelect = document.createElement("select");
+    themeSelect.setAttribute("aria-label", "Appearance");
+    for (const value of ["dark", "light"]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value === "dark" ? "Dark" : "Light";
+      themeSelect.append(option);
+    }
+    themeSelect.value = normalizeAppearance(config?.appearance);
+    themeSelect.addEventListener("change", async () => {
+      const appearance = normalizeAppearance(themeSelect.value);
+      state.config = await host.config.set({ appearance });
+      applyAppearance(document, state.config?.appearance ?? appearance);
+      paint();
+    });
+    themeLabel.append(document.createTextNode("Appearance "), themeSelect);
     const label = document.createElement("label");
     label.className = "setting-row";
     const input = document.createElement("input");
@@ -342,7 +390,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       }
     });
     debugLabel.append(debugInput, document.createTextNode(" Studio API debug logging"));
-    section.append(title, label, debugLabel);
+    section.append(title, themeLabel, label, debugLabel);
     return section;
   }
 

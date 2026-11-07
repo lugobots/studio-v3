@@ -219,6 +219,104 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   installed.restore();
 });
 
+test("lateral menu shows build version under Settings on every tab", async () => {
+  const installed = installDocument();
+  const outlet = installed.document.createElement("div");
+  const host = {
+    config: {
+      async get() {
+        return {
+          project_path: "/tmp/bot",
+          telemetryEnabled: false,
+          apiVersion: "v1.0.1",
+          game_frontend_url: "http://localhost:8080",
+          editor_url: "http://localhost:8082",
+        };
+      },
+    },
+    server: {
+      async start() { return { ok: true }; },
+      async status() { return { ok: true, body: { running: false } }; },
+      onStatus() { return () => {}; },
+    },
+    match: { async start() { return { ok: true }; } },
+    publish: { async bot() { return { ok: true }; } },
+    docker: {
+      async status() { return { imagePresent: false, image: "studio" }; },
+      async pull() { return { ok: true }; },
+    },
+  };
+  renderAppFrame(outlet, {
+    host,
+    dialogs: { notify() {}, confirm() { return Promise.resolve(false); } },
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  const pinned = outlet.querySelector(".side-menu-pinned");
+  assert.ok(pinned);
+  const settings = pinned.querySelectorAll("button").find((button) => button.textContent === "Settings");
+  const version = pinned.querySelector(".side-menu-version");
+  assert.ok(settings);
+  assert.ok(version);
+  assert.equal(version.textContent, "v1.0.1");
+  assert.equal(version.title, "Studio build version");
+  assert.equal(version.dataset.studioVersion || version.getAttribute("data-studio-version"), "v1.0.1");
+  const pinnedKids = pinned.children;
+  const settingsIndex = [...pinnedKids].indexOf(settings);
+  const versionIndex = [...pinnedKids].indexOf(version);
+  assert.equal(versionIndex, settingsIndex + 1);
+
+  outlet.querySelectorAll("button").find((button) => button.textContent === "Runtime").click();
+  const versionAfter = outlet.querySelector(".side-menu-version");
+  assert.ok(versionAfter);
+  assert.equal(versionAfter.textContent, "v1.0.1");
+  const settingsAfter = outlet.querySelector(".side-menu-pinned")
+    .querySelectorAll("button")
+    .find((button) => button.textContent === "Settings");
+  assert.ok(settingsAfter);
+  installed.restore();
+});
+
+test("lateral menu defaults build version to dev when config omits it", async () => {
+  const installed = installDocument();
+  const outlet = installed.document.createElement("div");
+  const host = {
+    config: {
+      async get() {
+        return {
+          project_path: "/tmp/bot",
+          telemetryEnabled: false,
+          game_frontend_url: "http://localhost:8080",
+          editor_url: "http://localhost:8082",
+        };
+      },
+    },
+    server: {
+      async start() { return { ok: true }; },
+      async status() { return { ok: true, body: { running: false } }; },
+      onStatus() { return () => {}; },
+    },
+    match: { async start() { return { ok: true }; } },
+    publish: { async bot() { return { ok: true }; } },
+    docker: {
+      async status() { return { imagePresent: false, image: "studio" }; },
+      async pull() { return { ok: true }; },
+    },
+  };
+  renderAppFrame(outlet, {
+    host,
+    dialogs: { notify() {}, confirm() { return Promise.resolve(false); } },
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  const version = outlet.querySelector(".side-menu-version");
+  assert.ok(version);
+  assert.equal(version.textContent, "dev");
+  installed.restore();
+});
+
 test("workspace loads match config from app settings into game controls", async () => {
   const installed = installDocument();
   const outlet = installed.document.createElement("div");
