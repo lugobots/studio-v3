@@ -46,8 +46,48 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   outlet.append(frame);
 
   const state = { tab: "workspace", view: "tab", config: null, game: initialGameControls() };
+
+  function syncArmUiAfterDrawerClose(source) {
+    if (source === "api") {
+      void (async () => {
+        if (typeof host?.config?.set === "function") {
+          state.config = await host.config.set({ debug_mode: false });
+        }
+        apiDebugApplied = false;
+        paint();
+      })();
+      return;
+    }
+    if (source === "server") {
+      if (state.game.serverLogs) {
+        state.game = reduceGameControl(state.game, { type: "toggle-server-logs" });
+        paint();
+      }
+      return;
+    }
+    const match = /^(home|away)\/(\d+)$/.exec(source || "");
+    if (!match) {
+      return;
+    }
+    const team = match[1];
+    const number = match[2];
+    const index = Number(number) - 1;
+    if (state.game[team]?.[index]?.logs) {
+      state.game = reduceGameControl(state.game, {
+        type: "set-bot",
+        team,
+        number,
+        control: "logs",
+      });
+      paint();
+    }
+  }
+
   // Mount once; the drawer redraws itself on subscribe/filter/clear without a full frame paint.
-  const processLogs = createProcessLogDrawer({ host });
+  const processLogs = createProcessLogDrawer({
+    host,
+    onSourceDisarmed: syncArmUiAfterDrawerClose,
+  });
   const processLogHost = document.createElement("div");
   processLogHost.className = "process-log-drawer-host";
   processLogs.mount(processLogHost);
@@ -109,6 +149,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
         }
       }
       apiDebugApplied = true;
+      processLogs.noteArmed("api");
       return;
     }
     if (apiDebugApplied === true && typeof host?.logs?.disarm === "function") {
@@ -118,6 +159,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       }
     }
     apiDebugApplied = false;
+    processLogs.noteDisarmed("api");
   }
 
   async function refreshConfig() {
@@ -180,7 +222,11 @@ export function renderAppFrame(outlet, { host, dialogs }) {
           paint();
         },
         onOpenLogs(source) {
+          processLogs.noteArmed(source);
           processLogs.openDrawer(source);
+        },
+        onLogsDisarmed(source) {
+          processLogs.noteDisarmed(source);
         },
       });
     }
@@ -265,6 +311,12 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     debugInput.addEventListener("change", async () => {
       state.config = await host.config.set({ debug_mode: debugInput.checked });
       await syncApiDebug(state.config);
+      if (debugInput.checked) {
+        processLogs.noteArmed("api");
+        processLogs.openDrawer("api");
+      } else {
+        processLogs.noteDisarmed("api");
+      }
     });
     debugLabel.append(debugInput, document.createTextNode(" Studio API debug logging"));
     section.append(title, label, debugLabel);

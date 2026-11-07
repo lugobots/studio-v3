@@ -4,6 +4,11 @@ const FILTER_ALL = "all";
 
 const WAITING_FOR_LOGS = "Waiting for logs…";
 
+const NEAR_BOTTOM_PX = 40;
+
+const PERF_ALERT_TEXT =
+  "Multiple log streams are open. Watching more than two at once can hurt Studio performance.";
+
 function sourceLabel(source) {
   if (source === "api") {
     return "API";
@@ -19,19 +24,46 @@ function sourceLabel(source) {
   return source || "unknown";
 }
 
+function sourceSortKey(source) {
+  if (source === "api") {
+    return "0:api";
+  }
+  if (source === "server") {
+    return "1:server";
+  }
+  const match = /^(home|away)\/(\d+)$/.exec(source || "");
+  if (match) {
+    const side = match[1] === "home" ? "2" : "3";
+    return `${side}:${Number(match[2]).toString().padStart(2, "0")}`;
+  }
+  return `9:${source || ""}`;
+}
+
+function compareSources(a, b) {
+  return sourceSortKey(a).localeCompare(sourceSortKey(b));
+}
+
 /**
  * Collapsible multiplexed process-log drawer under the Workspace game panel.
  * Opening starts a host subscription; closing unsubscribes.
  */
-export function createProcessLogDrawer({ host } = {}) {
+export function createProcessLogDrawer({ host, onSourceDisarmed } = {}) {
   let open = false;
   let filter = FILTER_ALL;
   let lines = [];
+  let armedSources = new Set();
+  let followTail = true;
   let unsubscribe = null;
   let listeners = new Set();
 
   function snapshot() {
-    return { open, filter, lines: lines.slice() };
+    return {
+      open,
+      filter,
+      lines: lines.slice(),
+      armedSources: [...armedSources].sort(compareSources),
+      followTail,
+    };
   }
 
   function notify() {
@@ -75,10 +107,37 @@ export function createProcessLogDrawer({ host } = {}) {
     unsubscribe = null;
   }
 
+  function noteArmed(source) {
+    if (!source || source === FILTER_ALL) {
+      return;
+    }
+    if (armedSources.has(source)) {
+      return;
+    }
+    armedSources.add(source);
+    notify();
+  }
+
+  function noteDisarmed(source) {
+    if (!source || !armedSources.has(source)) {
+      return;
+    }
+    armedSources.delete(source);
+    if (filter === source) {
+      filter = FILTER_ALL;
+      followTail = true;
+    }
+    notify();
+  }
+
   function openDrawer(focusSource) {
     open = true;
+    followTail = true;
     if (focusSource) {
       filter = focusSource;
+      if (focusSource !== FILTER_ALL) {
+        armedSources.add(focusSource);
+      }
     }
     ensureSubscribe();
     notify();
@@ -100,12 +159,36 @@ export function createProcessLogDrawer({ host } = {}) {
 
   function setFilter(next) {
     filter = next || FILTER_ALL;
+    followTail = true;
     notify();
   }
 
   function clear() {
     lines = [];
     notify();
+  }
+
+  async function closeSource(source) {
+    if (!source || source === FILTER_ALL) {
+      return;
+    }
+    if (typeof host?.logs?.disarm === "function") {
+      const result = await host.logs.disarm(source);
+      if (result && result.ok === false) {
+        return;
+      }
+    }
+    armedSources.delete(source);
+    if (filter === source) {
+      filter = FILTER_ALL;
+      followTail = true;
+    }
+    notify();
+    try {
+      onSourceDisarmed?.(source);
+    } catch {
+      // ignore listener errors
+    }
   }
 
   function visibleLines() {
@@ -116,16 +199,12 @@ export function createProcessLogDrawer({ host } = {}) {
   }
 
   function filterOptions() {
-    const seen = new Set();
     const options = [{ id: FILTER_ALL, label: "All" }];
-    for (const line of lines) {
-      if (!line?.source || seen.has(line.source)) {
-        continue;
-      }
-      seen.add(line.source);
-      options.push({ id: line.source, label: sourceLabel(line.source) });
+    const ordered = [...armedSources].sort(compareSources);
+    for (const id of ordered) {
+      options.push({ id, label: sourceLabel(id) });
     }
-    if (filter !== FILTER_ALL && !seen.has(filter)) {
+    if (filter !== FILTER_ALL && !armedSources.has(filter)) {
       options.push({ id: filter, label: sourceLabel(filter) });
     }
     return options;
@@ -161,23 +240,78 @@ export function createProcessLogDrawer({ host } = {}) {
     const body = document.createElement("div");
     body.className = "process-log-drawer-body";
     body.hidden = !open;
-    root.append(header, body);
+    // Real DOM scrollHeight/clientHeight are read-only; only scrollTop is writable.
+    body.scrollTop = 0;
+    body.addEventListener("scroll", () => {
+      const remaining = body.scrollHeight - body.scrollTop - body.clientHeight;
+      followTail = remaining <= NEAR_BOTTOM_PX;
+    });
+
+    const alert = document.createElement("div");
+    alert.className = "process-log-perf-alert";
+    alert.setAttribute("role", "status");
+    alert.textContent = PERF_ALERT_TEXT;
+    alert.hidden = true;
+
+    root.append(header, body, alert);
+
+    let lastFilterIds = null;
+
+    function optionIdsKey(options) {
+      return options.map((option) => option.id).join("\0");
+    }
 
     function paintFilters() {
-      filters.replaceChildren();
-      for (const option of filterOptions()) {
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "process-log-filter-chip";
-        chip.dataset.source = option.id;
-        chip.setAttribute("aria-pressed", String(option.id === filter));
-        chip.textContent = option.label;
-        chip.addEventListener("click", () => setFilter(option.id));
-        filters.append(chip);
+      const options = filterOptions();
+      const key = optionIdsKey(options);
+      if (key !== lastFilterIds) {
+        lastFilterIds = key;
+        filters.replaceChildren();
+        for (const option of options) {
+          const chip = document.createElement("div");
+          chip.className = "process-log-filter-chip";
+          chip.dataset.source = option.id;
+          chip.setAttribute("aria-pressed", String(option.id === filter));
+          chip.setAttribute("role", "button");
+          chip.tabIndex = 0;
+
+          const label = document.createElement("span");
+          label.className = "process-log-filter-label";
+          label.textContent = option.label;
+          chip.append(label);
+
+          if (option.id !== FILTER_ALL) {
+            const closeBtn = document.createElement("button");
+            closeBtn.type = "button";
+            closeBtn.className = "process-log-filter-close";
+            closeBtn.setAttribute("aria-label", `Close ${option.label} logs`);
+            closeBtn.textContent = "×";
+            closeBtn.addEventListener("click", (event) => {
+              event?.stopPropagation?.();
+              event?.preventDefault?.();
+              void closeSource(option.id);
+            });
+            chip.append(closeBtn);
+          }
+
+          chip.addEventListener("click", (event) => {
+            if (event?.target?.className === "process-log-filter-close") {
+              return;
+            }
+            setFilter(option.id);
+          });
+          filters.append(chip);
+        }
+        return;
+      }
+
+      for (const chip of filters.querySelectorAll(".process-log-filter-chip")) {
+        chip.setAttribute("aria-pressed", String(chip.dataset.source === filter));
       }
     }
 
     function paintBody() {
+      const previousScrollTop = Number(body.scrollTop) || 0;
       body.replaceChildren();
       const visible = visibleLines();
       if (!visible.length) {
@@ -185,6 +319,11 @@ export function createProcessLogDrawer({ host } = {}) {
         empty.className = "process-log-waiting";
         empty.textContent = WAITING_FOR_LOGS;
         body.append(empty);
+        if (followTail) {
+          body.scrollTop = 0;
+        } else {
+          body.scrollTop = previousScrollTop;
+        }
         return;
       }
       for (const line of visible) {
@@ -200,6 +339,15 @@ export function createProcessLogDrawer({ host } = {}) {
         row.append(tag, text);
         body.append(row);
       }
+      if (followTail) {
+        body.scrollTop = body.scrollHeight;
+      } else {
+        body.scrollTop = previousScrollTop;
+      }
+    }
+
+    function paintAlert() {
+      alert.hidden = !(open && armedSources.size > 2);
     }
 
     function paint() {
@@ -210,6 +358,7 @@ export function createProcessLogDrawer({ host } = {}) {
       body.hidden = !open;
       paintFilters();
       paintBody();
+      paintAlert();
     }
 
     paint();
@@ -227,6 +376,9 @@ export function createProcessLogDrawer({ host } = {}) {
     toggle,
     setFilter,
     clear,
+    closeSource,
+    noteArmed,
+    noteDisarmed,
     mount,
     onChange,
     snapshot,
@@ -235,4 +387,11 @@ export function createProcessLogDrawer({ host } = {}) {
   };
 }
 
-export { sourceLabel, FILTER_ALL, MAX_DRAWER_LINES, WAITING_FOR_LOGS };
+export {
+  sourceLabel,
+  FILTER_ALL,
+  MAX_DRAWER_LINES,
+  WAITING_FOR_LOGS,
+  PERF_ALERT_TEXT,
+  NEAR_BOTTOM_PX,
+};

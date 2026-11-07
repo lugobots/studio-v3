@@ -305,21 +305,23 @@ async function toggleBotActive(state, onChange, host, dialogs, team, number) {
   }
 }
 
-async function toggleServerLogs(state, onChange, host) {
+async function toggleServerLogs(state, onChange, host, onOpenLogs, onLogsDisarmed) {
   const nextOn = !state.serverLogs;
   onChange(reduceGameControl(state, { type: "toggle-server-logs" }));
   if (nextOn) {
     if (typeof host?.logs?.arm === "function") {
       await host.logs.arm("server");
     }
+    onOpenLogs?.("server");
     return;
   }
   if (typeof host?.logs?.disarm === "function") {
     await host.logs.disarm("server");
   }
+  onLogsDisarmed?.("server");
 }
 
-async function toggleBotLogs(state, onChange, host, team, number, onOpenLogs) {
+async function toggleBotLogs(state, onChange, host, team, number, onOpenLogs, onLogsDisarmed) {
   const index = Number(number) - 1;
   const row = state[team]?.[index];
   if (!row) {
@@ -344,9 +346,10 @@ async function toggleBotLogs(state, onChange, host, team, number, onOpenLogs) {
   if (typeof host?.logs?.disarm === "function") {
     await host.logs.disarm(source);
   }
+  onLogsDisarmed?.(source);
 }
 
-export function renderGameControls(parent, { state, onChange, host, dialogs, onOpenLogs }) {
+export function renderGameControls(parent, { state, onChange, host, dialogs, onOpenLogs, onLogsDisarmed }) {
   const root = document.createElement("div");
   root.className = "game-ctrl";
 
@@ -375,7 +378,7 @@ export function renderGameControls(parent, { state, onChange, host, dialogs, onO
     pressed: Boolean(state.serverLogs),
     text: state.serverLogs ? "X" : "📄",
     onClick: () => {
-      void toggleServerLogs(state, onChange, host);
+      void toggleServerLogs(state, onChange, host, onOpenLogs, onLogsDisarmed);
     },
   }));
   root.append(server);
@@ -405,8 +408,8 @@ export function renderGameControls(parent, { state, onChange, host, dialogs, onO
   const play = document.createElement("div");
   play.className = "game-ctrl-play";
   play.style.opacity = state.serverRunning ? "1" : "0.3";
-  play.append(teamBlock("home", "Home", state, onChange, host, dialogs, onOpenLogs));
-  play.append(teamBlock("away", "Away", state, onChange, host, dialogs, onOpenLogs));
+  play.append(teamBlock("home", "Home", state, onChange, host, dialogs, onOpenLogs, onLogsDisarmed));
+  play.append(teamBlock("away", "Away", state, onChange, host, dialogs, onOpenLogs, onLogsDisarmed));
   play.append(positionsBlock(state, onChange, host, dialogs, playLocked));
   root.append(play);
 
@@ -435,7 +438,7 @@ export function renderGameControls(parent, { state, onChange, host, dialogs, onO
   return root;
 }
 
-function teamBlock(team, label, state, onChange, host, dialogs, onOpenLogs) {
+function teamBlock(team, label, state, onChange, host, dialogs, onOpenLogs, onLogsDisarmed) {
   const block = document.createElement("div");
   block.className = "bot_actions";
   block.append(heading(label));
@@ -468,7 +471,7 @@ function teamBlock(team, label, state, onChange, host, dialogs, onOpenLogs) {
         title: "Ver logs",
         text: row.logs ? "X" : "📄",
         onClick: () => {
-          void toggleBotLogs(state, onChange, host, team, player, onOpenLogs);
+          void toggleBotLogs(state, onChange, host, team, player, onOpenLogs, onLogsDisarmed);
         },
       }),
     );

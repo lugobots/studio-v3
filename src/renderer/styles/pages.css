@@ -198,7 +198,8 @@ h1 {
 
 .process-log-drawer-toggle,
 .process-log-drawer-clear,
-.process-log-filter-chip {
+.process-log-filter-chip,
+.process-log-filter-close {
   appearance: none;
   border: 1px solid #3a4150;
   background: #1a2030;
@@ -208,9 +209,28 @@ h1 {
   cursor: pointer;
 }
 
+.process-log-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .process-log-filter-chip[aria-pressed="true"] {
   border-color: #60a5f8;
   background: #243044;
+}
+
+.process-log-filter-close {
+  border: none;
+  background: transparent;
+  padding: 0 2px;
+  line-height: 1;
+  font-size: 14px;
+  color: #9aa3b2;
+}
+
+.process-log-filter-close:hover {
+  color: #f87171;
 }
 
 .process-log-drawer-filters {
@@ -224,6 +244,15 @@ h1 {
   max-height: 180px;
   overflow: auto;
   padding: 0 10px 8px;
+}
+
+.process-log-perf-alert {
+  border-top: 1px solid #5b3b1a;
+  background: #2a1c0e;
+  color: #fbbf24;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 12px;
 }
 
 .process-log-waiting {

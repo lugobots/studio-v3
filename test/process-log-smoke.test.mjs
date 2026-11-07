@@ -115,11 +115,25 @@ test("process log smoke: defaults stay quiet, arming shows tagged lines, and rel
   assert.equal(buttonByText(outlet, "Show logs").textContent, "Show logs");
 
   serverLogs().click();
+  await flush();
+  assert.deepEqual(session.arms, ["server"]);
+  assert.equal(session.streaming(), true);
+  assert.equal(
+    outlet.querySelectorAll(".process-log-filter-chip").find((node) => node.dataset.source === "server")
+      ?.getAttribute("aria-pressed"),
+    "true",
+  );
+
   verLogs().click();
   await flush();
   assert.deepEqual(session.arms, ["server", "home/1"]);
   assert.equal(session.streaming(), true);
   assert.equal(buttonByText(outlet, "Hide logs") !== undefined, true);
+  assert.equal(
+    outlet.querySelectorAll(".process-log-filter-chip").find((node) => node.dataset.source === "home/1")
+      ?.getAttribute("aria-pressed"),
+    "true",
+  );
 
   session.push([
     { source: "server", text: "server-line", ts: 1 },
@@ -169,6 +183,42 @@ test("process log smoke: defaults stay quiet, arming shows tagged lines, and rel
   assert.equal(reloadedOutlet.querySelector('button[title="Ver logs"]').textContent, "📄");
   assert.equal(reloaded.subscriptions(), 0);
   reloadedDoc.restore();
+});
+
+test("closing a log tab disarms the source and syncs Ver logs off while keeping the drawer open", async () => {
+  const installed = installDocument();
+  const outlet = installed.document.createElement("div");
+  const session = createSession();
+  const dialogs = { notify() {}, confirm() { return Promise.resolve(false); } };
+
+  renderAppFrame(outlet, { host: session.host, dialogs });
+  await flush();
+
+  outlet.querySelector('button[title="Server logs"]').click();
+  outlet.querySelector('button[title="Ver logs"]').click();
+  await flush();
+  assert.equal(outlet.querySelector('button[title="Ver logs"]').textContent, "X");
+  assert.equal(outlet.querySelector('button[title="Server logs"]').getAttribute("aria-pressed"), "true");
+
+  const homeChip = outlet
+    .querySelectorAll(".process-log-filter-chip")
+    .find((node) => node.dataset.source === "home/1");
+  homeChip.querySelector(".process-log-filter-close").click();
+  await flush();
+
+  assert.ok(session.disarms.includes("home/1"));
+  assert.equal(outlet.querySelector('button[title="Ver logs"]').textContent, "📄");
+  assert.equal(outlet.querySelector('button[title="Server logs"]').getAttribute("aria-pressed"), "true");
+  assert.equal(buttonByText(outlet, "Hide logs") !== undefined, true);
+  assert.equal(
+    outlet.querySelectorAll(".process-log-filter-chip").some((node) => node.dataset.source === "home/1"),
+    false,
+  );
+  assert.ok(
+    outlet.querySelectorAll(".process-log-filter-chip").find((node) => node.dataset.source === "server"),
+  );
+
+  installed.restore();
 });
 
 test("workspace omits project path publish strip and keeps game iframe across log toggles", async () => {

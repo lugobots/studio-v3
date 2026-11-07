@@ -105,6 +105,11 @@ function createNode(tag) {
     placeholder: "",
     checked: false,
     disabled: false,
+    hidden: false,
+    scrollTop: 0,
+    scrollHeight: 0,
+    clientHeight: 0,
+    tabIndex: 0,
     setAttribute(name, value) {
       this.attributes[name] = String(value);
       if (name === "id") {
@@ -129,11 +134,18 @@ function createNode(tag) {
         node.parentElement = this;
         this.children.push(node);
       }
+      if (String(this.className || "").includes("process-log-drawer-body")) {
+        this.clientHeight = this.clientHeight || 180;
+        this.scrollHeight = Math.max(this.clientHeight, this.children.length * 20);
+      }
     },
     replaceChildren(...nodes) {
       this.children = [];
       if (nodes.length) {
         this.append(...nodes);
+      } else if (String(this.className || "").includes("process-log-drawer-body")) {
+        this.clientHeight = this.clientHeight || 180;
+        this.scrollHeight = this.clientHeight;
       }
     },
     addEventListener(type, fn) {
@@ -141,8 +153,19 @@ function createNode(tag) {
     },
     click() {
       for (const fn of this.listeners.click || []) {
-        fn({ preventDefault() {}, target: this });
+        fn({
+          preventDefault() {},
+          stopPropagation() {},
+          target: this,
+        });
       }
+    },
+    remove() {
+      if (!this.parentElement) {
+        return;
+      }
+      this.parentElement.children = this.parentElement.children.filter((child) => child !== this);
+      this.parentElement = null;
     },
     querySelectorAll(selector) {
       return queryAll(this, selector);
