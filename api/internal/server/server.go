@@ -34,6 +34,7 @@ type Deps struct {
 	Registry *procreg.Registry
 	Starter  gameruntime.Starter
 	Match    bots.Starter
+	Logs     *processLogHub // optional; tests inject a shared hub
 }
 
 // NewMux returns the Studio V3 API HTTP handler with default deps.
@@ -52,11 +53,15 @@ func NewMuxWith(deps Deps) http.Handler {
 	if deps.Match == nil {
 		deps.Match = bots.New(deps.Registry)
 	}
+	if deps.Logs == nil {
+		deps.Logs = newProcessLogHub()
+	}
 	api := &api{
 		starter:  deps.Starter,
 		match:    deps.Match,
 		registry: deps.Registry,
 		status:   newStatusHub(),
+		logs:     deps.Logs,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", handleHealth)
@@ -74,6 +79,9 @@ func NewMuxWith(deps Deps) http.Handler {
 	mux.HandleFunc("POST /api/team/{side}/bots/{number}", api.handleBotStart)
 	mux.HandleFunc("DELETE /api/team/{side}/bots/{number}", api.handleBotStop)
 	mux.HandleFunc("GET /api/team/{side}/bots/{number}", api.handleBotStatus)
+	mux.HandleFunc("POST /api/logs/arm", api.handleProcessLogArm)
+	mux.HandleFunc("POST /api/logs/disarm", api.handleProcessLogDisarm)
+	mux.HandleFunc("GET /api/logs/ws", api.handleProcessLogWS)
 	return mux
 }
 
@@ -82,6 +90,7 @@ type api struct {
 	match        bots.Starter
 	registry     *procreg.Registry
 	status       *statusHub
+	logs         *processLogHub
 	startMu      sync.Mutex
 	lastSettings gameruntime.MatchSettings // last applied while server was down / on start
 }
