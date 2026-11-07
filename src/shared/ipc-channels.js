@@ -5,6 +5,8 @@ const CHANNELS = {
     status: "docker:status",
     pull: "docker:pull",
     progress: "docker:progress",
+    ensureEditor: "docker:ensure-editor",
+    stopEditor: "docker:stop-editor",
   },
   config: {
     get: "config:get",

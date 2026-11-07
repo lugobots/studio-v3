@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld("studio", {
   docker: {
     status: () => ipcRenderer.invoke(CHANNELS.docker.status),
     pull: () => ipcRenderer.invoke(CHANNELS.docker.pull),
+    ensureEditor: () => ipcRenderer.invoke(CHANNELS.docker.ensureEditor),
+    stopEditor: () => ipcRenderer.invoke(CHANNELS.docker.stopEditor),
     onProgress: (callback) => subscribe(CHANNELS.docker.progress, callback),
   },
   config: {

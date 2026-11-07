@@ -2,6 +2,7 @@
 
 const DEFAULTS = {
   image: "lugobots/studio-v3-api:latest",
+  // Separate optional helper (see lugo-vs-code/IMAGE.md). Override with LUGO_VS_CODE_IMAGE.
   editorImage: "lugobots/vs-code-for-lugo:latest",
   containerName: "lugo-studio-v3",
   editorContainerName: "lugo-studio-v3-editor",

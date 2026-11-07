@@ -107,6 +107,11 @@ test("ipc channels expose match config get/set and bot lifecycle", () => {
   assert.equal(CHANNELS.bot.status, "bot:status");
 });
 
+test("ipc channels expose on-demand editor start and stop", () => {
+  assert.equal(CHANNELS.docker.ensureEditor, "docker:ensure-editor");
+  assert.equal(CHANNELS.docker.stopEditor, "docker:stop-editor");
+});
+
 test("server controls start posts current match settings payload", async () => {
   const apiCalls = [];
   const controls = createServerControls({

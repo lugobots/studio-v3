@@ -118,9 +118,24 @@ function createNode(tag) {
       if (name === "title") {
         this.title = String(value);
       }
+      if (name === "src") {
+        this.src = String(value);
+      }
+      if (name === "hidden") {
+        this.hidden = true;
+      }
     },
     getAttribute(name) {
       return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null;
+    },
+    removeAttribute(name) {
+      delete this.attributes[name];
+      if (name === "hidden") {
+        this.hidden = false;
+      }
+      if (name === "src" && Object.prototype.hasOwnProperty.call(this, "src")) {
+        delete this.src;
+      }
     },
     append(...nodes) {
       for (const node of nodes) {

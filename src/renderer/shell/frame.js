@@ -45,7 +45,13 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   frame.append(menu, workspace);
   outlet.append(frame);
 
-  const state = { tab: "workspace", view: "tab", config: null, game: initialGameControls() };
+  const state = {
+    tab: "workspace",
+    view: "tab",
+    config: null,
+    game: initialGameControls(),
+    editor: { open: false, starting: false, ready: false, error: "" },
+  };
 
   function syncArmUiAfterDrawerClose(source) {
     if (source === "api") {
@@ -93,6 +99,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   processLogs.mount(processLogHost);
   // Reuse across paint() so log toggles / control refreshes do not reload the match frontend.
   let gameFrame = null;
+  let editorFrame = null;
 
   function applyServerStatus(payload) {
     const running = statusRunning(payload);
@@ -229,6 +236,24 @@ export function renderAppFrame(outlet, { host, dialogs }) {
           processLogs.noteDisarmed(source);
         },
       });
+      const editorToggle = document.createElement("button");
+      editorToggle.type = "button";
+      editorToggle.className = "menu-item";
+      editorToggle.dataset.action = state.editor.open ? "close-editor" : "open-editor";
+      editorToggle.disabled = Boolean(state.editor.starting);
+      editorToggle.textContent = state.editor.open
+        ? state.editor.starting
+          ? "Starting editor…"
+          : "Close editor"
+        : "Open editor";
+      editorToggle.addEventListener("click", () => {
+        if (state.editor.open) {
+          void closeEditor();
+        } else {
+          void openEditor();
+        }
+      });
+      actions.append(editorToggle);
     }
     for (const action of tab.actions) {
       const button = document.createElement("button");
@@ -264,8 +289,6 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       windowPane.append(settingsView(state.config));
     } else if (state.tab === "runtime") {
       windowPane.append(runtimeView());
-    } else if (state.tab === "editor") {
-      windowPane.append(editorView(state.config));
     } else {
       windowPane.append(workspaceView(state.config));
     }
@@ -357,10 +380,110 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     }
   }
 
+  function ensureEditorFrame() {
+    if (editorFrame) {
+      return editorFrame;
+    }
+    editorFrame = document.createElement("iframe");
+    editorFrame.className = "editor-frame";
+    editorFrame.id = "editor_frame";
+    editorFrame.title = "Editor";
+    editorFrame.allow = "clipboard-read; clipboard-write";
+    return editorFrame;
+  }
+
+  function hideEditorFrame(frame) {
+    frame.hidden = true;
+    frame.setAttribute("aria-hidden", "true");
+    clearGameFrameSrc(frame);
+  }
+
+  function showEditorFrame(frame, url) {
+    frame.hidden = false;
+    if (typeof frame.removeAttribute === "function") {
+      frame.removeAttribute("hidden");
+      frame.removeAttribute("aria-hidden");
+    } else if (frame.attributes) {
+      delete frame.attributes.hidden;
+      delete frame.attributes["aria-hidden"];
+    }
+    const currentSrc = frame.getAttribute("src") || frame.src || "";
+    if (currentSrc !== url) {
+      frame.src = url;
+    }
+  }
+
+  async function openEditor() {
+    if (state.editor.open && (state.editor.ready || state.editor.starting)) {
+      return;
+    }
+    state.editor = { open: true, starting: true, ready: false, error: "" };
+    paint();
+    if (typeof host?.docker?.ensureEditor !== "function") {
+      state.editor = {
+        open: true,
+        starting: false,
+        ready: false,
+        error: "Editor controls are only available in the desktop app",
+      };
+      paint();
+      return;
+    }
+    try {
+      const result = await host.docker.ensureEditor();
+      if (!result?.ok) {
+        state.editor = {
+          open: true,
+          starting: false,
+          ready: false,
+          error: result?.error || "Could not start the editor",
+        };
+        paint();
+        return;
+      }
+      state.editor = {
+        open: true,
+        starting: false,
+        ready: true,
+        error: "",
+        url: result.url || state.config?.editor_url || editorUrl(),
+      };
+      paint();
+    } catch (error) {
+      state.editor = {
+        open: true,
+        starting: false,
+        ready: false,
+        error: error?.message || String(error),
+      };
+      paint();
+    }
+  }
+
+  async function closeEditor() {
+    state.editor = { open: false, starting: false, ready: false, error: "" };
+    if (editorFrame) {
+      hideEditorFrame(editorFrame);
+    }
+    paint();
+    if (typeof host?.docker?.stopEditor === "function") {
+      try {
+        await host.docker.stopEditor();
+      } catch {
+        // Teardown is best-effort; Workspace stays usable without the helper.
+      }
+    }
+  }
+
   function workspaceView(config) {
     const section = document.createElement("section");
     section.dataset.window = "workspace";
-    section.className = "workspace-main";
+    section.className = state.editor.open
+      ? "workspace-main workspace-main--editor-open"
+      : "workspace-main";
+
+    const split = document.createElement("div");
+    split.className = state.editor.open ? "workspace-split" : "workspace-split workspace-split--game-only";
 
     const panel = document.createElement("div");
     panel.className = "game-panel";
@@ -398,32 +521,35 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       panel.append(overlay, frame);
     }
 
-    section.append(panel, processLogHost);
-    return section;
-  }
+    split.append(panel);
 
-  function editorView(config) {
-    const section = document.createElement("section");
-    section.dataset.window = "editor";
-    section.className = "editor-main";
-    const url = config?.editor_url || editorUrl();
-    section.dataset.editorUrl = url;
+    if (state.editor.open) {
+      const editorPanel = document.createElement("div");
+      editorPanel.className = "editor-panel";
+      const url = state.editor.url || config?.editor_url || editorUrl();
+      editorPanel.dataset.editorUrl = url;
 
-    const placeholder = document.createElement("div");
-    placeholder.className = "editor-placeholder";
-    placeholder.textContent = "editor not started";
+      if (state.editor.ready) {
+        const edFrame = ensureEditorFrame();
+        showEditorFrame(edFrame, url);
+        editorPanel.append(edFrame);
+      } else {
+        if (editorFrame) {
+          hideEditorFrame(editorFrame);
+        }
+        const placeholder = document.createElement("div");
+        placeholder.className = "editor-placeholder";
+        placeholder.textContent = state.editor.starting
+          ? "Starting editor…"
+          : state.editor.error || "Editor unavailable";
+        editorPanel.append(placeholder);
+      }
+      split.append(editorPanel);
+    } else if (editorFrame) {
+      hideEditorFrame(editorFrame);
+    }
 
-    // Reserve the iframe placement for a later change. Do not set src — that would
-    // load code-server and imply the editor container is running.
-    const frame = document.createElement("iframe");
-    frame.className = "editor-frame";
-    frame.id = "editor_frame";
-    frame.title = "Editor";
-    frame.hidden = true;
-    frame.setAttribute("aria-hidden", "true");
-    frame.dataset.src = url;
-
-    section.append(placeholder, frame);
+    section.append(split, processLogHost);
     return section;
   }
 

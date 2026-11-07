@@ -79,11 +79,16 @@ test("workspace wiring hits API for server, match, and reset; locked settings an
         return () => {};
       },
     };
+    let editorStops = 0;
     studio.docker = {
       ...studio.docker,
       async ensureEditor() {
         editorStarts += 1;
-        throw new Error("Editor UI must not start the editor container");
+        return { ok: true, url: "http://localhost:8082" };
+      },
+      async stopEditor() {
+        editorStops += 1;
+        return { ok: true };
       },
     };
 
@@ -176,21 +181,26 @@ test("workspace wiring hits API for server, match, and reset; locked settings an
     assert.equal(buttonByTitle(outlet, "Starts the match").disabled, true);
     assert.equal(buttonByTitle(outlet, "Zombies mode").disabled, false);
 
-    outlet.querySelectorAll("button").find((button) => button.textContent === "Editor").click();
+    assert.equal(outlet.querySelectorAll("button").some((button) => button.textContent === "Editor"), false);
+    assert.equal(editorStarts, 0);
+    assert.equal(outlet.querySelector("#editor_frame"), null);
+
+    outlet.querySelectorAll("button").find((button) => button.textContent === "Open editor").click();
     await flush();
-    const editorPane = outlet.querySelector(".editor-main");
-    assert.ok(editorPane);
-    assert.equal(editorPane.dataset.editorUrl, "http://localhost:8082");
-    const placeholder = outlet.querySelector(".editor-placeholder");
-    assert.ok(placeholder);
-    assert.equal(placeholder.textContent, "editor not started");
+    assert.equal(editorStarts, 1);
+    assert.ok(outlet.querySelector(".workspace-main--editor-open"));
+    assert.ok(outlet.querySelector(".game-panel"));
+    assert.ok(outlet.querySelector(".editor-panel"));
     const editorFrame = outlet.querySelector("#editor_frame");
     assert.ok(editorFrame);
-    assert.equal(editorFrame.src, undefined);
-    assert.equal(editorFrame.getAttribute("src"), null);
-    assert.equal(editorFrame.dataset.src, "http://localhost:8082");
-    assert.equal(editorFrame.hidden, true);
-    assert.equal(editorStarts, 0);
+    assert.equal(editorFrame.src, "http://localhost:8082");
+    assert.equal(Boolean(editorFrame.hidden), false);
+
+    outlet.querySelectorAll("button").find((button) => button.textContent === "Close editor").click();
+    await flush();
+    assert.equal(editorStops, 1);
+    assert.equal(outlet.querySelector(".editor-panel"), null);
+    assert.equal(outlet.querySelector("#editor_frame")?.src, undefined);
 
     installed.restore();
   } finally {

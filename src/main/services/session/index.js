@@ -23,6 +23,7 @@ const { createLevel1Ready } = require("./level1-ready");
 const { createServerControls } = require("./server-controls");
 const { createLogControls } = require("./log-controls");
 const { describeStartup } = require("../../../shared/startup-progress");
+const { editorUrl } = require("../../../shared/ports");
 
 let webContents = null;
 let watchGeneration = 0;
@@ -185,6 +186,35 @@ async function startApi(saved) {
   }
   startWatch(paths.host);
   return { ok: true, route: "/api-loading" };
+}
+
+/**
+ * On-demand VS Code helper: start the separate editor container for the open bot.
+ * Must not be called from shell-enter / openRuntime auto-start.
+ */
+async function startEditor() {
+  const saved = await config.get();
+  const paths = launchPaths(saved);
+  if (!paths.host) {
+    return { ok: false, error: "Open a bot project before starting the editor" };
+  }
+  const started = await docker.ensureEditor(paths.host);
+  if (!started.ok) {
+    return { ok: false, error: started.error || "Could not start the editor" };
+  }
+  const ready = await docker.waitEditorReady({ url: editorUrl() });
+  if (!ready.ok) {
+    return {
+      ok: false,
+      error: ready.error || "Editor did not become reachable",
+      url: ready.url || editorUrl(),
+    };
+  }
+  return { ok: true, url: ready.url || editorUrl() };
+}
+
+async function stopEditor() {
+  return docker.stopEditor();
 }
 
 async function next() {
@@ -591,4 +621,6 @@ module.exports = {
   botStatus,
   publish,
   projectStatus,
+  startEditor,
+  stopEditor,
 };

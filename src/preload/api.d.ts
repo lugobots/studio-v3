@@ -41,6 +41,8 @@ export interface StudioApi {
   docker: {
     status: () => Promise<DockerStatus>;
     pull: () => Promise<DockerStatus>;
+    ensureEditor: () => Promise<{ ok: boolean; url?: string; error?: string }>;
+    stopEditor: () => Promise<{ ok: boolean; error?: string }>;
     onProgress: (callback: (payload: unknown) => void) => () => void;
   };
   config: {

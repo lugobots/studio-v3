@@ -93,6 +93,8 @@ export function createHttpStudio({
     docker: {
       status: async () => desktopOnly(),
       pull: async () => desktopOnly(),
+      ensureEditor: async () => desktopOnly(),
+      stopEditor: async () => desktopOnly(),
       onProgress: () => () => {},
     },
     config: {

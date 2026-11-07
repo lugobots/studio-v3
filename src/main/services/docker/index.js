@@ -4,6 +4,7 @@ const { execFile, spawn } = require("node:child_process");
 const { CHANNELS } = require("../../../shared/ipc-channels");
 const { DEFAULTS, imageFrom } = require("../../../shared/ports");
 const { editorRunArgs, runArgs } = require("./args");
+const { waitEditorReady } = require("./editor-ready");
 const { ensureLevel1Binary } = require("./level1");
 const { removeOk, stopStudioContainers } = require("./stop");
 
@@ -215,6 +216,7 @@ module.exports = {
   containerIsRunning,
   ensureContainer,
   ensureEditor,
+  waitEditorReady,
   stopContainer,
   stopEditor,
   recentLogs,

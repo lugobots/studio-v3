@@ -5,11 +5,6 @@ export const TABS = [
     actions: [],
   },
   {
-    id: "editor",
-    label: "Editor",
-    actions: [],
-  },
-  {
     id: "runtime",
     label: "Runtime",
     actions: [{ id: "image", label: "Studio image" }],

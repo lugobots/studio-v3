@@ -126,8 +126,7 @@ h1 {
   overflow: auto;
 }
 
-.app-window:has(> .workspace-main),
-.app-window:has(> .editor-main) {
+.app-window:has(> .workspace-main) {
   padding: 0;
   overflow: hidden;
 }
@@ -136,23 +135,56 @@ h1 {
   width: 100%;
 }
 
-.workspace-main,
-.editor-main {
+.workspace-main {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
 }
 
-.game-panel {
+.workspace-split {
   flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+  min-width: 0;
+}
+
+.workspace-split--game-only .game-panel {
+  flex: 1;
+}
+
+.workspace-main--editor-open .game-panel,
+.workspace-main--editor-open .editor-panel {
+  flex: 1 1 50%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.game-panel,
+.editor-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 
+.editor-panel {
+  border-left: 1px solid var(--border, #2a2f3a);
+  background: #0b0d12;
+}
+
+.editor-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  color: #c5c9d3;
+  text-align: center;
+}
+
 .workspace-main .game-frame,
-.editor-main .editor-frame {
+.workspace-main .editor-frame {
   flex: 1;
   width: 100%;
   min-height: 0;
