@@ -88,9 +88,40 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     }
   }
 
+  let apiDebugApplied = null;
+
+  function apiDebugOn(config) {
+    return Boolean(config && (config.debugMode === true || config.debug_mode === true));
+  }
+
+  async function syncApiDebug(config) {
+    const on = apiDebugOn(config);
+    if (apiDebugApplied === on) {
+      return;
+    }
+    if (on) {
+      if (typeof host?.logs?.arm === "function") {
+        const result = await host.logs.arm("api");
+        if (result && result.ok === false) {
+          return;
+        }
+      }
+      apiDebugApplied = true;
+      return;
+    }
+    if (apiDebugApplied === true && typeof host?.logs?.disarm === "function") {
+      const result = await host.logs.disarm("api");
+      if (result && result.ok === false) {
+        return;
+      }
+    }
+    apiDebugApplied = false;
+  }
+
   async function refreshConfig() {
     state.config = await host.config.get();
     paint();
+    await syncApiDebug(state.config);
     if (state.view === "settings") {
       applyTelemetry(document, {
         telemetryEnabled: state.config.telemetryEnabled,
@@ -223,7 +254,18 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       });
     });
     label.append(input, document.createTextNode(" Send usage data to Google Analytics"));
-    section.append(title, label);
+    const debugLabel = document.createElement("label");
+    debugLabel.className = "setting-row";
+    const debugInput = document.createElement("input");
+    debugInput.type = "checkbox";
+    debugInput.setAttribute("aria-label", "Studio API debug logging");
+    debugInput.checked = apiDebugOn(config);
+    debugInput.addEventListener("change", async () => {
+      state.config = await host.config.set({ debug_mode: debugInput.checked });
+      await syncApiDebug(state.config);
+    });
+    debugLabel.append(debugInput, document.createTextNode(" Studio API debug logging"));
+    section.append(title, label, debugLabel);
     return section;
   }
 

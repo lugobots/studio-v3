@@ -19,6 +19,7 @@ function view(record) {
     bot_paths: store.botPaths(data),
     projectCreated: store.projectReady(data, fs.existsSync),
     telemetryEnabled: store.telemetryEnabled(data),
+    debugMode: store.apiDebugEnabled(data),
     measurementId: process.env.STUDIO_GA_MEASUREMENT_ID || "",
     appVersion: pkg.version,
     game_frontend_url: gameFrontendUrl(),

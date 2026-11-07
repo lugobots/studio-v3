@@ -250,6 +250,15 @@ function telemetryEnabled(data) {
   return data.telemetry_enabled !== false;
 }
 
+/**
+ * Persisted Studio API debug preference (user.json `debug_mode`).
+ * Only boolean true is on. This does not arm game-server or per-bot capture.
+ * The game frontend's live `debug_mode` event field is a different document.
+ */
+function apiDebugEnabled(data) {
+  return Boolean(data && data.debug_mode === true);
+}
+
 function projectReady(data, existsSync) {
   if (!data || typeof data.project_path !== "string" || data.project_path.length === 0) {
     return false;
@@ -314,6 +323,7 @@ module.exports = {
   matchPatch,
   matchSettingsForApi,
   telemetryEnabled,
+  apiDebugEnabled,
   projectReady,
   botPaths,
   rememberBot,

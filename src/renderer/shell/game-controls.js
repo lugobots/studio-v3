@@ -52,6 +52,7 @@ function positionNames(saved) {
 export function initialGameControls() {
   return {
     serverRunning: false,
+    serverLogs: false,
     home: rows(),
     away: rows(),
     side: "home",
@@ -65,6 +66,7 @@ export function initialGameControls() {
 function copy(state) {
   return {
     serverRunning: state.serverRunning,
+    serverLogs: Boolean(state.serverLogs),
     home: state.home.map((row) => ({
       active: Boolean(row.active),
       running: Boolean(row.running),
@@ -244,6 +246,11 @@ export function reduceGameControl(state, action) {
 
   if (action.type === "set-server-running") {
     next.serverRunning = Boolean(action.running);
+    return next;
+  }
+
+  if (action.type === "toggle-server-logs") {
+    next.serverLogs = !state.serverLogs;
     return next;
   }
 

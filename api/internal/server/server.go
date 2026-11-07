@@ -89,7 +89,7 @@ func NewMuxWith(deps Deps) http.Handler {
 	mux.HandleFunc("POST /api/logs/arm", api.handleProcessLogArm)
 	mux.HandleFunc("POST /api/logs/disarm", api.handleProcessLogDisarm)
 	mux.HandleFunc("GET /api/logs/ws", api.handleProcessLogWS)
-	return mux
+	return withAPIDebug(api, mux)
 }
 
 type api struct {

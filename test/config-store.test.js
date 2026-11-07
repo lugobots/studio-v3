@@ -283,6 +283,38 @@ test("existing Level-1 image keys are preserved on read and write", () => {
   assert.equal(saved.bot_setup_image, "lugobots/bot-setup");
 });
 
+test("api debug preference round-trips in user.json and stays out of match settings", () => {
+  assert.equal(store.apiDebugEnabled({}), false);
+  assert.equal(store.apiDebugEnabled({ debug_mode: false }), false);
+  assert.equal(store.apiDebugEnabled({ debug_mode: "true" }), false);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-api-debug-"));
+  const file = store.settingsFile(dir, "linux");
+  store.write(file, { project_path: "/bots/demo", debug_mode: true, custom_flag: true });
+  const saved = store.read(file).data;
+  assert.equal(saved.debug_mode, true);
+  assert.equal(saved.custom_flag, true);
+  assert.equal(store.apiDebugEnabled(saved), true);
+
+  const off = store.applyPatch(saved, { debug_mode: false });
+  store.write(file, off);
+  const reread = store.read(file).data;
+  assert.equal(reread.debug_mode, false);
+  assert.equal(store.apiDebugEnabled(reread), false);
+  assert.equal(reread.project_path, "/bots/demo");
+
+  const match = store.matchSettingsForApi({ ...saved, debug_mode: true });
+  assert.deepEqual(match, {
+    team_side: "home",
+    skip_to_golden_goal: false,
+    game_speed: "normal",
+    opponent_mode: "default",
+  });
+  assert.equal(Object.prototype.hasOwnProperty.call(match, "debug_mode"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(match, "server_logs"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(match, "home_bots_active"), false);
+});
+
 test("resolved Level-1 image:tag uses bot_level_1_version from user.json", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-level1-resolved-"));
   const file = store.settingsFile(dir, "linux");

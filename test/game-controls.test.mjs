@@ -22,6 +22,7 @@ function idleActive(rows) {
 test("initial game controls are a stopped local match with all bots active", () => {
   const state = initialGameControls();
   assert.equal(state.serverRunning, false);
+  assert.equal(state.serverLogs, false);
   assert.equal(state.home.length, 11);
   assert.equal(state.away.length, 11);
   assert.equal(idleActive(state.home), true);
@@ -32,6 +33,30 @@ test("initial game controls are a stopped local match with all bots active", () 
   assert.equal(state.opponent, "default");
   assert.deepEqual(state.positions, []);
   assert.equal(activeBotSlots(state).length, 22);
+});
+
+test("server log arming is session-only and stays out of match settings", () => {
+  const initial = initialGameControls();
+  const armed = reduceGameControl(initial, { type: "toggle-server-logs" });
+  assert.equal(armed.serverLogs, true);
+  assert.equal(armed.serverRunning, false);
+  assert.equal(armed.home.every((row) => row.logs === false), true);
+  assert.equal(armed.away.every((row) => row.logs === false), true);
+
+  const patch = matchSettingsPatch(armed);
+  const api = matchSettingsForApi(armed);
+  assert.equal(Object.prototype.hasOwnProperty.call(patch, "server_logs"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(patch, "debug_mode"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(api, "server_logs"), false);
+
+  const reloaded = applyMatchConfig(initialGameControls(), {
+    ...patch,
+    server_logs: true,
+    debug_mode: true,
+  });
+  assert.equal(reloaded.serverLogs, false);
+  assert.equal(reloaded.home.every((row) => row.logs === false), true);
+  assert.equal(reloaded.away.every((row) => row.logs === false), true);
 });
 
 test("active switch is desired-active; running is separate process state", () => {

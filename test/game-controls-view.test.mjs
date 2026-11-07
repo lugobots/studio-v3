@@ -681,6 +681,48 @@ test("server and match start failures leave local state unchanged", async () => 
   panel.restore();
 });
 
+test("server log control stays interactive while match config is locked and calls the arm API", async () => {
+  const panel = mountPanel();
+  const logsButton = () => panel.button("Server logs");
+
+  assert.equal(panel.state().serverLogs, false);
+  assert.equal(logsButton().disabled, false);
+  assert.equal(logsButton().getAttribute("aria-pressed"), "false");
+
+  panel.button("Slow speed").click();
+  await flush();
+  panel.button("Starts the Game Server").click();
+  await flush();
+  assert.equal(panel.state().serverRunning, true);
+  assert.equal(panel.button("Fast speed").disabled, true);
+  assert.equal(panel.parent.querySelector("#team-side-switch").getAttribute("aria-disabled"), "true");
+  assert.equal(logsButton().disabled, false);
+
+  const writesWhileLocked = panel.matchSets.length;
+  logsButton().click();
+  await flush();
+  assert.equal(panel.state().serverLogs, true);
+  assert.equal(logsButton().disabled, false);
+  assert.equal(logsButton().getAttribute("aria-pressed"), "true");
+  assert.deepEqual(panel.logArms, ["server"]);
+  assert.deepEqual(panel.logDisarms, []);
+  assert.equal(panel.matchSets.length, writesWhileLocked);
+  assert.equal(panel.state().home.every((row) => row.logs === false), true);
+
+  logsButton().click();
+  await flush();
+  assert.equal(panel.state().serverLogs, false);
+  assert.deepEqual(panel.logDisarms, ["server"]);
+  assert.equal(panel.matchSets.length, writesWhileLocked);
+
+  panel.restore();
+  const fresh = mountPanel();
+  assert.equal(fresh.state().serverLogs, false);
+  assert.equal(fresh.button("Server logs").getAttribute("aria-pressed"), "false");
+  assert.deepEqual(fresh.logArms, []);
+  fresh.restore();
+});
+
 test("game control styles are scoped to the side menu", () => {
   const css = readFileSync(new URL("../src/renderer/styles/pages.css", import.meta.url), "utf8");
   assert.match(css, /\.side-menu \.game-ctrl/);

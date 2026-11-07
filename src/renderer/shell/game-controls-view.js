@@ -305,6 +305,20 @@ async function toggleBotActive(state, onChange, host, dialogs, team, number) {
   }
 }
 
+async function toggleServerLogs(state, onChange, host) {
+  const nextOn = !state.serverLogs;
+  onChange(reduceGameControl(state, { type: "toggle-server-logs" }));
+  if (nextOn) {
+    if (typeof host?.logs?.arm === "function") {
+      await host.logs.arm("server");
+    }
+    return;
+  }
+  if (typeof host?.logs?.disarm === "function") {
+    await host.logs.disarm("server");
+  }
+}
+
 async function toggleBotLogs(state, onChange, host, team, number, onOpenLogs) {
   const index = Number(number) - 1;
   const row = state[team]?.[index];
@@ -355,6 +369,14 @@ export function renderGameControls(parent, { state, onChange, host, dialogs, onO
       ["path", { d: "M12 3v6" }],
       ["path", { d: "M7 7.5a6.5 6.5 0 1 0 10 0" }],
     ]),
+  }));
+  server.append(controlButton({
+    title: "Server logs",
+    pressed: Boolean(state.serverLogs),
+    text: state.serverLogs ? "X" : "📄",
+    onClick: () => {
+      void toggleServerLogs(state, onChange, host);
+    },
   }));
   root.append(server);
 

@@ -363,3 +363,123 @@ test("workspace hydrates power control from already-running API/live status", as
   assert.equal(outlet.querySelector("#game_frame").src, "http://localhost:8080");
   installed.restore();
 });
+
+async function flushSettings() {
+  for (let i = 0; i < 8; i += 1) {
+    await Promise.resolve();
+  }
+}
+
+test("settings API debug preference persists and arms only the api source", async () => {
+  const installed = installDocument();
+  const outlet = installed.document.createElement("div");
+  const sets = [];
+  const arms = [];
+  const disarms = [];
+  let saved = {
+    project_path: "/tmp/bot",
+    telemetryEnabled: false,
+    debug_mode: false,
+    debugMode: false,
+    game_frontend_url: "http://localhost:8080",
+    editor_url: "http://localhost:8082",
+  };
+  const host = {
+    config: {
+      async get() {
+        return { ...saved };
+      },
+      async set(patch) {
+        sets.push(patch);
+        saved = {
+          ...saved,
+          ...patch,
+          debugMode: patch.debug_mode === true,
+        };
+        return { ...saved };
+      },
+      async matchGet() {
+        return { team_side: "home", game_speed: "normal", opponent_team: "default" };
+      },
+      async matchSet() {
+        throw new Error("API debug must not write match settings");
+      },
+    },
+    logs: {
+      async arm(source) {
+        arms.push(source);
+        return { ok: true };
+      },
+      async disarm(source) {
+        disarms.push(source);
+        return { ok: true };
+      },
+    },
+    server: {
+      async status() {
+        return { ok: true, running: false };
+      },
+    },
+  };
+  renderAppFrame(outlet, {
+    host,
+    dialogs: { notify() {}, confirm() { return Promise.resolve(false); } },
+  });
+  await flushSettings();
+  assert.deepEqual(arms, []);
+  assert.deepEqual(disarms, []);
+
+  outlet.querySelectorAll("button").find((button) => button.textContent === "Settings").click();
+  const box = outlet.querySelector('input[aria-label="Studio API debug logging"]');
+  assert.ok(box);
+  assert.equal(box.checked, false);
+
+  box.checked = true;
+  await box.listeners.change[0]();
+  await flushSettings();
+  assert.deepEqual(sets, [{ debug_mode: true }]);
+  assert.deepEqual(arms, ["api"]);
+  assert.deepEqual(disarms, []);
+
+  box.checked = false;
+  await box.listeners.change[0]();
+  await flushSettings();
+  assert.deepEqual(sets[1], { debug_mode: false });
+  assert.deepEqual(disarms, ["api"]);
+  assert.equal(arms.some((source) => source !== "api"), false);
+  installed.restore();
+});
+
+test("a saved API debug preference arms only the api source on load", async () => {
+  const installed = installDocument();
+  const outlet = installed.document.createElement("div");
+  const arms = [];
+  const host = {
+    config: {
+      async get() {
+        return {
+          project_path: "/tmp/bot",
+          telemetryEnabled: false,
+          debug_mode: true,
+          debugMode: true,
+        };
+      },
+    },
+    logs: {
+      async arm(source) {
+        arms.push(source);
+        return { ok: true };
+      },
+      async disarm() {
+        throw new Error("load must not disarm other sources");
+      },
+    },
+  };
+  renderAppFrame(outlet, {
+    host,
+    dialogs: { notify() {}, confirm() { return Promise.resolve(false); } },
+  });
+  await flushSettings();
+  assert.deepEqual(arms, ["api"]);
+  installed.restore();
+});
