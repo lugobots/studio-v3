@@ -1,0 +1,11 @@
+# Release-critical paths. Create/update the org team slug if it differs.
+.github/workflows/ @lugobots/maintainers
+.github/CODEOWNERS @lugobots/maintainers
+package.json @lugobots/maintainers
+package-lock.json @lugobots/maintainers
+build/ @lugobots/maintainers
+src/main/services/updater/ @lugobots/maintainers
+src/shared/artifact.js @lugobots/maintainers
+docs/verify-download.md @lugobots/maintainers
+docs/release-hardening.md @lugobots/maintainers
+docs/release-threat-model.md @lugobots/maintainers

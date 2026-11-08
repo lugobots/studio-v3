@@ -1,0 +1,83 @@
+# Publish previously built workflow artifacts as a GitHub Release.
+# Requires the "publish" Environment with required reviewers configured in repo settings.
+name: Publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g. v0.2.0)
+        required: true
+        type: string
+      run_id:
+        description: Build release workflow run id that produced artifacts
+        required: true
+        type: string
+      prerelease:
+        description: Mark the GitHub Release as prerelease
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: publish-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    environment: publish
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: studio-windows-latest
+          path: release-assets
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: studio-macos-latest
+          path: release-assets
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: studio-ubuntu-latest
+          path: release-assets
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge checksum files
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          shopt -s nullglob
+          cat SHA256SUMS* 2>/dev/null | sort -u > SHA256SUMS.merged || true
+          if [[ -s SHA256SUMS.merged ]]; then
+            mv SHA256SUMS.merged SHA256SUMS
+          fi
+          ls -la
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.2.1
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: Lugo Studio ${{ inputs.tag }}
+          prerelease: ${{ inputs.prerelease }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/Lugo-Studio-*
+            release-assets/SHA256SUMS
+            release-assets/*.asc
