@@ -49,7 +49,7 @@ test("a failed windows launch is reported and a decline keeps the running versio
 });
 
 test("windows package name matches the file the updater downloads", () => {
-  assert.equal(pkg.build.artifactName, "Lugo-Studio-Windows-${version}.${ext}");
+  assert.equal(pkg.build.win.artifactName, "Lugo-Studio-Windows-${version}.${ext}");
   assert.equal(windowsArtifactName(pkg.version), `Lugo-Studio-Windows-${pkg.version}.exe`);
   assert.equal(pkg.build.win.target[0].target, "portable");
 });

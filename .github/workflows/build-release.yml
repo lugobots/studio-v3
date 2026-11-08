@@ -1,0 +1,140 @@
+# Build and (when secrets are present) sign Studio artifacts.
+# Uploads workflow artifacts only — does not create a GitHub Release.
+name: Build release
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build (empty = current ref)
+        required: false
+        type: string
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    environment: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            pack: pack:win
+          - os: macos-latest
+            pack: pack:mac
+          - os: ubuntu-latest
+            pack: pack:linux
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Note signing secret availability
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          if [[ -n "${CSC_LINK:-}" || -n "${WIN_CSC_LINK:-}" || -n "${GPG_PRIVATE_KEY:-}" ]]; then
+            echo "At least one signing secret is configured for this environment."
+          else
+            echo "No signing secrets configured; this run produces unsigned dry-run artifacts."
+          fi
+
+      - name: Pack Electron app
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: npm run ${{ matrix.pack }}
+
+      - name: Detached GPG signature (Linux)
+        if: runner.os == 'Linux'
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${GPG_PRIVATE_KEY:-}" ]]; then
+            echo "GPG_PRIVATE_KEY not set; skipping detached signatures (unsigned dry run)."
+            exit 0
+          fi
+          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          shopt -s nullglob
+          for f in dist/Lugo-Studio-Linux-*.AppImage; do
+            gpg --batch --yes --pinentry-mode loopback \
+              --passphrase "$GPG_PASSPHRASE" \
+              --detach-sign --armor "$f"
+          done
+
+      - name: Checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          shopt -s nullglob
+          files=(Lugo-Studio-*)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No Lugo-Studio-* artifacts in dist/" >&2
+            exit 1
+          fi
+          if command -v sha256sum >/dev/null; then
+            sha256sum "${files[@]}" > SHA256SUMS
+          else
+            python - <<'PY'
+          import hashlib, glob, pathlib
+          lines = []
+          for path in sorted(glob.glob("Lugo-Studio-*")):
+              digest = hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
+              lines.append(f"{digest}  {path}")
+          pathlib.Path("SHA256SUMS").write_text("\n".join(lines) + "\n")
+          PY
+          fi
+          cat SHA256SUMS
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: dist/Lugo-Studio-*
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: studio-${{ matrix.os }}
+          path: |
+            dist/Lugo-Studio-*
+            dist/SHA256SUMS
+            dist/*.AppImage.asc
+          if-no-files-found: error
+          retention-days: 14
