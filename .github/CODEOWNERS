@@ -9,3 +9,6 @@ src/shared/artifact.js @lugobots/maintainers
 docs/verify-download.md @lugobots/maintainers
 docs/release-hardening.md @lugobots/maintainers
 docs/release-threat-model.md @lugobots/maintainers
+docs/signing.md @lugobots/maintainers
+docs/keys/ @lugobots/maintainers
+docs/dry-run-v0.1.0-ci-dryrun.md @lugobots/maintainers

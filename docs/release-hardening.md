@@ -18,14 +18,14 @@ Checklist for making `lugobots/studio-v3` safe to publish from as a public repo.
 
 ## Secrets (Environment `build`)
 
-| Secret | Purpose |
-|--------|---------|
-| `CSC_LINK` / `CSC_KEY_PASSWORD` | macOS Developer ID certificate (base64 p12) for electron-builder |
-| `APPLE_API_KEY` / `APPLE_API_KEY_ID` / `APPLE_API_ISSUER` | notarytool notarization |
-| `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD` | Windows Authenticode (or migrate to Azure Trusted Signing OIDC later) |
-| `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE` | Detached signatures for Linux AppImages |
+| Secret | Status | Purpose |
+|--------|--------|---------|
+| `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE` | **Enrolled** | Detached signatures for Linux AppImages |
+| `CSC_LINK` / `CSC_KEY_PASSWORD` | Deferred | macOS Developer ID (requires Apple Developer Program fee) |
+| `APPLE_API_KEY` / `APPLE_API_KEY_ID` / `APPLE_API_ISSUER` | Deferred | notarytool notarization (same paid membership) |
+| `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD` | Deferred | Windows Authenticode / later Azure Trusted Signing (commercial) |
 
-Never commit signing material. Prefer cloud HSM / short-lived certs when available.
+Never commit private signing material. Public Linux key: `docs/keys/studio-v3-release.asc` (fingerprint in `docs/signing.md`).
 
 ## In-repo controls (this change)
 
