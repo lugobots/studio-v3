@@ -7,10 +7,13 @@ Checklist for making `lugobots/studio-v3` safe to publish from as a public repo.
 - [ ] Default branch protection: required PR reviews, no force push, required status checks (at least unit tests / build workflow when available)
 - [ ] Tag protection for `v*`
 - [ ] Organization or repository rule: 2FA required for write access
-- [ ] Create GitHub Environment **`build`** (optional reviewers; holds signing secrets)
-- [ ] Create GitHub Environment **`publish`** with **required reviewers** (approval gate before Release upload)
-- [ ] Restrict who can approve `publish` and who can edit Environments
+- [x] Create GitHub Environment **`build`** (holds signing secrets when enrolled)
+- [x] Create GitHub Environment **`publish`** (used by Publish release workflow)
+- [ ] Enable **required reviewers** on `publish` when the org billing plan supports Environment protection rules (private free plans reject this API). Until then, keep Publish as manual `workflow_dispatch` only and limit who can run Actions.
+- [ ] Restrict who can edit Environments
 - [ ] Create/link CODEOWNERS team `@lugobots/maintainers` (or update `.github/CODEOWNERS` to a real team)
+- [ ] Apply default-branch protection + `v*` tag ruleset in the GitHub UI (API returned Forbidden for this token/plan); require PR reviews and block force-push
+- [ ] Confirm org 2FA requirement for write access
 
 ## Secrets (Environment `build`)
 

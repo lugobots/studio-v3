@@ -7,10 +7,10 @@
     "start": "electron .",
     "dev": "electron .",
     "test": "node --test",
-    "pack:win": "electron-builder --win portable --x64",
-    "pack:mac": "electron-builder --mac dmg zip --x64 --arm64",
-    "pack:linux": "electron-builder --linux AppImage --x64",
-    "pack:all": "electron-builder --win portable --x64 --mac dmg zip --linux AppImage --x64"
+    "pack:win": "electron-builder --win portable --x64 --publish never",
+    "pack:mac": "electron-builder --mac dmg zip --x64 --arm64 --publish never",
+    "pack:linux": "electron-builder --linux AppImage --x64 --publish never",
+    "pack:all": "electron-builder --win portable --x64 --mac dmg zip --linux AppImage --x64 --publish never"
   },
   "build": {
     "appId": "ai.lugobots.studio",
