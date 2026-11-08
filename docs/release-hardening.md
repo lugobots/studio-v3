@@ -14,6 +14,7 @@ Checklist for making `lugobots/studio-v3` safe to publish from as a public repo.
 - [ ] Create/link CODEOWNERS team `@lugobots/maintainers` (or update `.github/CODEOWNERS` to a real team)
 - [ ] Apply default-branch protection + `v*` tag ruleset in the GitHub UI (API returned Forbidden for this token/plan); require PR reviews and block force-push
 - [ ] Confirm org 2FA requirement for write access
+- [ ] Artifact Attestations / required Environment reviewers need a plan that supports them (or a public repo). Until then Build release keeps checksums and treats attestation as best-effort (`continue-on-error`).
 
 ## Secrets (Environment `build`)
 
