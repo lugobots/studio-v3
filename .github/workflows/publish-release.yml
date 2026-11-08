@@ -76,7 +76,8 @@ jobs:
           name: Lugo Studio ${{ inputs.tag }}
           prerelease: ${{ inputs.prerelease }}
           generate_release_notes: true
-          fail_on_unmatched_files: true
+          # .asc signatures are optional until GPG secrets are enrolled.
+          fail_on_unmatched_files: false
           files: |
             release-assets/Lugo-Studio-*
             release-assets/SHA256SUMS
