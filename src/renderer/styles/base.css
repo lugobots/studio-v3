@@ -1,4 +1,5 @@
-:root {
+:root,
+:root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #101114;
   --panel: #181a1f;
@@ -6,7 +7,43 @@
   --muted: #9aa1ad;
   --accent: #7c8cff;
   --border: #2a2e37;
+  --surface: #12141a;
+  --menu: #14161c;
+  --hero-glow: #23263a;
+  --canvas: #0b0d12;
+  --control: #1b2530;
+  --control-deep: #111923;
+  --control-border: #324150;
+  --control-hover: #162232;
+  --control-hover-border: #5f7388;
+  --log-chip: #1a2030;
+  --log-chip-active: #243044;
+  --log-chip-border: #3a4150;
+  --log-source: #93c5fd;
   font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f4f7;
+  --panel: #ffffff;
+  --text: #1a1d24;
+  --muted: #5c6472;
+  --accent: #3d52d5;
+  --border: #d5dae3;
+  --surface: #eef0f4;
+  --menu: #eceff4;
+  --hero-glow: #c9d2ef;
+  --canvas: #e4e8ef;
+  --control: #ffffff;
+  --control-deep: #e8ecf3;
+  --control-border: #c5ccd8;
+  --control-hover: #dce2ec;
+  --control-hover-border: #9aa6b8;
+  --log-chip: #e8ecf3;
+  --log-chip-active: #d4dcf0;
+  --log-chip-border: #c5ccd8;
+  --log-source: #2f5fbf;
 }
 
 * {
@@ -22,7 +59,7 @@ body {
 
 body {
   background:
-    radial-gradient(circle at top, #23263a 0%, transparent 42%),
+    radial-gradient(circle at top, var(--hero-glow) 0%, transparent 42%),
     var(--bg);
   color: var(--text);
 }
@@ -53,7 +90,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 10px 16px;
-  background: #12141a;
+  background: var(--surface);
   color: var(--text);
   font: inherit;
   cursor: pointer;

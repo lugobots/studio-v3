@@ -4,6 +4,9 @@ const { execFile, spawn } = require("node:child_process");
 const { CHANNELS } = require("../../../shared/ipc-channels");
 const { DEFAULTS, imageFrom } = require("../../../shared/ports");
 const { editorRunArgs, runArgs } = require("./args");
+const { waitEditorReady } = require("./editor-ready");
+const { ensureLevel1Binary } = require("./level1");
+const { removeOk, stopStudioContainers } = require("./stop");
 
 let webContents = null;
 let pullListener = () => {};
@@ -95,6 +98,18 @@ async function ensureImage() {
   return { ok: true, imagePresent: status.imagePresent, pull: pullState };
 }
 
+/**
+ * Pull (if needed) and extract the Level-1 opponent binary into the host cache.
+ * Session kicks this after the Docker gate (background) and awaits it before
+ * match start / API container start.
+ */
+async function ensureLevel1(resolved) {
+  return ensureLevel1Binary({
+    resolved,
+    execDocker: (args, timeout) => exec("docker", args, timeout),
+  });
+}
+
 async function containerIsRunning(name = DEFAULTS.containerName) {
   const running = await exec("docker", ["inspect", "-f", "{{.State.Running}}", name]);
   return running.ok && running.stdout.trim() === "true";
@@ -115,9 +130,18 @@ async function ensureNamedContainer(name, args) {
   return { ok: true, name };
 }
 
-async function runningHostPath(name = DEFAULTS.containerName) {
+function envValue(lines, prefix) {
+  const line = lines.find((item) => item.startsWith(prefix));
+  return line ? line.slice(prefix.length) : "";
+}
+
+/**
+ * Inspect a running Studio API container for recreate decisions.
+ * Compares LUGO_HOST_PROJECT_PATH and LUGO_HOST_OPPONENT_BOT (Level-1 cache path).
+ */
+async function runningContainerState(name = DEFAULTS.containerName) {
   if (!(await containerIsRunning(name))) {
-    return { running: false, hostPath: "" };
+    return { running: false, hostPath: "", opponentHostPath: "" };
   }
   const inspected = await exec("docker", [
     "inspect",
@@ -126,16 +150,24 @@ async function runningHostPath(name = DEFAULTS.containerName) {
     name,
   ]);
   if (!inspected.ok) {
-    return { running: true, hostPath: null };
+    return { running: true, hostPath: null, opponentHostPath: null };
   }
-  const prefix = "LUGO_HOST_PROJECT_PATH=";
-  const line = inspected.stdout.split("\n").find((item) => item.startsWith(prefix));
-  return { running: true, hostPath: line ? line.slice(prefix.length) : "" };
+  const lines = inspected.stdout.split("\n");
+  return {
+    running: true,
+    hostPath: envValue(lines, "LUGO_HOST_PROJECT_PATH="),
+    opponentHostPath: envValue(lines, "LUGO_HOST_OPPONENT_BOT="),
+  };
 }
 
-async function ensureContainer(projectPath, hostProjectPath = "") {
-  const current = await runningHostPath();
-  if (current.running && current.hostPath === hostProjectPath) {
+async function ensureContainer(projectPath, hostProjectPath = "", level1 = null) {
+  const expectedOpponent = (level1 && level1.hostBinaryPath) || "";
+  const current = await runningContainerState();
+  if (
+    current.running &&
+    current.hostPath === hostProjectPath &&
+    current.opponentHostPath === expectedOpponent
+  ) {
     return { ok: true, name: DEFAULTS.containerName };
   }
   if (current.running) {
@@ -143,14 +175,13 @@ async function ensureContainer(projectPath, hostProjectPath = "") {
   }
   return ensureNamedContainer(
     DEFAULTS.containerName,
-    runArgs(projectPath, process.env, hostProjectPath),
+    runArgs(projectPath, process.env, hostProjectPath, level1),
   );
 }
 
 async function stopEditor() {
   const editor = await exec("docker", ["rm", "-f", DEFAULTS.editorContainerName], 20000);
-  const editorMissing = /No such container/i.test(editor.stderr || "");
-  return { ok: editor.ok || editorMissing };
+  return { ok: removeOk(editor) };
 }
 
 async function recentLogs(name = DEFAULTS.containerName) {
@@ -172,10 +203,7 @@ async function ensureEditor(projectPath) {
 }
 
 async function stopContainer() {
-  const editor = await exec("docker", ["rm", "-f", DEFAULTS.editorContainerName], 20000);
-  const studio = await exec("docker", ["rm", "-f", DEFAULTS.containerName], 20000);
-  const editorMissing = /No such container/i.test(editor.stderr || "");
-  return { ok: studio.ok && (editor.ok || editorMissing) };
+  return stopStudioContainers(async (name) => exec("docker", ["rm", "-f", name], 20000));
 }
 
 module.exports = {
@@ -184,9 +212,11 @@ module.exports = {
   getStatus,
   startPull,
   ensureImage,
+  ensureLevel1,
   containerIsRunning,
   ensureContainer,
   ensureEditor,
+  waitEditorReady,
   stopContainer,
   stopEditor,
   recentLogs,
