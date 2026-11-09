@@ -42,7 +42,7 @@ mountDialogs(document, dialogs, async (action) => {
   }
   const accepted = await dialogs.confirm({
     title: "Upgrade Studio?",
-    body: "Studio will close after the Windows installer starts.",
+    body: "Studio will close after the update package for this system starts.",
     confirmLabel: "Upgrade",
     cancelLabel: "Not now",
   });
@@ -51,9 +51,17 @@ mountDialogs(document, dialogs, async (action) => {
   }
   const result = await host.updates.apply();
   if (!result.ok) {
+    if (result.rejected) {
+      dialogs.notify({
+        mode: "notify",
+        title: "Update rejected",
+        body: result.error || "The update failed integrity or signature checks",
+      });
+      return;
+    }
     await dialogs.confirm({
       title: "Upgrade did not start",
-      body: result.error || "The Windows installer was not launched.",
+      body: result.error || "The update package was not launched.",
       confirmLabel: "Close",
       cancelLabel: "Close",
     });
