@@ -1,4 +1,5 @@
-import { PINNED, TABS, tabById } from "./model.js";
+import { AREAS, areaById } from "./model.js";
+import { createAreaIcon } from "./area-icons.js";
 import { applyAppearance, normalizeAppearance } from "../lib/appearance.js";
 import { applyTelemetry } from "../lib/telemetry.js";
 import { reportResult } from "../lib/dialogs.js";
@@ -25,34 +26,132 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   const frame = document.createElement("div");
   frame.className = "app-frame";
 
+  const rail = document.createElement("nav");
+  rail.className = "area-rail";
+  rail.setAttribute("aria-label", "Primary areas");
+
   const menu = document.createElement("aside");
-  menu.className = "side-menu";
+  menu.className = "side-menu area-lateral";
   const actions = document.createElement("nav");
-  actions.className = "tab-actions";
+  actions.className = "tab-actions area-actions";
   const pinned = document.createElement("div");
-  pinned.className = "side-menu-pinned";
+  pinned.className = "side-menu-pinned area-lateral-footer";
   menu.append(actions, pinned);
 
   const workspace = document.createElement("div");
   workspace.className = "workspace";
-  const tabs = document.createElement("div");
-  tabs.className = "tab-bar";
-  tabs.setAttribute("role", "tablist");
   const windowPane = document.createElement("main");
   windowPane.className = "app-window";
-  windowPane.setAttribute("role", "tabpanel");
-  workspace.append(tabs, windowPane);
+  windowPane.setAttribute("role", "main");
+  workspace.append(windowPane);
 
-  frame.append(menu, workspace);
-  outlet.append(frame);
+  frame.append(rail, menu, workspace);
+
+  const statusBar = document.createElement("footer");
+  statusBar.className = "app-status-bar";
+  statusBar.setAttribute("aria-label", "Studio status");
+
+  const shell = document.createElement("div");
+  shell.className = "app-shell";
+  shell.append(frame, statusBar);
+  outlet.append(shell);
+
+  // Area rail (Workspace / Build / …) can auto-collapse to icons; lateral menu stays fixed.
+  const RAIL_MODES = ["auto", "open", "closed"];
+  const RAIL_MODE_LABEL = {
+    auto: "Area menu auto-collapses; click to keep expanded with names",
+    open: "Area menu kept expanded; click to keep icons only",
+    closed: "Area menu icons only; click for auto-collapse",
+  };
+  const RAIL_MODE_GLYPH = {
+    auto: "↻",
+    open: "⊣",
+    closed: "⊢",
+  };
 
   const state = {
-    tab: "workspace",
-    view: "tab",
+    area: "workspace",
     config: null,
     game: initialGameControls(),
     editor: { open: false, starting: false, ready: false, error: "" },
+    update: null,
+    // auto: expand labels on hover; open/closed: pin permanently.
+    rail: { mode: "auto", hovered: true },
   };
+
+  let railLeaveTimer = null;
+
+  function railExpanded() {
+    if (state.rail.mode === "open") {
+      return true;
+    }
+    if (state.rail.mode === "closed") {
+      return false;
+    }
+    return Boolean(state.rail.hovered);
+  }
+
+  function syncRailChrome() {
+    const expanded = railExpanded();
+    frame.setAttribute("data-rail-expanded", String(expanded));
+    frame.setAttribute("data-rail-mode", state.rail.mode);
+    rail.setAttribute("data-rail-expanded", String(expanded));
+    for (const label of rail.querySelectorAll(".area-rail-label")) {
+      label.hidden = !expanded;
+    }
+    const fold = rail.querySelector(".area-rail-fold");
+    if (fold) {
+      fold.setAttribute("aria-label", RAIL_MODE_LABEL[state.rail.mode]);
+      fold.title = RAIL_MODE_LABEL[state.rail.mode];
+      fold.setAttribute("data-rail-mode", state.rail.mode);
+      fold.setAttribute("aria-pressed", state.rail.mode === "open" ? "true" : "false");
+      const glyph = fold.querySelector(".area-rail-icon");
+      if (glyph) {
+        glyph.textContent = RAIL_MODE_GLYPH[state.rail.mode];
+      }
+    }
+  }
+
+  function cycleRailMode() {
+    const index = RAIL_MODES.indexOf(state.rail.mode);
+    state.rail.mode = RAIL_MODES[(index + 1) % RAIL_MODES.length];
+    if (state.rail.mode === "auto") {
+      state.rail.hovered = true;
+    }
+    syncRailChrome();
+  }
+
+  function setRailHovered(hovered) {
+    if (railLeaveTimer) {
+      clearTimeout(railLeaveTimer);
+      railLeaveTimer = null;
+    }
+    state.rail.hovered = Boolean(hovered);
+    syncRailChrome();
+  }
+
+  function scheduleRailLeave() {
+    if (state.rail.mode !== "auto") {
+      return;
+    }
+    if (railLeaveTimer) {
+      clearTimeout(railLeaveTimer);
+    }
+    railLeaveTimer = setTimeout(() => {
+      railLeaveTimer = null;
+      state.rail.hovered = false;
+      syncRailChrome();
+    }, 180);
+  }
+
+  rail.addEventListener("mouseenter", () => {
+    if (state.rail.mode === "auto") {
+      setRailHovered(true);
+    }
+  });
+  rail.addEventListener("mouseleave", () => {
+    scheduleRailLeave();
+  });
 
   function syncArmUiAfterDrawerClose(source) {
     if (source === "api") {
@@ -173,7 +272,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     applyAppearance(document, state.config?.appearance);
     paint();
     await syncApiDebug(state.config);
-    if (state.view === "settings") {
+    if (state.area === "settings") {
       applyTelemetry(document, {
         telemetryEnabled: state.config.telemetryEnabled,
         measurementId: state.config.measurementId,
@@ -201,72 +300,118 @@ export function renderAppFrame(outlet, { host, dialogs }) {
   function applyGameControlUpdate(next) {
     const mediaChanged = Boolean(state.game.serverRunning) !== Boolean(next.serverRunning);
     state.game = next;
-    if (mediaChanged || state.view !== "tab" || state.tab !== "workspace") {
+    if (mediaChanged || state.area !== "workspace") {
       paint();
       return;
     }
     paintChrome();
   }
 
-  function paintChrome() {
-    tabs.replaceChildren();
-    for (const tab of TABS) {
+  function selectArea(areaId) {
+    state.area = areaById(areaId).id;
+    if (state.rail.mode === "auto") {
+      state.rail.hovered = true;
+    }
+    paint();
+  }
+
+  function paintRail() {
+    rail.replaceChildren();
+
+    const fold = document.createElement("button");
+    fold.type = "button";
+    fold.className = "area-rail-item area-rail-fold";
+    fold.setAttribute("data-rail-fold", "true");
+    const foldGlyph = document.createElement("span");
+    foldGlyph.className = "area-rail-icon";
+    foldGlyph.setAttribute("aria-hidden", "true");
+    foldGlyph.textContent = RAIL_MODE_GLYPH[state.rail.mode];
+    fold.append(foldGlyph);
+    fold.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      cycleRailMode();
+    });
+
+    const items = document.createElement("div");
+    items.className = "area-rail-items";
+    const main = document.createElement("div");
+    main.className = "area-rail-group area-rail-group--main";
+    const account = document.createElement("div");
+    account.className = "area-rail-group area-rail-group--account";
+
+    for (const area of AREAS) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "tab";
-      button.setAttribute("role", "tab");
-      const selected = state.tab === tab.id;
-      button.setAttribute("aria-selected", String(selected));
-      button.id = `tab-${tab.id}`;
-      if (selected) {
-        windowPane.setAttribute("aria-labelledby", button.id);
+      button.className = "area-rail-item";
+      button.setAttribute("data-area", area.id);
+      button.dataset.area = area.id;
+      button.title = area.label;
+      button.setAttribute("aria-label", area.label);
+      const selected = state.area === area.id;
+      button.setAttribute("aria-current", selected ? "page" : "false");
+      const glyph = document.createElement("span");
+      glyph.className = "area-rail-icon";
+      glyph.setAttribute("aria-hidden", "true");
+      glyph.setAttribute("data-area-icon", area.icon);
+      glyph.append(createAreaIcon(area.icon));
+      const label = document.createElement("span");
+      label.className = "area-rail-label";
+      label.textContent = area.label;
+      button.append(glyph, label);
+      button.addEventListener("click", () => selectArea(area.id));
+      if (area.group === "account") {
+        account.append(button);
+      } else {
+        main.append(button);
       }
-      button.textContent = tab.label;
-      button.addEventListener("click", () => {
-        state.tab = tab.id;
-        state.view = "tab";
-        paint();
-      });
-      tabs.append(button);
     }
 
-    const tab = tabById(state.tab);
-    actions.setAttribute("aria-label", tab.label);
+    items.append(main, account);
+    rail.append(fold, items);
+    syncRailChrome();
+  }
+
+  function paintWorkspaceLateral() {
+    actions.setAttribute("aria-label", "Workspace");
     actions.replaceChildren();
-    if (state.tab === "workspace") {
-      renderGameControls(actions, {
-        state: state.game,
-        host,
-        dialogs,
-        onChange: applyGameControlUpdate,
-        onOpenLogs(source) {
-          processLogs.noteArmed(source);
-          processLogs.openDrawer(source);
-        },
-        onLogsDisarmed(source) {
-          processLogs.noteDisarmed(source);
-        },
-      });
-      const editorToggle = document.createElement("button");
-      editorToggle.type = "button";
-      editorToggle.className = "menu-item";
-      editorToggle.dataset.action = state.editor.open ? "close-editor" : "open-editor";
-      editorToggle.disabled = Boolean(state.editor.starting);
-      editorToggle.textContent = state.editor.open
-        ? state.editor.starting
-          ? "Starting editor…"
-          : "Close editor"
-        : "Open editor";
-      editorToggle.addEventListener("click", () => {
-        if (state.editor.open) {
-          void closeEditor();
-        } else {
-          void openEditor();
-        }
-      });
-      actions.append(editorToggle);
-    }
-    for (const action of tab.actions) {
+    pinned.replaceChildren();
+
+    renderGameControls(actions, {
+      state: state.game,
+      host,
+      dialogs,
+      onChange: applyGameControlUpdate,
+      onOpenLogs(source) {
+        processLogs.noteArmed(source);
+        processLogs.openDrawer(source);
+      },
+      onLogsDisarmed(source) {
+        processLogs.noteDisarmed(source);
+      },
+    });
+
+    const editorToggle = document.createElement("button");
+    editorToggle.type = "button";
+    editorToggle.className = "menu-item";
+    editorToggle.dataset.action = state.editor.open ? "close-editor" : "open-editor";
+    editorToggle.disabled = Boolean(state.editor.starting);
+    editorToggle.textContent = state.editor.open
+      ? state.editor.starting
+        ? "Starting editor…"
+        : "Close editor"
+      : "Open editor";
+    editorToggle.addEventListener("click", () => {
+      if (state.editor.open) {
+        void closeEditor();
+      } else {
+        void openEditor();
+      }
+    });
+    actions.append(editorToggle);
+
+    const area = areaById("workspace");
+    for (const action of area.actions) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "menu-item";
@@ -275,73 +420,13 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       button.addEventListener("click", () => runAction(action.id));
       actions.append(button);
     }
+  }
 
+  function paintSettingsLateral(config) {
+    actions.setAttribute("aria-label", "Settings");
+    actions.replaceChildren();
     pinned.replaceChildren();
-    for (const item of PINNED) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "menu-item";
-      button.dataset.view = item.id;
-      if (state.view === item.id) {
-        button.setAttribute("aria-current", "page");
-      }
-      button.textContent = item.label;
-      button.addEventListener("click", () => {
-        state.view = item.id;
-        paint();
-      });
-      pinned.append(button);
-    }
-    // Build version from the Studio API (compile-time), e.g. "dev" or "v1.0.1".
-    // This is not the "V3" product generation name.
-    const buildVersion = state.config?.apiVersion
-      || state.config?.studio_api_version
-      || "dev";
-    const versionLabel = document.createElement("p");
-    versionLabel.className = "side-menu-version";
-    versionLabel.dataset.studioVersion = buildVersion;
-    versionLabel.title = "Studio build version";
-    versionLabel.setAttribute("aria-label", `Studio build version ${buildVersion}`);
-    versionLabel.textContent = buildVersion;
-    pinned.append(versionLabel);
-  }
 
-  function paintWindow() {
-    windowPane.replaceChildren();
-    if (state.view === "profile") {
-      windowPane.append(profileView(state.config));
-    } else if (state.view === "settings") {
-      windowPane.append(settingsView(state.config));
-    } else if (state.tab === "runtime") {
-      windowPane.append(runtimeView());
-    } else {
-      windowPane.append(workspaceView(state.config));
-    }
-  }
-
-  function paint() {
-    paintChrome();
-    paintWindow();
-  }
-
-  function profileView(config) {
-    const section = document.createElement("section");
-    section.dataset.window = "profile";
-    const title = document.createElement("h1");
-    title.textContent = "Profile";
-    const version = document.createElement("p");
-    version.textContent = `Version ${config?.appVersion || config?.app_version || "unknown"}`;
-    const install = document.createElement("p");
-    install.textContent = `Install ${config?.install_unique_id || "assigned on first save"}`;
-    section.append(title, version, install);
-    return section;
-  }
-
-  function settingsView(config) {
-    const section = document.createElement("section");
-    section.dataset.window = "settings";
-    const title = document.createElement("h1");
-    title.textContent = "Settings";
     const themeLabel = document.createElement("label");
     themeLabel.className = "setting-row";
     const themeSelect = document.createElement("select");
@@ -360,6 +445,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       paint();
     });
     themeLabel.append(document.createTextNode("Appearance "), themeSelect);
+
     const label = document.createElement("label");
     label.className = "setting-row";
     const input = document.createElement("input");
@@ -373,6 +459,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       });
     });
     label.append(input, document.createTextNode(" Send usage data to Google Analytics"));
+
     const debugLabel = document.createElement("label");
     debugLabel.className = "setting-row";
     const debugInput = document.createElement("input");
@@ -390,7 +477,170 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       }
     });
     debugLabel.append(debugInput, document.createTextNode(" Studio API debug logging"));
-    section.append(title, themeLabel, label, debugLabel);
+
+    actions.append(themeLabel, label, debugLabel);
+  }
+
+  function paintPlaceholderLateral(area) {
+    actions.setAttribute("aria-label", area.label);
+    actions.replaceChildren();
+    pinned.replaceChildren();
+    const note = document.createElement("p");
+    note.className = "area-placeholder-note";
+    note.textContent = "Coming soon";
+    actions.append(note);
+  }
+
+  function paintProfileLateral() {
+    actions.setAttribute("aria-label", "Profile");
+    actions.replaceChildren();
+    pinned.replaceChildren();
+    const note = document.createElement("p");
+    note.className = "area-placeholder-note";
+    note.textContent = "Account";
+    actions.append(note);
+  }
+
+  function paintChrome() {
+    paintRail();
+    const area = areaById(state.area);
+    if (area.id === "workspace") {
+      paintWorkspaceLateral();
+    } else if (area.id === "settings") {
+      paintSettingsLateral(state.config);
+    } else if (area.id === "profile") {
+      paintProfileLateral();
+    } else {
+      paintPlaceholderLateral(area);
+    }
+  }
+
+  function paintWindow() {
+    windowPane.replaceChildren();
+    if (state.area === "profile") {
+      windowPane.append(profileView(state.config));
+    } else if (state.area === "settings") {
+      windowPane.append(settingsView());
+    } else if (state.area === "build" || state.area === "help") {
+      windowPane.append(placeholderView(areaById(state.area)));
+    } else {
+      windowPane.append(workspaceView(state.config));
+    }
+  }
+
+  function studioBuildVersion(config) {
+    return config?.apiVersion || config?.studio_api_version || "dev";
+  }
+
+  async function offerUpgrade() {
+    const accepted = await dialogs.confirm({
+      title: "Upgrade Studio?",
+      body: "Studio will close after the update package for this system starts.",
+      confirmLabel: "Upgrade",
+      cancelLabel: "Not now",
+    });
+    if (!accepted) {
+      return;
+    }
+    if (typeof host?.updates?.apply !== "function") {
+      return;
+    }
+    const result = await host.updates.apply();
+    if (!result?.ok) {
+      await reportResult(dialogs, result || { ok: false, error: "The update package was not launched." });
+    }
+  }
+
+  function paintFooter() {
+    statusBar.replaceChildren();
+    const version = studioBuildVersion(state.config);
+    const versionEl = document.createElement("p");
+    versionEl.className = "app-status-version";
+    versionEl.dataset.studioVersion = version;
+    versionEl.title = "Studio build version";
+    versionEl.setAttribute("aria-label", `Studio build version ${version}`);
+    versionEl.textContent = version;
+
+    const updateSlot = document.createElement("div");
+    updateSlot.className = "app-status-update";
+    if (state.update?.state === "newer") {
+      const notice = document.createElement("span");
+      notice.className = "app-status-update-label";
+      notice.textContent = `Update available: ${state.update.version}`;
+      const action = document.createElement("button");
+      action.type = "button";
+      action.className = "app-status-update-action";
+      action.textContent = "Upgrade";
+      action.addEventListener("click", () => {
+        void offerUpgrade();
+      });
+      updateSlot.append(notice, action);
+    }
+
+    statusBar.append(versionEl, updateSlot);
+  }
+
+  function paint() {
+    paintChrome();
+    paintWindow();
+    paintFooter();
+    syncRailChrome();
+  }
+
+  async function refreshUpdateStatus() {
+    if (typeof host?.updates?.check !== "function") {
+      return;
+    }
+    try {
+      const result = await host.updates.check();
+      if (!result || result.unsupported) {
+        state.update = null;
+      } else {
+        state.update = result;
+      }
+      paintFooter();
+    } catch {
+      state.update = null;
+      paintFooter();
+    }
+  }
+
+  function profileView(config) {
+    const section = document.createElement("section");
+    section.setAttribute("data-window", "profile");
+    section.dataset.window = "profile";
+    const title = document.createElement("h1");
+    title.textContent = "Profile";
+    const version = document.createElement("p");
+    version.textContent = `Version ${config?.appVersion || config?.app_version || "unknown"}`;
+    const install = document.createElement("p");
+    install.textContent = `Install ${config?.install_unique_id || "assigned on first save"}`;
+    section.append(title, version, install);
+    return section;
+  }
+
+  function settingsView() {
+    const section = document.createElement("section");
+    section.setAttribute("data-window", "settings");
+    section.dataset.window = "settings";
+    const title = document.createElement("h1");
+    title.textContent = "Settings";
+    const body = document.createElement("p");
+    body.textContent = "Use the Settings menu to change appearance, telemetry, and API debug logging.";
+    section.append(title, body);
+    return section;
+  }
+
+  function placeholderView(area) {
+    const section = document.createElement("section");
+    section.setAttribute("data-window", area.id);
+    section.dataset.window = area.id;
+    section.className = "area-placeholder";
+    const title = document.createElement("h1");
+    title.textContent = area.label;
+    const body = document.createElement("p");
+    body.textContent = "Coming soon";
+    section.append(title, body);
     return section;
   }
 
@@ -525,6 +775,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
 
   function workspaceView(config) {
     const section = document.createElement("section");
+    section.setAttribute("data-window", "workspace");
     section.dataset.window = "workspace";
     section.className = state.editor.open
       ? "workspace-main workspace-main--editor-open"
@@ -536,21 +787,21 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     const panel = document.createElement("div");
     panel.className = "game-panel";
 
-    const frame = ensureGameFrame();
+    const frameEl = ensureGameFrame();
     const nextUrl = config?.game_frontend_url || gameFrontendUrl();
 
     if (state.game.serverRunning) {
-      showGameFrame(frame);
-      const currentSrc = frame.getAttribute("src") || "";
+      showGameFrame(frameEl);
+      const currentSrc = frameEl.getAttribute("src") || "";
       if (currentSrc !== nextUrl) {
-        frame.src = nextUrl;
+        frameEl.src = nextUrl;
       }
-      panel.append(frame);
+      panel.append(frameEl);
     } else {
       // Unload the frontend while down so authors are not left on a white/failed document.
-      frame.hidden = true;
-      frame.setAttribute("aria-hidden", "true");
-      clearGameFrameSrc(frame);
+      frameEl.hidden = true;
+      frameEl.setAttribute("aria-hidden", "true");
+      clearGameFrameSrc(frameEl);
       const overlay = document.createElement("div");
       overlay.className = "game-start-overlay";
       const start = document.createElement("button");
@@ -566,7 +817,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
         }, host, dialogs);
       });
       overlay.append(start);
-      panel.append(overlay, frame);
+      panel.append(overlay, frameEl);
     }
 
     split.append(panel);
@@ -601,31 +852,6 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     return section;
   }
 
-  function runtimeView() {
-    const section = document.createElement("section");
-    section.dataset.window = "runtime";
-    const title = document.createElement("h1");
-    title.textContent = "Runtime";
-    const status = document.createElement("p");
-    status.textContent = "Image status appears after a check.";
-    const check = document.createElement("button");
-    check.type = "button";
-    check.className = "button";
-    check.textContent = "Check image";
-    check.addEventListener("click", async () => {
-      const result = await host.docker.status();
-      if (result.unsupported) {
-        await reportResult(dialogs, result);
-        return;
-      }
-      status.textContent = result.imagePresent
-        ? `${result.image} is present`
-        : `${result.image || "Studio image"} is not present`;
-    });
-    section.append(title, status, check);
-    return section;
-  }
-
   async function runAction(id) {
     if (id === "image") {
       const result = await host.docker.pull();
@@ -639,6 +865,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
 
   refreshConfig();
   refreshMatchConfig();
+  refreshUpdateStatus();
   bindServerStatus();
-  return frame;
+  return shell;
 }

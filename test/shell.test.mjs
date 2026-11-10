@@ -26,14 +26,104 @@ test("a confirm dialog stays open until it is answered", async () => {
   assert.equal(dialogs.snapshot().blocking, null);
 });
 
-test("tabs change the menu and keep profile and settings", () => {
+test("areas expose workspace image action without pinned profile or settings", () => {
   const workspace = menuFor("workspace");
-  const runtime = menuFor("runtime");
-  assert.deepEqual(workspace.actions, []);
-  assert.deepEqual(runtime.actions, ["image"]);
-  assert.deepEqual(workspace.pinned, ["profile", "settings"]);
-  assert.deepEqual(runtime.pinned, ["profile", "settings"]);
+  const settings = menuFor("settings");
+  const build = menuFor("build");
+  assert.deepEqual(workspace.actions, ["image"]);
+  assert.deepEqual(workspace.pinned, []);
+  assert.equal(workspace.areaId, "workspace");
+  assert.deepEqual(settings.actions, []);
+  assert.deepEqual(build.actions, []);
+  assert.equal(menuFor("runtime").areaId, "workspace");
   assert.equal(menuFor("editor").tabId, "workspace");
+});
+
+test("area rail shows labels when open and icons only when closed; lateral stays fixed", async () => {
+  const installed = installDocument();
+  const outlet = installed.document.createElement("div");
+  const host = {
+    config: {
+      async get() {
+        return {
+          project_path: "/tmp/bot",
+          telemetryEnabled: false,
+          game_frontend_url: "http://localhost:8080",
+          editor_url: "http://localhost:8082",
+        };
+      },
+    },
+    server: {
+      async start() { return { ok: true }; },
+      async status() { return { ok: true, body: { running: false } }; },
+      onStatus() { return () => {}; },
+    },
+    match: { async start() { return { ok: true }; } },
+    publish: { async bot() { return { ok: true }; } },
+    docker: {
+      async status() { return { imagePresent: false, image: "studio" }; },
+      async pull() { return { ok: true }; },
+    },
+  };
+  renderAppFrame(outlet, {
+    host,
+    dialogs: { notify() {}, confirm() { return Promise.resolve(false); } },
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  const frame = outlet.querySelector(".app-frame");
+  const fold = outlet.querySelector(".area-rail-fold");
+  const workspaceLabel = outlet.querySelector('[data-area="workspace"] .area-rail-label');
+  assert.ok(frame);
+  assert.ok(fold);
+  assert.ok(workspaceLabel);
+  assert.equal(frame.getAttribute("data-rail-mode"), "auto");
+  assert.equal(frame.getAttribute("data-rail-expanded"), "true");
+  assert.equal(workspaceLabel.hidden, false);
+  assert.equal(workspaceLabel.textContent, "Workspace");
+  assert.ok(outlet.querySelector(".game-ctrl"));
+  assert.equal(outlet.querySelector(".side-menu").hidden, false);
+
+  fold.click();
+  assert.equal(frame.getAttribute("data-rail-mode"), "open");
+  assert.equal(frame.getAttribute("data-rail-expanded"), "true");
+  assert.equal(workspaceLabel.hidden, false);
+
+  fold.click();
+  assert.equal(frame.getAttribute("data-rail-mode"), "closed");
+  assert.equal(frame.getAttribute("data-rail-expanded"), "false");
+  assert.equal(workspaceLabel.hidden, true);
+  assert.ok(outlet.querySelector('[data-area="workspace"] .area-rail-icon'));
+  assert.equal(
+    outlet.querySelector('[data-area="workspace"] .area-rail-icon').getAttribute("data-area-icon"),
+    "code",
+  );
+  assert.equal(
+    outlet.querySelector('[data-area="build"] .area-rail-icon').getAttribute("data-area-icon"),
+    "rocket",
+  );
+  assert.equal(
+    outlet.querySelector('[data-area="help"] .area-rail-icon').getAttribute("data-area-icon"),
+    "circle-help",
+  );
+  assert.equal(
+    outlet.querySelector('[data-area="profile"] .area-rail-icon').getAttribute("data-area-icon"),
+    "user",
+  );
+  assert.equal(
+    outlet.querySelector('[data-area="settings"] .area-rail-icon').getAttribute("data-area-icon"),
+    "settings",
+  );
+  assert.ok(outlet.querySelector('[data-area="workspace"] .area-rail-svg'));
+  assert.equal(outlet.querySelector(".side-menu").hidden, false);
+  assert.ok(outlet.querySelector(".game-ctrl"));
+
+  fold.click();
+  assert.equal(frame.getAttribute("data-rail-mode"), "auto");
+  assert.equal(frame.getAttribute("data-rail-expanded"), "true");
+  assert.equal(workspaceLabel.hidden, false);
+  installed.restore();
 });
 
 test("telemetry loads only with an id and an on switch", () => {
@@ -99,7 +189,7 @@ test("web adapter reaches server, match and publish and refuses local upgrade", 
   server.close();
 });
 
-test("the shell shows the game panel, pinned items, runtime, and publish", async () => {
+test("the shell shows the game panel, area rail, workspace image, and publish", async () => {
   const installed = installDocument();
   const outlet = installed.document.createElement("div");
   let started = 0;
@@ -151,10 +241,17 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   await Promise.resolve();
 
   const labels = () => outlet.querySelectorAll("button").map((button) => button.textContent);
-  assert.equal(labels().includes("Profile"), true);
-  assert.equal(labels().includes("Settings"), true);
+  const rail = outlet.querySelector(".area-rail");
+  assert.ok(rail);
+  assert.equal(outlet.querySelector(".tab-bar"), null);
+  assert.ok(outlet.querySelector('[data-area="workspace"]'));
+  assert.ok(outlet.querySelector('[data-area="build"]'));
+  assert.ok(outlet.querySelector('[data-area="help"]'));
+  assert.ok(outlet.querySelector('[data-area="profile"]'));
+  assert.ok(outlet.querySelector('[data-area="settings"]'));
   assert.equal(labels().includes("Editor"), false);
   assert.equal(labels().includes("Open editor"), true);
+  assert.equal(labels().includes("Studio image"), true);
   assert.equal(labels().includes("Open bot"), false);
   assert.equal(labels().includes("Start match"), false);
   assert.equal(labels().includes("Publish bot"), false);
@@ -210,16 +307,38 @@ test("the shell shows the game panel, pinned items, runtime, and publish", async
   assert.equal(outlet.querySelector("#editor_frame")?.src, undefined);
   assert.equal(outlet.querySelector("#game_frame").src, "http://localhost:8080");
 
-  outlet.querySelectorAll("button").find((button) => button.textContent === "Runtime").click();
+  outlet.querySelector('[data-area="settings"]').click();
+  assert.equal(outlet.querySelector(".game-ctrl"), null);
+  assert.equal(labels().includes("Open editor"), false);
+  assert.equal(labels().includes("Studio image"), false);
+  assert.ok(outlet.querySelector(".app-status-version"));
+
+  outlet.querySelector('[data-area="workspace"]').click();
+  assert.ok(outlet.querySelector(".game-ctrl"));
   assert.equal(labels().includes("Studio image"), true);
-  assert.equal(labels().includes("Profile"), true);
-  assert.equal(labels().includes("Settings"), true);
+  assert.ok(outlet.querySelector(".app-status-version"));
   assert.equal(started, 0);
   assert.equal(serverStarts, 1);
+
+  outlet.querySelector('[data-area="build"]').click();
+  assert.equal(outlet.querySelector(".game-ctrl"), null);
+  assert.ok(outlet.querySelector('[data-window="build"]'));
+  assert.equal(
+    outlet.querySelectorAll("p").some((node) => node.textContent === "Coming soon"),
+    true,
+  );
+
+  outlet.querySelector('[data-area="help"]').click();
+  assert.equal(outlet.querySelector(".game-ctrl"), null);
+  assert.ok(outlet.querySelector('[data-window="help"]'));
+  assert.equal(
+    outlet.querySelectorAll("p").some((node) => node.textContent === "Coming soon"),
+    true,
+  );
   installed.restore();
 });
 
-test("lateral menu shows build version under Settings on every tab", async () => {
+test("status footer shows build version on every area and update notice when newer", async () => {
   const installed = installDocument();
   const outlet = installed.document.createElement("div");
   const host = {
@@ -234,6 +353,14 @@ test("lateral menu shows build version under Settings on every tab", async () =>
         };
       },
     },
+    updates: {
+      async check() {
+        return { state: "newer", version: "v1.2.0" };
+      },
+      async apply() {
+        return { ok: true };
+      },
+    },
     server: {
       async start() { return { ok: true }; },
       async status() { return { ok: true, body: { running: false } }; },
@@ -252,33 +379,35 @@ test("lateral menu shows build version under Settings on every tab", async () =>
   });
   await Promise.resolve();
   await Promise.resolve();
+  await Promise.resolve();
 
-  const pinned = outlet.querySelector(".side-menu-pinned");
-  assert.ok(pinned);
-  const settings = pinned.querySelectorAll("button").find((button) => button.textContent === "Settings");
-  const version = pinned.querySelector(".side-menu-version");
-  assert.ok(settings);
+  assert.ok(outlet.querySelector(".app-shell"));
+  assert.ok(outlet.querySelector(".app-status-bar"));
+  assert.equal(outlet.querySelector(".side-menu-version"), null);
+  const version = outlet.querySelector(".app-status-version");
   assert.ok(version);
   assert.equal(version.textContent, "v1.0.1");
   assert.equal(version.title, "Studio build version");
   assert.equal(version.dataset.studioVersion || version.getAttribute("data-studio-version"), "v1.0.1");
-  const pinnedKids = pinned.children;
-  const settingsIndex = [...pinnedKids].indexOf(settings);
-  const versionIndex = [...pinnedKids].indexOf(version);
-  assert.equal(versionIndex, settingsIndex + 1);
+  assert.ok(outlet.querySelector(".game-ctrl"));
 
-  outlet.querySelectorAll("button").find((button) => button.textContent === "Runtime").click();
-  const versionAfter = outlet.querySelector(".side-menu-version");
-  assert.ok(versionAfter);
-  assert.equal(versionAfter.textContent, "v1.0.1");
-  const settingsAfter = outlet.querySelector(".side-menu-pinned")
-    .querySelectorAll("button")
-    .find((button) => button.textContent === "Settings");
-  assert.ok(settingsAfter);
+  const updateLabel = outlet.querySelector(".app-status-update-label");
+  assert.ok(updateLabel);
+  assert.equal(updateLabel.textContent, "Update available: v1.2.0");
+  assert.ok(outlet.querySelector(".app-status-update-action"));
+
+  outlet.querySelector('[data-area="settings"]').click();
+  assert.equal(outlet.querySelector(".game-ctrl"), null);
+  assert.equal(outlet.querySelector(".app-status-version").textContent, "v1.0.1");
+  assert.equal(outlet.querySelector(".app-status-update-label").textContent, "Update available: v1.2.0");
+
+  outlet.querySelector('[data-area="workspace"]').click();
+  assert.ok(outlet.querySelector(".game-ctrl"));
+  assert.equal(outlet.querySelector(".app-status-version").textContent, "v1.0.1");
   installed.restore();
 });
 
-test("lateral menu defaults build version to dev when config omits it", async () => {
+test("status footer defaults build version to dev when config omits it", async () => {
   const installed = installDocument();
   const outlet = installed.document.createElement("div");
   const host = {
@@ -311,7 +440,7 @@ test("lateral menu defaults build version to dev when config omits it", async ()
   await Promise.resolve();
   await Promise.resolve();
 
-  const version = outlet.querySelector(".side-menu-version");
+  const version = outlet.querySelector(".app-status-version");
   assert.ok(version);
   assert.equal(version.textContent, "dev");
   installed.restore();
@@ -545,7 +674,7 @@ test("settings API debug preference persists and arms only the api source", asyn
   assert.deepEqual(arms, []);
   assert.deepEqual(disarms, []);
 
-  outlet.querySelectorAll("button").find((button) => button.textContent === "Settings").click();
+  outlet.querySelector('[data-area="settings"]').click();
   const box = outlet.querySelector('input[aria-label="Studio API debug logging"]');
   assert.ok(box);
   assert.equal(box.checked, false);

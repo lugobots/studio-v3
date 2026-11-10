@@ -726,7 +726,9 @@ test("server log control stays interactive while match config is locked and call
 test("game control styles are scoped to the side menu", () => {
   const css = readFileSync(new URL("../src/renderer/styles/pages.css", import.meta.url), "utf8");
   assert.match(css, /\.side-menu \.game-ctrl/);
-  assert.match(css, /260px/);
-  assert.match(css, /\.tab-actions\s*\{[^}]*overflow:\s*auto/s);
-  assert.match(css, /\.side-menu-pinned\s*\{[^}]*margin-top:\s*auto/s);
+  assert.match(css, /48px 240px/);
+  assert.match(css, /168px 240px/);
+  assert.match(css, /\.app-status-bar\s*\{/);
+  assert.match(css, /\.tab-actions,\s*\n\.area-actions\s*\{[^}]*overflow:\s*auto/s);
+  assert.match(css, /\.side-menu-pinned,\s*\n\.area-lateral-footer\s*\{[^}]*margin-top:\s*auto/s);
 });

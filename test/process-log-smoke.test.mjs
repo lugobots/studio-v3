@@ -93,7 +93,9 @@ function createSession(initial = {}) {
 }
 
 function buttonByText(root, text) {
-  return root.querySelectorAll("button").find((button) => button.textContent === text);
+  return root.querySelectorAll("button").find((button) => (
+    button.textContent === text || button.getAttribute("aria-label") === text
+  ));
 }
 
 test("process log smoke: defaults stay quiet, arming shows tagged lines, and reload keeps only API debug", async () => {

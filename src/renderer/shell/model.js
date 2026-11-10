@@ -1,30 +1,67 @@
-export const TABS = [
+/** Primary shell areas: icon rail destinations with per-area lateral actions. */
+export const AREAS = [
   {
     id: "workspace",
     label: "Workspace",
+    icon: "code",
+    group: "main",
+    actions: [{ id: "image", label: "Studio image" }],
+  },
+  {
+    id: "build",
+    label: "Build",
+    icon: "rocket",
+    group: "main",
+    actions: [],
+    placeholder: true,
+  },
+  {
+    id: "help",
+    label: "Help",
+    icon: "circle-help",
+    group: "main",
+    actions: [],
+    placeholder: true,
+  },
+  {
+    id: "profile",
+    label: "Profile",
+    icon: "user",
+    group: "account",
     actions: [],
   },
   {
-    id: "runtime",
-    label: "Runtime",
-    actions: [{ id: "image", label: "Studio image" }],
+    id: "settings",
+    label: "Settings",
+    icon: "settings",
+    group: "account",
+    actions: [],
   },
 ];
 
-export const PINNED = [
-  { id: "profile", label: "Profile" },
-  { id: "settings", label: "Settings" },
-];
-
-export function tabById(id) {
-  return TABS.find((tab) => tab.id === id) || TABS[0];
+export function areaById(id) {
+  return AREAS.find((area) => area.id === id) || AREAS[0];
 }
 
-export function menuFor(tabId) {
-  const tab = tabById(tabId);
+/** @deprecated Prefer areaById; kept for callers that still say "tab". */
+export function tabById(id) {
+  return areaById(id);
+}
+
+/**
+ * Lateral menu shape for an area.
+ * Profile/Settings are areas on the rail — not pinned onto every menu.
+ */
+export function menuFor(areaId) {
+  const area = areaById(areaId);
   return {
-    tabId: tab.id,
-    actions: tab.actions.map((action) => action.id),
-    pinned: PINNED.map((item) => item.id),
+    areaId: area.id,
+    tabId: area.id,
+    actions: area.actions.map((action) => action.id),
+    pinned: [],
   };
+}
+
+export function railAreas() {
+  return AREAS;
 }
