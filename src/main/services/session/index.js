@@ -9,6 +9,7 @@ const { checkBotCompatibility } = require("../bots/compatibility");
 const config = require("../config");
 const docker = require("../docker");
 const { openRuntime } = require("../docker/runtime");
+const notifications = require("../notifications");
 const studioApi = require("../studio-api");
 const {
   HEALTH_DEADLINE_MS,
@@ -18,15 +19,28 @@ const {
   decideStartup,
   routeForStatus,
 } = require("./gate");
+const { createLevel1Ready } = require("./level1-ready");
+const { createServerControls } = require("./server-controls");
+const { createLogControls } = require("./log-controls");
 const { describeStartup } = require("../../../shared/startup-progress");
+const { editorUrl } = require("../../../shared/ports");
 
 let webContents = null;
 let watchGeneration = 0;
+let serverControls = null;
+let logControls = null;
 let lastProgress = describeStartup({
   phase: "docker",
   detail: "Checking Docker and your bot.",
 });
 let lastProgressKey = "";
+
+const level1Ready = createLevel1Ready({
+  getResolved: () => config.getLevel1(),
+  ensureLevel1: (resolved) => docker.ensureLevel1(resolved),
+  onProgress: (input) => emitProgress(input),
+  notify: (payload) => notifications.show(payload),
+});
 
 function attach(contents) {
   webContents = contents;
@@ -153,9 +167,17 @@ function startWatch(projectPath, forcedRoute = "", flow = "startup") {
   tick();
 }
 
+async function ensureApiContainer(projectPath, hostProjectPath = "") {
+  const level1 = await level1Ready.awaitReady();
+  if (!level1.ok) {
+    return level1;
+  }
+  return docker.ensureContainer(projectPath, hostProjectPath, level1);
+}
+
 async function startApi(saved) {
   const paths = launchPaths(saved);
-  const started = await docker.ensureContainer(paths.mount, paths.host);
+  const started = await ensureApiContainer(paths.mount, paths.host);
   if (!started.ok) {
     return { ok: false, route: "/api-error", message: started.error, error: started.error };
   }
@@ -166,10 +188,43 @@ async function startApi(saved) {
   return { ok: true, route: "/api-loading" };
 }
 
+/**
+ * On-demand VS Code helper: start the separate editor container for the open bot.
+ * Must not be called from shell-enter / openRuntime auto-start.
+ */
+async function startEditor() {
+  const saved = await config.get();
+  const paths = launchPaths(saved);
+  if (!paths.host) {
+    return { ok: false, error: "Open a bot project before starting the editor" };
+  }
+  const started = await docker.ensureEditor(paths.host);
+  if (!started.ok) {
+    return { ok: false, error: started.error || "Could not start the editor" };
+  }
+  const ready = await docker.waitEditorReady({ url: editorUrl() });
+  if (!ready.ok) {
+    return {
+      ok: false,
+      error: ready.error || "Editor did not become reachable",
+      url: ready.url || editorUrl(),
+    };
+  }
+  return { ok: true, url: ready.url || editorUrl() };
+}
+
+async function stopEditor() {
+  return docker.stopEditor();
+}
+
 async function next() {
   emitProgress({ phase: "docker", detail: "Checking that Docker is running." });
   const status = await docker.getStatus();
   const saved = await config.get();
+  if (status.running) {
+    // Non-blocking: shell entry must not wait on Level-1 pull/extract.
+    level1Ready.kick();
+  }
   return decideStartup({
     dockerRunning: status.running,
     botPaths: saved.bot_paths,
@@ -201,7 +256,7 @@ async function open(folder) {
     check: checkBotCompatibility,
     remember: (dir) => config.rememberBot(dir),
     stop: () => docker.stopContainer(),
-    start: (dir) => docker.ensureContainer(dir, dir),
+    start: (dir) => ensureApiContainer(dir, dir),
     watch: (dir, route) => {
       watchGeneration += 1;
       startWatch(dir, route);
@@ -246,10 +301,19 @@ async function create({ folder, language, overwrite }) {
       }
       emitProgress({
         flow,
+        phase: "image",
+        detail: "Preparing the Level-1 opponent binary.",
+      });
+      const level1 = await level1Ready.awaitReady();
+      if (!level1.ok) {
+        return level1;
+      }
+      emitProgress({
+        flow,
         phase: "container",
         detail: creating ? "Starting the API that will create the bot." : "Starting the Studio API.",
       });
-      const container = await docker.ensureContainer(dir, dir);
+      const container = await docker.ensureContainer(dir, dir, level1);
       if (!container.ok) {
         return container;
       }
@@ -322,12 +386,12 @@ async function remove(folder) {
   return { ok: true, config: saved };
 }
 
-async function startMatch() {
+async function ensureStudioApiReady(missingBotError) {
   const saved = await config.get();
   if (!saved.project_path) {
-    return { ok: false, error: "Open a bot before starting a match." };
+    return { ok: false, error: missingBotError };
   }
-  const container = await docker.ensureContainer(saved.project_path, saved.project_path);
+  const container = await ensureApiContainer(saved.project_path, saved.project_path);
   if (!container.ok) {
     return container;
   }
@@ -335,8 +399,165 @@ async function startMatch() {
   if (!ready.ok) {
     return ready;
   }
+  return { ok: true };
+}
+
+function getServerControls() {
+  if (!serverControls) {
+    serverControls = createServerControls({
+      ensureReady: ensureStudioApiReady,
+      api: studioApi,
+      matchSettings: () => config.matchSettingsForApi(),
+      sendStatus: (status) => {
+        webContents?.send(CHANNELS.server.statusEvent, status);
+      },
+    });
+  }
+  return serverControls;
+}
+
+async function startServer(settings) {
+  return getServerControls().start(settings);
+}
+
+async function stopServer() {
+  return getServerControls().stop();
+}
+
+async function serverStatus() {
+  return getServerControls().status();
+}
+
+function watchServerStatus(options) {
+  return getServerControls().watch(options);
+}
+
+function getLogControls() {
+  if (!logControls) {
+    logControls = createLogControls({
+      ensureReady: ensureStudioApiReady,
+      api: studioApi,
+      sendLines: (payload) => {
+        webContents?.send(CHANNELS.logs.event, payload);
+      },
+    });
+  }
+  return logControls;
+}
+
+async function armLogs(source) {
+  return getLogControls().arm(source);
+}
+
+async function disarmLogs(source) {
+  return getLogControls().disarm(source);
+}
+
+function watchProcessLogs(options) {
+  return getLogControls().watch(options);
+}
+
+function unwatchProcessLogs() {
+  return getLogControls().unwatch();
+}
+
+async function startMatch(options = {}) {
+  const level1 = await level1Ready.awaitReady();
+  if (!level1.ok) {
+    return level1;
+  }
+  const ready = await ensureStudioApiReady("Open a bot before starting a match.");
+  if (!ready.ok) {
+    return ready;
+  }
   try {
-    return actionResult(await studioApi.startMatch());
+    const settings = await config.matchSettingsForApi();
+    const payload = { ...settings };
+    if (options && Array.isArray(options.active)) {
+      payload.active = options.active;
+    }
+    return actionResult(await studioApi.startMatch(payload));
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function resetMatch() {
+  const ready = await ensureStudioApiReady("Open a bot before resetting a match.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    return actionResult(await studioApi.resetMatch());
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function getPositions() {
+  const ready = await ensureStudioApiReady("Open a bot before reading positions.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    const body = await studioApi.getPositions();
+    return { ok: true, body };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function applyPositions(snapshot) {
+  const ready = await ensureStudioApiReady("Open a bot before applying positions.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    return actionResult(await studioApi.applyPositions(snapshot));
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function startBot(slot = {}) {
+  const ready = await ensureStudioApiReady("Open a bot before starting a player.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    const settings = await config.matchSettingsForApi();
+    return actionResult(
+      await studioApi.startBot({
+        side: slot.side,
+        number: slot.number,
+        settings,
+      }),
+    );
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function stopBot(slot) {
+  const ready = await ensureStudioApiReady("Open a bot before stopping a player.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    return actionResult(await studioApi.stopBot(slot));
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function botStatus(slot) {
+  const ready = await ensureStudioApiReady("Open a bot before reading player status.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    const body = await studioApi.botStatus(slot);
+    return { ok: true, body };
   } catch (error) {
     return { ok: false, error: error.message };
   }
@@ -383,7 +604,23 @@ module.exports = {
   open,
   create,
   remove,
+  startServer,
+  stopServer,
+  serverStatus,
+  watchServerStatus,
+  armLogs,
+  disarmLogs,
+  watchProcessLogs,
+  unwatchProcessLogs,
   startMatch,
+  resetMatch,
+  getPositions,
+  applyPositions,
+  startBot,
+  stopBot,
+  botStatus,
   publish,
   projectStatus,
+  startEditor,
+  stopEditor,
 };

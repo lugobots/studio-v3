@@ -1,11 +1,22 @@
 "use strict";
 
+const { LEVEL1_CONTAINER_BINARY_PATH } = require("../config/store");
 const { DEFAULTS, editorImageFrom, imageFrom, portsFrom } = require("../../../shared/ports");
 
-function runArgs(projectPath, env = process.env, hostProjectPath = "") {
+/**
+ * Build `docker run` args for the Studio API container.
+ * When `level1` includes a host binary path, bind-mount it at the path the API
+ * bot manager expects (default `/usr/local/lib/lugo/bot-level-1`).
+ *
+ * @param {string} projectPath
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {string} [hostProjectPath]
+ * @param {{ hostBinaryPath?: string, containerBinaryPath?: string }} [level1]
+ */
+function runArgs(projectPath, env = process.env, hostProjectPath = "", level1 = null) {
   const ports = portsFrom(env);
   const image = imageFrom(env);
-  return [
+  const args = [
     "run",
     "-d",
     "--name",
@@ -28,9 +39,24 @@ function runArgs(projectPath, env = process.env, hostProjectPath = "") {
     `LUGO_HOST_PROJECT_PATH=${hostProjectPath}`,
     "-e",
     `BOT_SOURCE_PATH=${DEFAULTS.mountTarget}`,
-    image,
-    "api",
   ];
+
+  const hostBinaryPath = level1 && level1.hostBinaryPath;
+  if (hostBinaryPath) {
+    const containerBinaryPath =
+      (level1 && level1.containerBinaryPath) || LEVEL1_CONTAINER_BINARY_PATH;
+    args.push(
+      "-v",
+      `${hostBinaryPath}:${containerBinaryPath}`,
+      "-e",
+      `LUGO_STUDIO_OPPONENT_BOT=${containerBinaryPath}`,
+      "-e",
+      `LUGO_HOST_OPPONENT_BOT=${hostBinaryPath}`,
+    );
+  }
+
+  args.push(image, "api");
+  return args;
 }
 
 function editorRunArgs(projectPath, env = process.env) {

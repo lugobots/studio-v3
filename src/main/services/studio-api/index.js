@@ -1,13 +1,20 @@
 "use strict";
 
-// studio-v2/api/router.go already exposes GET /studio/status, POST /game/start,
-// POST /init/setup-new-bot, and POST /bot/publish under /api. entrypoint.sh runs
-// `app run` with the bot mounted at /home/coder/project. lugobots/studio:latest
-// was not present on this machine, so a live image smoke belongs to the image publisher.
+// Client talks to the V3-owned API in lugobots/studio-v3-api:latest (command `api`).
+// Routes under /api include health, studio/status, init/setup-new-bot, server/start,
+// server/status, server/stop, server/status/ws, game/start, and bot/publish.
 
 function apiBase() {
   const port = process.env.LUGO_STUDIO_API_PORT || "8081";
   return `http://127.0.0.1:${port}/api`;
+}
+
+function statusWsUrl(base = apiBase()) {
+  return `${base.replace(/^http/, "ws")}/server/status/ws`;
+}
+
+function logsWsUrl(base = apiBase()) {
+  return `${base.replace(/^http/, "ws")}/logs/ws`;
 }
 
 async function request(pathname, options, fetchImpl = global.fetch) {
@@ -34,10 +41,32 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Last version string from a successful GET /api/health (null until known). */
+let cachedApiVersion = null;
+
+function rememberHealthVersion(body) {
+  if (body && typeof body.version === "string" && body.version) {
+    cachedApiVersion = body.version;
+  }
+}
+
+function apiVersion() {
+  return cachedApiVersion;
+}
+
+/** Test helper: clear the cached health version. */
+function resetApiVersionCache() {
+  cachedApiVersion = null;
+}
+
 async function healthy(fetchImpl) {
   try {
     const body = await request("/health", { method: "GET" }, fetchImpl);
-    return Boolean(body && body.status === "OK");
+    if (body && body.status === "OK") {
+      rememberHealthVersion(body);
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -47,7 +76,8 @@ async function waitUntilReady(fetchImpl, attempts = 20) {
   let last = "Studio API is not ready";
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      await request("/health", { method: "GET" }, fetchImpl);
+      const body = await request("/health", { method: "GET" }, fetchImpl);
+      rememberHealthVersion(body);
       return { ok: true };
     } catch (error) {
       last = error.message;
@@ -61,8 +91,117 @@ async function status(fetchImpl) {
   return request("/studio/status", { method: "GET" }, fetchImpl);
 }
 
-async function startMatch(fetchImpl) {
-  return request("/game/start", { method: "POST" }, fetchImpl);
+function jsonPostBody(body) {
+  if (!body || typeof body !== "object") {
+    return { method: "POST" };
+  }
+  return {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  };
+}
+
+async function startServer(settings, fetchImpl = global.fetch) {
+  if (typeof settings === "function") {
+    return request("/server/start", jsonPostBody(undefined), settings);
+  }
+  return request("/server/start", jsonPostBody(settings), fetchImpl);
+}
+
+async function serverStatus(fetchImpl) {
+  return request("/server/status", { method: "GET" }, fetchImpl);
+}
+
+async function stopServer(fetchImpl) {
+  return request("/server/stop", { method: "POST" }, fetchImpl);
+}
+
+function parseStatusPayload(raw) {
+  let data = raw;
+  if (typeof data === "string") {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+  return { running: Boolean(data.running) };
+}
+
+function subscribeServerStatus(onStatus, { WebSocketImpl = globalThis.WebSocket, url } = {}) {
+  if (typeof onStatus !== "function") {
+    throw new TypeError("subscribeServerStatus requires an onStatus callback");
+  }
+  if (typeof WebSocketImpl !== "function") {
+    throw new Error("WebSocket is not available");
+  }
+  const ws = new WebSocketImpl(url || statusWsUrl());
+  const handleMessage = (event) => {
+    const status = parseStatusPayload(event && event.data);
+    if (status) {
+      onStatus(status);
+    }
+  };
+  if (typeof ws.addEventListener === "function") {
+    ws.addEventListener("message", handleMessage);
+  } else {
+    ws.onmessage = handleMessage;
+  }
+  return () => {
+    if (typeof ws.removeEventListener === "function") {
+      ws.removeEventListener("message", handleMessage);
+    } else if (ws.onmessage === handleMessage) {
+      ws.onmessage = null;
+    }
+    if (typeof ws.close === "function") {
+      try {
+        ws.close();
+      } catch {
+        // ignore close errors on teardown
+      }
+    }
+  };
+}
+
+async function startMatch(payload, fetchImpl = global.fetch) {
+  if (typeof payload === "function") {
+    return request("/game/start", jsonPostBody(undefined), payload);
+  }
+  return request("/game/start", jsonPostBody(payload), fetchImpl);
+}
+
+async function resetMatch(fetchImpl = global.fetch) {
+  return request("/game/reset", { method: "POST" }, fetchImpl);
+}
+
+async function getPositions(fetchImpl = global.fetch) {
+  return request("/game/positions", { method: "GET" }, fetchImpl);
+}
+
+async function applyPositions(snapshot, fetchImpl = global.fetch) {
+  return request("/game/positions", jsonPostBody(snapshot), fetchImpl);
+}
+
+function botPath(side, number) {
+  return `/team/${encodeURIComponent(side)}/bots/${encodeURIComponent(String(number))}`;
+}
+
+async function startBot({ side, number, settings }, fetchImpl = global.fetch) {
+  // Settings are applied on server/match start (API session lastSettings). The
+  // body is still sent so main always forwards current prefs on bot calls.
+  return request(botPath(side, number), jsonPostBody(settings), fetchImpl);
+}
+
+async function stopBot({ side, number }, fetchImpl = global.fetch) {
+  return request(botPath(side, number), { method: "DELETE" }, fetchImpl);
+}
+
+async function botStatus({ side, number }, fetchImpl = global.fetch) {
+  return request(botPath(side, number), { method: "GET" }, fetchImpl);
 }
 
 async function setupBot(language, fetchImpl) {
@@ -83,4 +222,88 @@ async function publishBot({ botUri, tag }, fetchImpl) {
   );
 }
 
-module.exports = { apiBase, request, healthy, waitUntilReady, status, startMatch, setupBot, publishBot };
+async function armLogSource(source, fetchImpl = global.fetch) {
+  return request("/logs/arm", jsonPostBody({ source }), fetchImpl);
+}
+
+async function disarmLogSource(source, fetchImpl = global.fetch) {
+  return request("/logs/disarm", jsonPostBody({ source }), fetchImpl);
+}
+
+function parseProcessLogPayload(raw) {
+  let data = raw;
+  if (typeof data === "string") {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+  if (!data || typeof data !== "object" || !Array.isArray(data.lines)) {
+    return null;
+  }
+  return { lines: data.lines };
+}
+
+function subscribeProcessLogs(onLines, { WebSocketImpl = globalThis.WebSocket, url } = {}) {
+  if (typeof onLines !== "function") {
+    throw new TypeError("subscribeProcessLogs requires an onLines callback");
+  }
+  if (typeof WebSocketImpl !== "function") {
+    throw new Error("WebSocket is not available");
+  }
+  const ws = new WebSocketImpl(url || logsWsUrl());
+  const handleMessage = (event) => {
+    const payload = parseProcessLogPayload(event && event.data);
+    if (payload) {
+      onLines(payload);
+    }
+  };
+  if (typeof ws.addEventListener === "function") {
+    ws.addEventListener("message", handleMessage);
+  } else {
+    ws.onmessage = handleMessage;
+  }
+  return () => {
+    if (typeof ws.removeEventListener === "function") {
+      ws.removeEventListener("message", handleMessage);
+    } else if (ws.onmessage === handleMessage) {
+      ws.onmessage = null;
+    }
+    if (typeof ws.close === "function") {
+      try {
+        ws.close();
+      } catch {
+        // ignore close errors on teardown
+      }
+    }
+  };
+}
+
+module.exports = {
+  apiBase,
+  statusWsUrl,
+  logsWsUrl,
+  request,
+  healthy,
+  apiVersion,
+  resetApiVersionCache,
+  waitUntilReady,
+  status,
+  startServer,
+  serverStatus,
+  stopServer,
+  subscribeServerStatus,
+  startMatch,
+  resetMatch,
+  getPositions,
+  applyPositions,
+  startBot,
+  stopBot,
+  botStatus,
+  setupBot,
+  publishBot,
+  armLogSource,
+  disarmLogSource,
+  subscribeProcessLogs,
+};

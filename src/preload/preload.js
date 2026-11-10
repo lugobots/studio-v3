@@ -17,11 +17,15 @@ contextBridge.exposeInMainWorld("studio", {
   docker: {
     status: () => ipcRenderer.invoke(CHANNELS.docker.status),
     pull: () => ipcRenderer.invoke(CHANNELS.docker.pull),
+    ensureEditor: () => ipcRenderer.invoke(CHANNELS.docker.ensureEditor),
+    stopEditor: () => ipcRenderer.invoke(CHANNELS.docker.stopEditor),
     onProgress: (callback) => subscribe(CHANNELS.docker.progress, callback),
   },
   config: {
     get: () => ipcRenderer.invoke(CHANNELS.config.get),
     set: (patch) => ipcRenderer.invoke(CHANNELS.config.set, patch),
+    matchGet: () => ipcRenderer.invoke(CHANNELS.config.matchGet),
+    matchSet: (patch) => ipcRenderer.invoke(CHANNELS.config.matchSet, patch),
   },
   updates: {
     check: () => ipcRenderer.invoke(CHANNELS.updates.check),
@@ -44,9 +48,39 @@ contextBridge.exposeInMainWorld("studio", {
     create: (payload) => ipcRenderer.invoke(CHANNELS.project.create, payload),
     remove: (folder) => ipcRenderer.invoke(CHANNELS.project.remove, folder),
   },
+  server: {
+    start: (settings) => ipcRenderer.invoke(CHANNELS.server.start, settings),
+    stop: () => ipcRenderer.invoke(CHANNELS.server.stop),
+    status: () => ipcRenderer.invoke(CHANNELS.server.status),
+    onStatus: (callback) => {
+      const unsubscribe = subscribe(CHANNELS.server.statusEvent, callback);
+      void ipcRenderer.invoke(CHANNELS.server.watchStatus);
+      return unsubscribe;
+    },
+  },
   match: {
-    start: () => ipcRenderer.invoke(CHANNELS.match.start),
+    start: (payload) => ipcRenderer.invoke(CHANNELS.match.start, payload),
     status: () => ipcRenderer.invoke(CHANNELS.match.status),
+    reset: () => ipcRenderer.invoke(CHANNELS.match.reset),
+    getPositions: () => ipcRenderer.invoke(CHANNELS.match.getPositions),
+    applyPositions: (snapshot) => ipcRenderer.invoke(CHANNELS.match.applyPositions, snapshot),
+  },
+  bot: {
+    start: (payload) => ipcRenderer.invoke(CHANNELS.bot.start, payload),
+    stop: (payload) => ipcRenderer.invoke(CHANNELS.bot.stop, payload),
+    status: (payload) => ipcRenderer.invoke(CHANNELS.bot.status, payload),
+  },
+  logs: {
+    arm: (source) => ipcRenderer.invoke(CHANNELS.logs.arm, source),
+    disarm: (source) => ipcRenderer.invoke(CHANNELS.logs.disarm, source),
+    subscribe: (callback) => {
+      const unsubscribe = subscribe(CHANNELS.logs.event, callback);
+      void ipcRenderer.invoke(CHANNELS.logs.watch);
+      return () => {
+        unsubscribe();
+        void ipcRenderer.invoke(CHANNELS.logs.unwatch);
+      };
+    },
   },
   publish: {
     bot: (payload) => ipcRenderer.invoke(CHANNELS.publish.bot, payload),

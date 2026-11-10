@@ -1,7 +1,8 @@
 "use strict";
 
 const DEFAULTS = {
-  image: "lugobots/studio:latest",
+  image: "lugobots/studio-v3-api:latest",
+  // Separate optional helper (see lugo-vs-code/IMAGE.md). Override with LUGO_VS_CODE_IMAGE.
   editorImage: "lugobots/vs-code-for-lugo:latest",
   containerName: "lugo-studio-v3",
   editorContainerName: "lugo-studio-v3-editor",
@@ -29,4 +30,12 @@ function editorImageFrom(env = process.env) {
   return env.LUGO_VS_CODE_IMAGE || DEFAULTS.editorImage;
 }
 
-module.exports = { DEFAULTS, portsFrom, imageFrom, editorImageFrom };
+function gameFrontendUrl(env = process.env) {
+  return `http://localhost:${portsFrom(env).gameFrontend}`;
+}
+
+function editorUrl(env = process.env) {
+  return `http://localhost:${portsFrom(env).vsCode}`;
+}
+
+module.exports = { DEFAULTS, portsFrom, imageFrom, editorImageFrom, gameFrontendUrl, editorUrl };

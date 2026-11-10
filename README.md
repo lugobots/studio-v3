@@ -31,6 +31,18 @@ npm run dev
 
 This launches the Electron window. `npm start` does the same thing.
 
+## Studio API Docker image version
+
+The Studio API binary embeds a build version (default `dev`) and exposes it on `GET /api/health` as `version`. Release builds must inject the same string into the binary and the image tag:
+
+```bash
+# Development (binary version stays "dev")
+docker build -t lugobots/studio-v3-api:latest .
+
+# Release (binary version and image tag both "1.2.3")
+docker build --build-arg VERSION=1.2.3 -t lugobots/studio-v3-api:1.2.3 .
+```
+
 ## Official downloads and signing
 
 Official installers are published only as [GitHub Releases](https://github.com/lugobots/studio-v3/releases) for this repository. See [docs/verify-download.md](docs/verify-download.md).
