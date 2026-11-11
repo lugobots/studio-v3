@@ -10,6 +10,25 @@ function button(label, className) {
   return element;
 }
 
+function renderBusyProgress(documentRef, blocking) {
+  const percent = Number.isFinite(blocking.percent) ? blocking.percent : 0;
+  const track = documentRef.createElement("div");
+  track.className = "dialog-progress";
+  track.setAttribute("role", "progressbar");
+  track.setAttribute("aria-valuemin", "0");
+  track.setAttribute("aria-valuemax", "100");
+  track.setAttribute("aria-valuenow", String(percent));
+  track.setAttribute("aria-valuetext", `${percent}%`);
+  const fill = documentRef.createElement("div");
+  fill.className = "dialog-progress-fill";
+  fill.style.width = `${percent}%`;
+  track.append(fill);
+  const label = documentRef.createElement("p");
+  label.className = "dialog-progress-label";
+  label.textContent = `${percent}%`;
+  return { track, label };
+}
+
 export function mountDialogs(documentRef, controller = dialogs, onAction) {
   const backdrop = documentRef.createElement("div");
   const stack = documentRef.createElement("div");
@@ -28,21 +47,28 @@ export function mountDialogs(documentRef, controller = dialogs, onAction) {
     if (blocking) {
       backdrop.className = "dialog-backdrop";
       const card = documentRef.createElement("section");
-      card.className = "dialog-card";
+      card.className =
+        blocking.kind === "busy" ? "dialog-card dialog-card-busy" : "dialog-card";
       card.setAttribute("role", "alertdialog");
       card.setAttribute("aria-modal", "true");
       const title = documentRef.createElement("h2");
       title.textContent = blocking.title;
       const body = documentRef.createElement("p");
       body.textContent = blocking.body;
-      const actions = documentRef.createElement("div");
-      actions.className = "dialog-actions";
-      const cancel = button(blocking.cancelLabel, "button");
-      cancel.addEventListener("click", () => controller.answer(false));
-      const confirm = button(blocking.confirmLabel, "button button-primary");
-      confirm.addEventListener("click", () => controller.answer(true));
-      actions.append(cancel, confirm);
-      card.append(title, body, actions);
+      card.append(title, body);
+      if (blocking.kind === "busy") {
+        const { track, label } = renderBusyProgress(documentRef, blocking);
+        card.append(track, label);
+      } else {
+        const actions = documentRef.createElement("div");
+        actions.className = "dialog-actions";
+        const cancel = button(blocking.cancelLabel, "button");
+        cancel.addEventListener("click", () => controller.answer(false));
+        const confirm = button(blocking.confirmLabel, "button button-primary");
+        confirm.addEventListener("click", () => controller.answer(true));
+        actions.append(cancel, confirm);
+        card.append(actions);
+      }
       backdrop.append(card);
     } else {
       backdrop.className = "dialog-backdrop dialog-backdrop-hidden";

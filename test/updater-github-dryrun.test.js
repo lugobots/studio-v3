@@ -1,10 +1,9 @@
 /**
  * Non-prod discovery dry-run against prerelease v0.1.0-ci-dryrun metadata.
  *
- * Note: `lugobots/studio-v3` is still private, so anonymous
- * `https://github.com/.../releases/download/...` URLs return 404.
- * This test uses locally cached release assets (via `gh release download`)
- * behind allowlisted URLs to exercise discover → download → verify → tamper-reject.
+ * Uses allowlisted GitHub Release URLs. Prefer anonymous live downloads when
+ * the repo is public; cached assets (via `gh release download` / LUGO_DRYRUN_CACHE)
+ * still exercise discover → download → verify → tamper-reject offline.
  */
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -76,9 +75,9 @@ test("non-prod Doorway-shaped payload selects the GitHub Linux asset", () => {
   assert.equal(trust.isAllowlistedReleaseAssetUrl(result.asset.url), true);
 });
 
-test("anonymous GitHub download URLs 404 while the repo is private (document blocker)", async () => {
+test("anonymous GitHub download URLs succeed for the public release asset", async () => {
   const response = await fetch(URL, { redirect: "manual" });
-  assert.equal(response.status, 404);
+  assert.ok([200, 302].includes(response.status), `unexpected status ${response.status}`);
 });
 
 test("tampered bytes fail SHA-256 before apply", async () => {

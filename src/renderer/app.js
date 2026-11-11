@@ -2,6 +2,7 @@ import { mountDialogs, dialogs } from "./lib/dialogs.js";
 import { getHost } from "./lib/api.js";
 import { registerRoute, startRouter, navigate } from "./lib/router.js";
 import { applyTelemetry } from "./lib/telemetry.js";
+import { offerUpgrade } from "./lib/upgrade-flow.js";
 import { renderLoading } from "./pages/loading/index.js";
 import { renderDockerCheck } from "./pages/docker-check/index.js";
 import { renderStartProject } from "./pages/start-project/index.js";
@@ -40,32 +41,24 @@ mountDialogs(document, dialogs, async (action) => {
   if (action !== "upgrade") {
     return;
   }
-  const accepted = await dialogs.confirm({
-    title: "Upgrade Studio?",
-    body: "Studio will close after the update package for this system starts.",
-    confirmLabel: "Upgrade",
-    cancelLabel: "Not now",
-  });
-  if (!accepted) {
+  const result = await offerUpgrade(host, dialogs);
+  if (result?.ok || result?.declined) {
     return;
   }
-  const result = await host.updates.apply();
-  if (!result.ok) {
-    if (result.rejected) {
-      dialogs.notify({
-        mode: "notify",
-        title: "Update rejected",
-        body: result.error || "The update failed integrity or signature checks",
-      });
-      return;
-    }
-    await dialogs.confirm({
-      title: "Upgrade did not start",
-      body: result.error || "The update package was not launched.",
-      confirmLabel: "Close",
-      cancelLabel: "Close",
+  if (result?.rejected) {
+    dialogs.notify({
+      mode: "notify",
+      title: "Update rejected",
+      body: result.error || "The update failed integrity or signature checks",
     });
+    return;
   }
+  await dialogs.confirm({
+    title: "Upgrade did not start",
+    body: result?.error || "The update package was not launched.",
+    confirmLabel: "Close",
+    cancelLabel: "Close",
+  });
 });
 
 window.addEventListener("hashchange", syncShell);

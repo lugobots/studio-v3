@@ -57,7 +57,8 @@ The matching `.asc` verifies with fingerprint `31E53F0DC46B2CC0A64AA08A511EB233A
 
 - **Windows:** Not enrolled (commercial Authenticode / Trusted Signing deferred). Rely on checksums + GitHub Release source until a publisher pin is configured (`LUGO_STUDIO_WIN_PUBLISHER`).
 - **macOS:** Not enrolled (Apple Developer Program deferred). Rely on checksums until `LUGO_STUDIO_MAC_TEAM_ID` is set against a notarized build.
-- **Linux:** `gpg --verify Lugo-Studio-Linux-<version>.AppImage.asc Lugo-Studio-Linux-<version>.AppImage` using [`docs/keys/studio-v3-release.asc`](keys/studio-v3-release.asc). Pin: `LUGO_STUDIO_GPG_FINGERPRINT=31E53F0DC46B2CC0A64AA08A511EB233AE342775`.
+- **Linux (manual):** `gpg --import docs/keys/studio-v3-release.asc` then `gpg --verify Lugo-Studio-Linux-<version>.AppImage.asc Lugo-Studio-Linux-<version>.AppImage`. Fingerprint pin: `31E53F0DC46B2CC0A64AA08A511EB233AE342775`. The in-app updater already ships that pin and public key and does not require a manual import.
+- **Linux (in-app):** Studio verifies with the baked fingerprint and the bundled `docs/keys/studio-v3-release.asc`. Set `LUGO_STUDIO_GPG_FINGERPRINT` only to override the pin for rotation testing.
 - **Provenance:** `gh attestation verify <artifact> --repo lugobots/studio-v3` when the build emitted GitHub Artifact Attestations (best-effort on some plans).
 
 Do not install an artifact whose checksum or (when expected) signature check fails.

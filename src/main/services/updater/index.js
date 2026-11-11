@@ -41,6 +41,19 @@ async function check(fetchImpl = global.fetch, platform = process.platform) {
   }
 }
 
+function emitProgress(onProgress, payload) {
+  if (typeof onProgress === "function") {
+    onProgress(payload);
+  }
+}
+
+function mapDownloadPercent(percent, start, end) {
+  if (percent == null || !Number.isFinite(percent)) {
+    return start;
+  }
+  return Math.round(start + ((end - start) * Math.min(100, Math.max(0, percent))) / 100);
+}
+
 async function downloadAsset(asset, options = {}) {
   if (!asset || !asset.url || !asset.name || !asset.sha256) {
     throw new Error("Update asset metadata is incomplete");
@@ -48,13 +61,38 @@ async function downloadAsset(asset, options = {}) {
   trust.assertAllowlistedDownloadUrl(asset.url);
 
   const fetchImpl = options.fetchImpl || global.fetch;
+  const onProgress = options.onProgress;
   const directory =
     options.directory ||
     path.join(electronApp().getPath("appData"), ".LugoStudio", "updates");
-  const { bytes, finalUrl } = await trust.downloadAllowlisted(asset.url, fetchImpl);
+  emitProgress(onProgress, {
+    phase: "download",
+    percent: 0,
+    label: "Downloading update",
+    detail: `Downloading ${asset.name}…`,
+  });
+  const { bytes, finalUrl } = await trust.downloadAllowlisted(asset.url, fetchImpl, {
+    onProgress: (progress) => {
+      emitProgress(onProgress, {
+        phase: "download",
+        percent: mapDownloadPercent(progress.percent, 0, 80),
+        label: "Downloading update",
+        detail:
+          progress.total > 0
+            ? `Downloaded ${progress.received} of ${progress.total} bytes`
+            : `Downloaded ${progress.received} bytes`,
+      });
+    },
+  });
   trust.assertAllowlistedFinalUrl(finalUrl);
 
   const destination = trust.writeUpdateFile(directory, asset.name, bytes);
+  emitProgress(onProgress, {
+    phase: "verify",
+    percent: 82,
+    label: "Verifying update",
+    detail: "Checking SHA-256 integrity…",
+  });
   const digest = trust.verifySha256(destination, asset.sha256);
   if (!digest.ok) {
     try {
@@ -70,10 +108,22 @@ async function downloadAsset(asset, options = {}) {
   let signaturePath = options.signaturePath || null;
   if (!signaturePath && asset.signatureUrl) {
     trust.assertAllowlistedDownloadUrl(asset.signatureUrl);
+    emitProgress(onProgress, {
+      phase: "download",
+      percent: 86,
+      label: "Downloading update",
+      detail: "Downloading signature…",
+    });
     const sig = await trust.downloadAllowlisted(asset.signatureUrl, fetchImpl);
     signaturePath = trust.writeUpdateFile(directory, `${asset.name}.asc`, sig.bytes);
   }
 
+  emitProgress(onProgress, {
+    phase: "verify",
+    percent: 92,
+    label: "Verifying update",
+    detail: "Checking publisher signature…",
+  });
   const signature = await trust.verifyPublisherSignature(destination, options.platform || process.platform, {
     verifyImpl: options.verifyImpl,
     expectedPublisher: options.expectedPublisher,
@@ -90,6 +140,12 @@ async function downloadAsset(asset, options = {}) {
     throw error;
   }
 
+  emitProgress(onProgress, {
+    phase: "verify",
+    percent: 96,
+    label: "Verifying update",
+    detail: "Update package verified.",
+  });
   return destination;
 }
 

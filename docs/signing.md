@@ -14,17 +14,19 @@ Paid vendor subscriptions are deferred. Only **free** signing is enrolled:
 
 - **Identity:** `Lugo Bots Studio Release <studio-release@lugobots.ai>`
 - **Fingerprint:** `31E53F0DC46B2CC0A64AA08A511EB233AE342775`
-- **Public key (in repo):** [`docs/keys/studio-v3-release.asc`](keys/studio-v3-release.asc)
-- **Client pin env (Studio updater):** `LUGO_STUDIO_GPG_FINGERPRINT=31E53F0DC46B2CC0A64AA08A511EB233AE342775`
+- **Public key (in repo / shipped with the app):** [`docs/keys/studio-v3-release.asc`](keys/studio-v3-release.asc)
+- **Client pin:** baked into the Studio updater as that fingerprint. Optional override: `LUGO_STUDIO_GPG_FINGERPRINT=…` (rotation / emergency drills only).
 
-### Verify a Linux AppImage
+Shipped Linux builds verify updates with a **temporary GPG homedir** that imports the bundled public key. End users do **not** need to run `gpg --import` for in-app updates.
+
+### Verify a Linux AppImage (out-of-app / manual)
 
 ```bash
 gpg --import docs/keys/studio-v3-release.asc
 gpg --verify Lugo-Studio-Linux-<version>.AppImage.asc Lugo-Studio-Linux-<version>.AppImage
 ```
 
-Expect a good signature from the fingerprint above.
+Expect a good signature from the fingerprint above. Manual import is only for this CLI check, not for the in-app updater.
 
 ### CI
 

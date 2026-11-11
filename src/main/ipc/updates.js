@@ -1,7 +1,18 @@
-const { ipcMain, app } = require("electron");
+const { ipcMain, app, BrowserWindow } = require("electron");
 const { CHANNELS } = require("../../shared/ipc-channels");
 const updater = require("../services/updater");
 const logic = require("../services/updater/logic");
+
+function targetWindow() {
+  return (
+    BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null
+  );
+}
+
+function emitProgress(payload) {
+  const win = targetWindow();
+  win?.webContents?.send(CHANNELS.updates.progress, payload);
+}
 
 function register() {
   ipcMain.handle(CHANNELS.updates.check, () => updater.check());
@@ -14,9 +25,23 @@ function register() {
       return { ok: false, error: info.message || "No upgrade is available" };
     }
     try {
-      const file = await updater.downloadAsset(info.asset);
+      const file = await updater.downloadAsset(info.asset, {
+        onProgress: emitProgress,
+      });
+      emitProgress({
+        phase: "launch",
+        percent: 98,
+        label: "Starting update",
+        detail: "Launching the new Studio package…",
+      });
       const launched = await updater.launch(file);
       if (launched.ok) {
+        emitProgress({
+          phase: "launch",
+          percent: 100,
+          label: "Starting update",
+          detail: "Closing this Studio window…",
+        });
         app.quit();
       }
       return launched;

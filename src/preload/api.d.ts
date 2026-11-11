@@ -52,6 +52,12 @@ export interface StudioApi {
   updates: {
     check: () => Promise<{ state?: string; unsupported?: boolean; error?: string }>;
     apply: () => Promise<{ ok: boolean; error?: string; declined?: boolean }>;
+    onProgress: (callback: (payload: {
+      phase?: string;
+      percent?: number;
+      label?: string;
+      detail?: string;
+    }) => void) => () => void;
   };
   notifications: {
     show: (payload: { title: string; body?: string }) => Promise<void>;

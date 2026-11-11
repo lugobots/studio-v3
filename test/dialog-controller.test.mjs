@@ -77,3 +77,61 @@ test("mounted notices use distinct class and a countdown progress bar", () => {
 
   installed.restore();
 });
+
+test("busy dialog blocks with a real progress bar and no action buttons", () => {
+  const installed = installDocument();
+  const body = installed.document.createElement("div");
+  body.querySelector = (selector) => body.querySelectorAll(selector)[0] || null;
+  body.querySelectorAll = (selector) => {
+    const out = [];
+    const walk = (node) => {
+      for (const child of node.children || []) {
+        if (child.nodeType !== 1) {
+          continue;
+        }
+        if (selector.startsWith(".") && String(child.className || "").split(/\s+/).includes(selector.slice(1))) {
+          out.push(child);
+        }
+        walk(child);
+      }
+    };
+    walk(body);
+    return out;
+  };
+  installed.document.body = body;
+  installed.document.querySelector = () => null;
+
+  const controller = createDialogController({
+    setTimeout() {
+      return 1;
+    },
+    clearTimeout() {},
+  });
+  mountDialogs(installed.document, controller);
+  controller.busy({
+    title: "Downloading update",
+    body: "Please wait",
+    percent: 12,
+  });
+
+  const card = body.querySelector(".dialog-card");
+  assert.ok(card);
+  assert.match(String(card.className), /dialog-card-busy/);
+  const progress = body.querySelector(".dialog-progress");
+  assert.ok(progress);
+  assert.equal(progress.getAttribute("role"), "progressbar");
+  assert.equal(progress.getAttribute("aria-valuenow"), "12");
+  assert.equal(body.querySelector(".dialog-actions"), null);
+  assert.equal(body.querySelector(".notice-progress"), null);
+
+  controller.setBusyProgress({ percent: 64, title: "Verifying update", body: "Checking SHA-256…" });
+  assert.equal(body.querySelector(".dialog-progress").getAttribute("aria-valuenow"), "64");
+  assert.equal(controller.snapshot().blocking.title, "Verifying update");
+  assert.equal(controller.snapshot().blocking.body, "Checking SHA-256…");
+  assert.equal(controller.snapshot().blocking.percent, 64);
+
+  controller.clearBusy();
+  assert.equal(body.querySelector(".dialog-card"), null);
+
+  installed.restore();
+});

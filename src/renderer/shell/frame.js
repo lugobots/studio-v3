@@ -3,6 +3,7 @@ import { createAreaIcon } from "./area-icons.js";
 import { applyAppearance, normalizeAppearance } from "../lib/appearance.js";
 import { applyTelemetry } from "../lib/telemetry.js";
 import { reportResult } from "../lib/dialogs.js";
+import { offerUpgrade } from "../lib/upgrade-flow.js";
 import { applyMatchConfig, initialGameControls, reduceGameControl } from "./game-controls.js";
 import { renderGameControls, startServerFromApi } from "./game-controls-view.js";
 import { createProcessLogDrawer } from "./process-log-drawer.js";
@@ -532,22 +533,13 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     return config?.apiVersion || config?.studio_api_version || "dev";
   }
 
-  async function offerUpgrade() {
-    const accepted = await dialogs.confirm({
-      title: "Upgrade Studio?",
-      body: "Studio will close after the update package for this system starts.",
-      confirmLabel: "Upgrade",
-      cancelLabel: "Not now",
-    });
-    if (!accepted) {
-      return;
-    }
-    if (typeof host?.updates?.apply !== "function") {
-      return;
-    }
-    const result = await host.updates.apply();
-    if (!result?.ok) {
-      await reportResult(dialogs, result || { ok: false, error: "The update package was not launched." });
+  async function requestUpgrade() {
+    const result = await offerUpgrade(host, dialogs);
+    if (!result?.ok && !result?.declined) {
+      await reportResult(
+        dialogs,
+        result || { ok: false, error: "The update package was not launched." },
+      );
     }
   }
 
@@ -572,7 +564,7 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       action.className = "app-status-update-action";
       action.textContent = "Upgrade";
       action.addEventListener("click", () => {
-        void offerUpgrade();
+        void requestUpgrade();
       });
       updateSlot.append(notice, action);
     }

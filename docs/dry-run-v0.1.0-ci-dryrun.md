@@ -40,16 +40,14 @@ LUGO_STUDIO_V3_LINUX_SIGNATURE_URL=https://github.com/lugobots/studio-v3/release
 
 Studio client pin for Linux: `LUGO_STUDIO_GPG_FINGERPRINT=31E53F0DC46B2CC0A64AA08A511EB233AE342775`.
 
-## Blocker: repository is private
+## Anonymous download readiness
 
-`lugobots/studio-v3` is **private**. Anonymous `https://github.com/.../releases/download/...` requests return **404**, so end users (and the in-app updater) cannot download assets until the repo is public (or a public release host is chosen).
-
-Authenticated `gh release download` works for maintainers. Task 6.2 verification used cached authenticated downloads + updater allowlist/SHA-256/GPG checks.
+`lugobots/studio-v3` is **public**. Anonymous `https://github.com/.../releases/download/...` requests for this prerelease’s Linux AppImage, `.asc`, and `SHA256SUMS` return success (after re-uploading the AppImage asset once visibility flipped).
 
 ## Follow-ups before first real Release (6.3)
 
-- **Make `studio-v3` public** (or otherwise publish assets on a publicly downloadable GitHub Release host)
 - Fix multi-platform `SHA256SUMS` aggregation so Win/macOS digests ship on the same file
 - Re-run **Build release** so CI produces `.asc` automatically (secrets now in Environment `build`)
 - Keep website V3 download CTAs hidden
-- Do **not** point production Doorway at a Release until anonymous download URLs work
+- Apply production Doorway discovery env only after anonymous download URLs work (done for this dry-run tag)
+- Finish remaining GitHub Settings items in `docs/release-hardening.md` (branch/tag protection now available on the public free plan)

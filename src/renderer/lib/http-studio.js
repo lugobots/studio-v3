@@ -144,6 +144,7 @@ export function createHttpStudio({
     updates: {
       check: async () => desktopOnly(),
       apply: async () => desktopOnly(),
+      onProgress: () => () => {},
     },
     notifications: {
       show: async () => {},

@@ -48,6 +48,7 @@ export function createDialogController(options = {}) {
       }
       return new Promise((resolve) => {
         blocking = {
+          kind: "confirm",
           title: request.title,
           body: request.body || "",
           confirmLabel: request.confirmLabel || "OK",
@@ -56,6 +57,40 @@ export function createDialogController(options = {}) {
         };
         emit();
       });
+    },
+    busy(request = {}) {
+      if (blocking?.kind === "confirm") {
+        throw new Error("A dialog is already open");
+      }
+      blocking = {
+        kind: "busy",
+        title: request.title || "Please wait",
+        body: request.body || "",
+        percent: Number.isFinite(request.percent) ? request.percent : 0,
+      };
+      emit();
+    },
+    setBusyProgress(request = {}) {
+      if (!blocking || blocking.kind !== "busy") {
+        return;
+      }
+      if (request.title != null) {
+        blocking.title = request.title;
+      }
+      if (request.body != null) {
+        blocking.body = request.body;
+      }
+      if (Number.isFinite(request.percent)) {
+        blocking.percent = Math.max(0, Math.min(100, request.percent));
+      }
+      emit();
+    },
+    clearBusy() {
+      if (!blocking || blocking.kind !== "busy") {
+        return;
+      }
+      blocking = null;
+      emit();
     },
     notify(request) {
       const notice = {
@@ -78,7 +113,7 @@ export function createDialogController(options = {}) {
       return notice.id;
     },
     answer(confirmed) {
-      if (!blocking) {
+      if (!blocking || blocking.kind !== "confirm") {
         return;
       }
       const { resolve } = blocking;

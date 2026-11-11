@@ -21,6 +21,7 @@
     "files": [
       "src/**/*",
       "resources/**/*",
+      "docs/keys/studio-v3-release.asc",
       "package.json"
     ],
     "win": {

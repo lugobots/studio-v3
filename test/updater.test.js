@@ -289,6 +289,53 @@ test("successful download verifies digest and signature before returning the fil
   fs.rmSync(directory, { recursive: true, force: true });
 });
 
+test("downloadAsset emits progress for streamed downloads and verification", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "lugo-update-"));
+  const bytes = Buffer.from("abcdefghij");
+  const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
+  const events = [];
+  let offset = 0;
+  const body = {
+    getReader() {
+      return {
+        async read() {
+          if (offset >= bytes.length) {
+            return { done: true, value: undefined };
+          }
+          const value = bytes.subarray(offset, offset + 4);
+          offset += value.length;
+          return { done: false, value };
+        },
+      };
+    },
+  };
+
+  const file = await updater.downloadAsset(
+    { name: "Lugo-Studio-Windows-0.2.0.exe", url: GH, sha256 },
+    {
+      directory,
+      onProgress: (event) => events.push(event),
+      fetchImpl: async () => ({
+        status: 200,
+        ok: true,
+        url: GH,
+        headers: {
+          get: (name) => (String(name).toLowerCase() === "content-length" ? String(bytes.length) : null),
+        },
+        body,
+        arrayBuffer: async () => bytes,
+      }),
+      verifyImpl: async () => ({ ok: true, publisher: "Lugo" }),
+    },
+  );
+
+  assert.equal(path.basename(file), "Lugo-Studio-Windows-0.2.0.exe");
+  assert.ok(events.some((event) => event.phase === "download" && event.percent > 0));
+  assert.ok(events.some((event) => event.phase === "verify"));
+  assert.ok(events.at(-1).percent >= 96);
+  fs.rmSync(directory, { recursive: true, force: true });
+});
+
 test("windows package name matches the release artifact pattern", () => {
   assert.equal(pkg.build.win.artifactName, "Lugo-Studio-Windows-${version}.${ext}");
   assert.equal(windowsArtifactName(pkg.version), `Lugo-Studio-Windows-${pkg.version}.exe`);
@@ -301,4 +348,65 @@ test("confirm copy is platform-aware and trust failure notices stay non-blocking
   const rejected = logic.noticeFor({ state: "rejected", message: "checksum mismatch" });
   assert.equal(rejected.mode, "notify");
   assert.equal(rejected.action, undefined);
+});
+
+test("Linux publisher pin is baked and env override wins", () => {
+  assert.equal(trust.LINUX_GPG_FINGERPRINT, "31E53F0DC46B2CC0A64AA08A511EB233AE342775");
+  const previous = process.env.LUGO_STUDIO_GPG_FINGERPRINT;
+  try {
+    delete process.env.LUGO_STUDIO_GPG_FINGERPRINT;
+    assert.equal(trust.expectedPublisherFor("linux"), trust.LINUX_GPG_FINGERPRINT);
+    process.env.LUGO_STUDIO_GPG_FINGERPRINT = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    assert.equal(
+      trust.expectedPublisherFor("linux"),
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    );
+  } finally {
+    if (previous === undefined) {
+      delete process.env.LUGO_STUDIO_GPG_FINGERPRINT;
+    } else {
+      process.env.LUGO_STUDIO_GPG_FINGERPRINT = previous;
+    }
+  }
+  assert.equal(trust.expectedPublisherFor("win32"), "");
+  assert.equal(trust.expectedPublisherFor("darwin"), "");
+});
+
+test("Linux GPG verify uses a bundled public key without the user keyring", async () => {
+  const publicKey = trust.bundledPublicKeyPath();
+  assert.ok(fs.existsSync(publicKey), `missing bundled key at ${publicKey}`);
+
+  const cache = process.env.LUGO_DRYRUN_CACHE || "/tmp/studio-v3-reupload";
+  const appImage = path.join(cache, "Lugo-Studio-Linux-0.1.0.AppImage");
+  const asc = path.join(cache, "Lugo-Studio-Linux-0.1.0.AppImage.asc");
+  if (!fs.existsSync(appImage) || !fs.existsSync(asc)) {
+    // Cache is prepared by readiness/dry-run flows; skip when absent locally.
+    return;
+  }
+
+  const emptyHome = fs.mkdtempSync(path.join(os.tmpdir(), "lugo-empty-gnupg-"));
+  const previous = process.env.GNUPGHOME;
+  const previousPin = process.env.LUGO_STUDIO_GPG_FINGERPRINT;
+  process.env.GNUPGHOME = emptyHome;
+  delete process.env.LUGO_STUDIO_GPG_FINGERPRINT;
+  try {
+    const ok = await trust.verifyPublisherSignature(appImage, "linux", {
+      signaturePath: asc,
+      publicKeyPath: publicKey,
+    });
+    assert.equal(ok.ok, true, ok.error);
+    assert.equal(ok.fingerprint, trust.LINUX_GPG_FINGERPRINT);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.GNUPGHOME;
+    } else {
+      process.env.GNUPGHOME = previous;
+    }
+    if (previousPin === undefined) {
+      delete process.env.LUGO_STUDIO_GPG_FINGERPRINT;
+    } else {
+      process.env.LUGO_STUDIO_GPG_FINGERPRINT = previousPin;
+    }
+    fs.rmSync(emptyHome, { recursive: true, force: true });
+  }
 });

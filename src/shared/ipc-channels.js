@@ -17,6 +17,7 @@ const CHANNELS = {
   updates: {
     check: "updates:check",
     apply: "updates:apply",
+    progress: "updates:progress",
   },
   notifications: {
     show: "notifications:show",

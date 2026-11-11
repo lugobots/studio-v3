@@ -2,6 +2,7 @@
 
 const crypto = require("node:crypto");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
@@ -18,12 +19,46 @@ const RELEASE_CDN_HOSTS = new Set([
   "github-releases.githubusercontent.com",
 ]);
 
-/** Publisher identity pins — fill when signing (task 2.5) is enrolled. */
+/** Enrolled Linux release-key fingerprint (docs/signing.md). Env overrides for rotation drills. */
+const LINUX_GPG_FINGERPRINT = "31E53F0DC46B2CC0A64AA08A511EB233AE342775";
+
+/** Publisher identity pins — Win/macOS stay empty until paid signing is enrolled. */
 const EXPECTED_PUBLISHER = {
   win32: process.env.LUGO_STUDIO_WIN_PUBLISHER || "",
   darwin: process.env.LUGO_STUDIO_MAC_TEAM_ID || "",
-  linux: process.env.LUGO_STUDIO_GPG_FINGERPRINT || "",
+  linux: process.env.LUGO_STUDIO_GPG_FINGERPRINT || LINUX_GPG_FINGERPRINT,
 };
+
+function expectedPublisherFor(platform) {
+  if (platform === "linux") {
+    return process.env.LUGO_STUDIO_GPG_FINGERPRINT || LINUX_GPG_FINGERPRINT;
+  }
+  if (platform === "win32") {
+    return process.env.LUGO_STUDIO_WIN_PUBLISHER || "";
+  }
+  if (platform === "darwin") {
+    return process.env.LUGO_STUDIO_MAC_TEAM_ID || "";
+  }
+  return "";
+}
+
+function bundledPublicKeyPath() {
+  return path.join(__dirname, "../../../../docs/keys/studio-v3-release.asc");
+}
+
+/**
+ * gpg is an external process and cannot read files inside Electron's asar archive.
+ * Node fs can, so copy the bundled key to a real temp path before --import.
+ */
+function materializeBundledPublicKey(sourcePath) {
+  const bytes = fs.readFileSync(sourcePath);
+  const dest = path.join(
+    os.tmpdir(),
+    `lugo-studio-release-${process.pid}-${Date.now()}.asc`,
+  );
+  fs.writeFileSync(dest, bytes);
+  return dest;
+}
 
 function releaseDownloadPrefix() {
   return `https://${RELEASE_DOWNLOAD_HOST}/${CANONICAL_REPO.owner}/${CANONICAL_REPO.name}/releases/download/`;
@@ -192,7 +227,7 @@ function verifyMacSignature(filePath, expectedTeamId) {
   return { ok: true, teamId: expectedTeamId };
 }
 
-function verifyLinuxSignature(filePath, expectedFingerprint, signaturePath) {
+function verifyLinuxSignature(filePath, expectedFingerprint, signaturePath, options = {}) {
   const sigFile = signaturePath || `${filePath}.asc`;
   if (!fs.existsSync(sigFile)) {
     return { ok: false, error: "Linux update is missing a detached GPG signature (.asc)" };
@@ -203,40 +238,80 @@ function verifyLinuxSignature(filePath, expectedFingerprint, signaturePath) {
       error: "Linux GPG fingerprint pin is not configured; refusing unsigned trust path",
     };
   }
-  const result = runCommand("gpg", [
-    "--batch",
-    "--status-fd",
-    "1",
-    "--verify",
-    sigFile,
-    filePath,
-  ]);
-  if (result.error) {
-    return { ok: false, error: result.error.message };
+  const bundledKeyPath = options.publicKeyPath || bundledPublicKeyPath();
+  if (!fs.existsSync(bundledKeyPath)) {
+    return { ok: false, error: "Bundled Linux release public key is missing" };
   }
-  if (result.status !== 0) {
-    return { ok: false, error: "Linux GPG signature verification failed" };
+
+  const gnupgHome = fs.mkdtempSync(path.join(os.tmpdir(), "lugo-studio-gpg-"));
+  let materializedKeyPath = null;
+  try {
+    materializedKeyPath = materializeBundledPublicKey(bundledKeyPath);
+    const imported = runCommand("gpg", [
+      "--batch",
+      "--homedir",
+      gnupgHome,
+      "--import",
+      materializedKeyPath,
+    ]);
+    if (imported.error) {
+      return { ok: false, error: imported.error.message };
+    }
+    if (imported.status !== 0) {
+      return { ok: false, error: "Failed to import bundled Linux release public key" };
+    }
+
+    const result = runCommand("gpg", [
+      "--batch",
+      "--homedir",
+      gnupgHome,
+      "--status-fd",
+      "1",
+      "--verify",
+      sigFile,
+      filePath,
+    ]);
+    if (result.error) {
+      return { ok: false, error: result.error.message };
+    }
+    if (result.status !== 0) {
+      return { ok: false, error: "Linux GPG signature verification failed" };
+    }
+    const normalized = expectedFingerprint.replace(/\s+/g, "").toUpperCase();
+    const statusBlob = `${result.stdout}\n${result.stderr}`.toUpperCase();
+    const good =
+      /\[GNUPG:\]\s+GOODSIG\b/.test(statusBlob) || /\[GNUPG:\]\s+VALIDSIG\b/.test(statusBlob);
+    if (!good) {
+      return { ok: false, error: "Linux GPG signature verification failed" };
+    }
+    if (!statusBlob.includes(normalized)) {
+      return {
+        ok: false,
+        error: "Linux GPG fingerprint does not match the pinned Studio identity",
+      };
+    }
+    return { ok: true, fingerprint: expectedFingerprint };
+  } finally {
+    try {
+      fs.rmSync(gnupgHome, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup errors
+    }
+    if (materializedKeyPath) {
+      try {
+        fs.unlinkSync(materializedKeyPath);
+      } catch {
+        // ignore cleanup errors
+      }
+    }
   }
-  const normalized = expectedFingerprint.replace(/\s+/g, "").toUpperCase();
-  const statusBlob = `${result.stdout}\n${result.stderr}`.toUpperCase();
-  const good = /\[GNUPG:\]\s+GOODSIG\b/.test(statusBlob) || /\[GNUPG:\]\s+VALIDSIG\b/.test(statusBlob);
-  if (!good) {
-    return { ok: false, error: "Linux GPG signature verification failed" };
-  }
-  if (!statusBlob.includes(normalized)) {
-    return {
-      ok: false,
-      error: "Linux GPG fingerprint does not match the pinned Studio identity",
-    };
-  }
-  return { ok: true, fingerprint: expectedFingerprint };
 }
 
 async function verifyPublisherSignature(filePath, platform = process.platform, options = {}) {
   if (typeof options.verifyImpl === "function") {
     return options.verifyImpl(filePath, platform, options);
   }
-  const expected = options.expectedPublisher || EXPECTED_PUBLISHER[platform] || "";
+  const expected = options.expectedPublisher || expectedPublisherFor(platform);
   if (platform === "win32") {
     return verifyWindowsSignature(filePath, expected);
   }
@@ -244,9 +319,49 @@ async function verifyPublisherSignature(filePath, platform = process.platform, o
     return verifyMacSignature(filePath, expected);
   }
   if (platform === "linux") {
-    return verifyLinuxSignature(filePath, expected, options.signaturePath);
+    return verifyLinuxSignature(filePath, expected, options.signaturePath, options);
   }
   return { ok: false, error: `Unsupported platform for signature verification: ${platform}` };
+}
+
+async function readResponseBytes(response, onProgress) {
+  const totalHeader = Number(response.headers?.get?.("content-length") || 0);
+  const total = Number.isFinite(totalHeader) && totalHeader > 0 ? totalHeader : 0;
+  const report = (received, done = false) => {
+    if (typeof onProgress !== "function") {
+      return;
+    }
+    const percent =
+      total > 0
+        ? Math.min(done ? 100 : 99, Math.round((received / total) * 100))
+        : done
+          ? 100
+          : null;
+    onProgress({ received, total, percent });
+  };
+
+  const body = response.body;
+  if (body && typeof body.getReader === "function") {
+    const reader = body.getReader();
+    const chunks = [];
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      const chunk = Buffer.from(value);
+      chunks.push(chunk);
+      received += chunk.length;
+      report(received, false);
+    }
+    report(received, true);
+    return Buffer.concat(chunks);
+  }
+
+  const bytes = Buffer.from(await response.arrayBuffer());
+  report(bytes.length, true);
+  return bytes;
 }
 
 /**
@@ -272,7 +387,7 @@ async function downloadAllowlisted(url, fetchImpl = global.fetch, options = {}) 
       throw new Error(`Download failed (${response.status})`);
     }
     assertAllowlistedFinalUrl(response.url || current);
-    const bytes = Buffer.from(await response.arrayBuffer());
+    const bytes = await readResponseBytes(response, options.onProgress);
     return { bytes, finalUrl: response.url || current };
   }
   throw new Error("Update download exceeded redirect limit");
@@ -292,6 +407,10 @@ function writeUpdateFile(directory, name, bytes) {
 module.exports = {
   CANONICAL_REPO,
   EXPECTED_PUBLISHER,
+  LINUX_GPG_FINGERPRINT,
+  expectedPublisherFor,
+  bundledPublicKeyPath,
+  materializeBundledPublicKey,
   releaseDownloadPrefix,
   isAllowlistedReleaseAssetUrl,
   isAllowlistedRedirectTarget,
@@ -300,6 +419,7 @@ module.exports = {
   normalizeSha256,
   sha256File,
   verifySha256,
+  verifyLinuxSignature,
   verifyPublisherSignature,
   downloadAllowlisted,
   writeUpdateFile,

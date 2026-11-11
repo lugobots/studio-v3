@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("studio", {
   updates: {
     check: () => ipcRenderer.invoke(CHANNELS.updates.check),
     apply: () => ipcRenderer.invoke(CHANNELS.updates.apply),
+    onProgress: (callback) => subscribe(CHANNELS.updates.progress, callback),
   },
   notifications: {
     show: (payload) => ipcRenderer.invoke(CHANNELS.notifications.show, payload),
