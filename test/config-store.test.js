@@ -37,6 +37,26 @@ test("appearance defaults to dark and remembers light", () => {
   assert.equal(store.appearance(store.read(file).data), "dark");
 });
 
+test("workspace editor open defaults true and remembers closed", () => {
+  assert.equal(store.workspaceEditorOpen({}), true);
+  assert.equal(store.workspaceEditorOpen(undefined), true);
+  assert.equal(store.workspaceEditorOpen({ workspace_editor_open: "nope" }), true);
+  assert.equal(store.workspaceEditorOpen({ workspace_editor_open: true }), true);
+  assert.equal(store.workspaceEditorOpen({ workspace_editor_open: false }), false);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-editor-pref-"));
+  const file = store.settingsFile(dir, "linux");
+  store.write(file, store.applyPatch({}, { workspace_editor_open: false }));
+  const closed = store.read(file).data;
+  assert.equal(closed.workspace_editor_open, false);
+  assert.equal(store.workspaceEditorOpen(closed), false);
+
+  store.write(file, store.applyPatch(closed, { workspace_editor_open: true }));
+  const opened = store.read(file).data;
+  assert.equal(opened.workspace_editor_open, true);
+  assert.equal(store.workspaceEditorOpen(opened), true);
+});
+
 test("a missing bot list is seeded from project_path", () => {
   assert.deepEqual(store.botPaths({ project_path: "/bots/demo" }), ["/bots/demo"]);
   assert.deepEqual(store.botPaths({ project_path: "" }), []);
@@ -106,22 +126,18 @@ test("match config defaults when keys are unset", () => {
     game_speed: "normal",
     opponent_team: "default",
     saved_positions: [],
-    home_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, () => true),
-    away_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, () => true),
   });
   assert.equal(store.matchConfig({ skip_to_golden_goal: "yes" }).skip_to_golden_goal, false);
   assert.equal(store.matchConfig({ team_side: "left" }).team_side, "home");
   assert.equal(store.matchConfig({ game_speed: 1 }).game_speed, "normal");
   assert.equal(store.matchConfig({ opponent_team: "level-0" }).opponent_team, "default");
   assert.deepEqual(store.matchConfig({ saved_positions: "opaque" }).saved_positions, []);
-  assert.deepEqual(
-    store.matchConfig({ home_bots_active: [false], away_bots_active: "nope" }).home_bots_active,
-    Array.from({ length: store.BOT_ROSTER_SIZE }, () => true),
-  );
-  assert.deepEqual(
-    store.matchConfig({ home_bots_active: [false], away_bots_active: "nope" }).away_bots_active,
-    Array.from({ length: store.BOT_ROSTER_SIZE }, () => true),
-  );
+  const withLegacy = store.matchConfig({
+    home_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, () => false),
+    away_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, () => false),
+  });
+  assert.equal(Object.hasOwn(withLegacy, "home_bots_active"), false);
+  assert.equal(Object.hasOwn(withLegacy, "away_bots_active"), false);
 });
 
 test("match keys patch round-trips through user.json", () => {
@@ -133,8 +149,6 @@ test("match keys patch round-trips through user.json", () => {
     homeTeam: { 1: { x: 1, y: 2 } },
     awayTeam: { 1: { x: 3, y: 4 } },
   };
-  const homeActive = Array.from({ length: store.BOT_ROSTER_SIZE }, (_, i) => i !== 2);
-  const awayActive = Array.from({ length: store.BOT_ROSTER_SIZE }, (_, i) => i === 10);
   const patched = store.applyPatch(
     store.read(file).data,
     store.matchPatch({
@@ -143,8 +157,8 @@ test("match keys patch round-trips through user.json", () => {
       game_speed: "fast",
       opponent_team: "zombies",
       saved_positions: [preset],
-      home_bots_active: homeActive,
-      away_bots_active: awayActive,
+      home_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, () => false),
+      away_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, () => false),
     }),
   );
   store.write(file, patched);
@@ -154,8 +168,8 @@ test("match keys patch round-trips through user.json", () => {
   assert.equal(saved.game_speed, "fast");
   assert.equal(saved.opponent_team, "zombies");
   assert.deepEqual(saved.saved_positions, [preset]);
-  assert.deepEqual(saved.home_bots_active, homeActive);
-  assert.deepEqual(saved.away_bots_active, awayActive);
+  assert.equal(Object.hasOwn(saved, "home_bots_active"), false);
+  assert.equal(Object.hasOwn(store.matchPatch({ home_bots_active: [false] }), "home_bots_active"), false);
   assert.ok(store.V1_KEYS.includes("skip_to_golden_goal"));
   assert.deepEqual(store.MATCH_KEYS, [
     "team_side",
@@ -163,13 +177,10 @@ test("match keys patch round-trips through user.json", () => {
     "game_speed",
     "opponent_team",
     "saved_positions",
-    "home_bots_active",
-    "away_bots_active",
   ]);
 });
 
 test("match settings for api map opponent_team to opponent_mode", () => {
-  const homeActive = Array.from({ length: store.BOT_ROSTER_SIZE }, (_, i) => i < 3);
   assert.deepEqual(
     store.matchSettingsForApi({
       team_side: "away",
@@ -177,8 +188,7 @@ test("match settings for api map opponent_team to opponent_mode", () => {
       game_speed: "fast",
       opponent_team: "kids",
       saved_positions: [{ name: "x" }],
-      home_bots_active: homeActive,
-      away_bots_active: homeActive,
+      home_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, () => false),
     }),
     {
       team_side: "away",
@@ -193,7 +203,7 @@ test("match settings for api map opponent_team to opponent_mode", () => {
     game_speed: "normal",
     opponent_mode: "default",
   });
-  assert.equal(Object.hasOwn(store.matchSettingsForApi({ home_bots_active: homeActive }), "home_bots_active"), false);
+  assert.equal(Object.hasOwn(store.matchSettingsForApi({ home_bots_active: [false] }), "home_bots_active"), false);
 });
 
 test("opening a different bot does not rewrite match preferences", () => {
@@ -205,14 +215,13 @@ test("opening a different bot does not rewrite match preferences", () => {
     game_speed: "slow",
     opponent_team: "kids",
     saved_positions: [{ name: "corner", ball: { x: 10, y: 20 }, homeTeam: {}, awayTeam: {} }],
-    home_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, (_, i) => i !== 2),
-    away_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, (_, i) => i < 5),
   };
   store.write(file, {
     project_path: "/bots/first",
     bot_paths: ["/bots/first"],
     custom_flag: true,
     ...match,
+    home_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, () => false),
   });
   const afterOpen = store.rememberBot(store.read(file).data, "/bots/second");
   store.write(file, afterOpen);

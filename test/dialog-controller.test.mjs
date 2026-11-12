@@ -78,6 +78,31 @@ test("mounted notices use distinct class and a countdown progress bar", () => {
   installed.restore();
 });
 
+test("prompt resolves with entered text or null on cancel", async () => {
+  const controller = createDialogController({
+    setTimeout() {
+      return 1;
+    },
+    clearTimeout() {},
+  });
+
+  const pending = controller.prompt({
+    title: "Save positions",
+    body: "Pick a name",
+    confirmLabel: "Save",
+  });
+  assert.equal(controller.snapshot().blocking.kind, "prompt");
+  assert.equal(controller.snapshot().blocking.confirmLabel, "Save");
+  controller.snapshot().blocking.value = "  corner kick  ";
+  controller.answer(true);
+  assert.equal(await pending, "  corner kick  ");
+  assert.equal(controller.snapshot().blocking, null);
+
+  const cancelled = controller.prompt({ title: "Save positions" });
+  controller.answer(false);
+  assert.equal(await cancelled, null);
+});
+
 test("busy dialog blocks with a real progress bar and no action buttons", () => {
   const installed = installDocument();
   const body = installed.document.createElement("div");

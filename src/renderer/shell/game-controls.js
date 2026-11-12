@@ -8,28 +8,10 @@ function rows() {
   return Array.from({ length: BOT_ROSTER_SIZE }, () => ({ active: true, running: false, logs: false }));
 }
 
-/** Normalize a Home/Away desired-active array; invalid → all true. */
-function normalizeBotsActive(value) {
-  if (!Array.isArray(value) || value.length !== BOT_ROSTER_SIZE) {
-    return Array.from({ length: BOT_ROSTER_SIZE }, () => true);
-  }
-  return value.map((entry) => entry === true);
-}
-
 /** Desired-active flags for one team from game-control rows. */
 function botsActiveFromRows(teamRows) {
   const rowsForTeam = Array.isArray(teamRows) ? teamRows : [];
   return Array.from({ length: BOT_ROSTER_SIZE }, (_, index) => Boolean(rowsForTeam[index]?.active));
-}
-
-/** Apply a desired-active array onto team rows (preserves running/logs). */
-function applyBotsActive(teamRows, activeFlags) {
-  const flags = normalizeBotsActive(activeFlags);
-  return teamRows.map((row, index) => ({
-    active: flags[index],
-    running: Boolean(row.running),
-    logs: Boolean(row.logs),
-  }));
 }
 
 function positionNames(saved) {
@@ -109,12 +91,7 @@ export function applyMatchConfig(state, match) {
   if (Object.prototype.hasOwnProperty.call(match, "saved_positions")) {
     next.positions = positionNames(match.saved_positions);
   }
-  if (Object.prototype.hasOwnProperty.call(match, "home_bots_active")) {
-    next.home = applyBotsActive(next.home, match.home_bots_active);
-  }
-  if (Object.prototype.hasOwnProperty.call(match, "away_bots_active")) {
-    next.away = applyBotsActive(next.away, match.away_bots_active);
-  }
+  // Desired-active is session-only; ignore legacy home_bots_active / away_bots_active.
   return next;
 }
 
@@ -196,14 +173,19 @@ export function persistMatchSettings(host, state) {
 }
 
 /**
- * Persist Home/Away desired-active preferences.
- * Writes whether or not the game server is running (unlike match settings lock).
+ * Desired-active is session-only and must not be written to user.json.
+ * Kept as a no-op so callers can drop persistence without changing toggle flow.
  */
-export function persistBotActiveSettings(host, state) {
-  if (!host?.config?.matchSet) {
-    return undefined;
-  }
-  return host.config.matchSet(botActiveSettingsPatch(state));
+export function persistBotActiveSettings() {
+  return undefined;
+}
+
+/** Force every Home/Away row desired-active enabled (used when the game server starts). */
+export function enableAllBotsActive(state) {
+  const next = copy(state);
+  next.home = (next.home || []).map((row) => ({ ...row, active: true }));
+  next.away = (next.away || []).map((row) => ({ ...row, active: true }));
+  return next;
 }
 
 /** Active rows as match-start IPC slots (HOME/AWAY + number). */
@@ -246,6 +228,16 @@ export function reduceGameControl(state, action) {
 
   if (action.type === "set-server-running") {
     next.serverRunning = Boolean(action.running);
+    if (next.serverRunning) {
+      next.home = next.home.map((row) => ({ ...row, active: true }));
+      next.away = next.away.map((row) => ({ ...row, active: true }));
+    }
+    return next;
+  }
+
+  if (action.type === "enable-all-bots") {
+    next.home = next.home.map((row) => ({ ...row, active: true }));
+    next.away = next.away.map((row) => ({ ...row, active: true }));
     return next;
   }
 

@@ -268,6 +268,30 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     processLogs.noteDisarmed("api");
   }
 
+  function editorPreferenceOpen(config) {
+    if (!config || typeof config !== "object") {
+      return true;
+    }
+    if (Object.prototype.hasOwnProperty.call(config, "workspaceEditorOpen")) {
+      return config.workspaceEditorOpen !== false;
+    }
+    if (Object.prototype.hasOwnProperty.call(config, "workspace_editor_open")) {
+      return config.workspace_editor_open !== false;
+    }
+    return true;
+  }
+
+  async function persistEditorPreference(open) {
+    if (typeof host?.config?.set !== "function") {
+      return;
+    }
+    try {
+      state.config = await host.config.set({ workspace_editor_open: Boolean(open) });
+    } catch {
+      // Preference write is best-effort; editor UI still follows the session toggle.
+    }
+  }
+
   async function refreshConfig() {
     state.config = await host.config.get();
     applyAppearance(document, state.config?.appearance);
@@ -279,6 +303,13 @@ export function renderAppFrame(outlet, { host, dialogs }) {
         measurementId: state.config.measurementId,
       });
     }
+  }
+
+  async function restoreEditorPreference() {
+    if (!editorPreferenceOpen(state.config)) {
+      return;
+    }
+    await openEditor({ persist: false });
   }
 
   async function refreshMatchConfig() {
@@ -681,8 +712,11 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     }
   }
 
-  async function openEditor() {
+  async function openEditor({ persist = true } = {}) {
     if (state.editor.open && (state.editor.ready || state.editor.starting)) {
+      if (persist) {
+        await persistEditorPreference(true);
+      }
       return;
     }
     state.editor = { open: true, starting: true, ready: false, error: "" };
@@ -695,6 +729,9 @@ export function renderAppFrame(outlet, { host, dialogs }) {
         error: "Editor controls are only available in the desktop app",
       };
       paint();
+      if (persist) {
+        await persistEditorPreference(true);
+      }
       return;
     }
     try {
@@ -707,6 +744,9 @@ export function renderAppFrame(outlet, { host, dialogs }) {
           error: result?.error || "Could not start the editor",
         };
         paint();
+        if (persist) {
+          await persistEditorPreference(true);
+        }
         return;
       }
       state.editor = {
@@ -726,9 +766,12 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       };
       paint();
     }
+    if (persist) {
+      await persistEditorPreference(true);
+    }
   }
 
-  async function closeEditor() {
+  async function closeEditor({ persist = true } = {}) {
     state.editor = { open: false, starting: false, ready: false, error: "" };
     if (editorFrame) {
       hideEditorFrame(editorFrame);
@@ -740,6 +783,9 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       } catch {
         // Teardown is best-effort; Workspace stays usable without the helper.
       }
+    }
+    if (persist) {
+      await persistEditorPreference(false);
     }
   }
 
@@ -822,9 +868,15 @@ export function renderAppFrame(outlet, { host, dialogs }) {
     return section;
   }
 
-  refreshConfig();
-  refreshMatchConfig();
-  refreshUpdateStatus();
+  void (async () => {
+    await refreshConfig();
+    // Match/update must not wait on the editor helper; restore in parallel.
+    await Promise.all([
+      refreshMatchConfig(),
+      refreshUpdateStatus(),
+      restoreEditorPreference(),
+    ]);
+  })();
   bindServerStatus();
   return shell;
 }

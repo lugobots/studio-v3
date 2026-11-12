@@ -66,7 +66,12 @@ test("workspace wiring hits API for server, match, and reset; locked settings an
           telemetryEnabled: false,
           game_frontend_url: "http://localhost:8080",
           editor_url: "http://localhost:8082",
+          workspace_editor_open: false,
+          workspaceEditorOpen: false,
         };
+      },
+      async set() {
+        return this.get();
       },
     };
     // Keep this fixture on the start/match/stop HTTP paths; status hydration is covered in shell tests.

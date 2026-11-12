@@ -50,6 +50,8 @@ test("area rail shows labels when open and icons only when closed; lateral stays
           telemetryEnabled: false,
           game_frontend_url: "http://localhost:8080",
           editor_url: "http://localhost:8082",
+          workspace_editor_open: false,
+          workspaceEditorOpen: false,
         };
       },
     },
@@ -196,6 +198,7 @@ test("the shell shows the game panel, area rail, workspace image, and publish", 
   let serverStarts = 0;
   let editorStarts = 0;
   let editorStops = 0;
+  let editorPref = false;
   const host = {
     config: {
       async get() {
@@ -204,7 +207,15 @@ test("the shell shows the game panel, area rail, workspace image, and publish", 
           telemetryEnabled: false,
           game_frontend_url: "http://localhost:8080",
           editor_url: "http://localhost:8082",
+          workspace_editor_open: editorPref,
+          workspaceEditorOpen: editorPref,
         };
+      },
+      async set(patch) {
+        if (Object.prototype.hasOwnProperty.call(patch, "workspace_editor_open")) {
+          editorPref = patch.workspace_editor_open !== false;
+        }
+        return this.get();
       },
     },
     server: {
@@ -344,6 +355,85 @@ test("the shell shows the game panel, area rail, workspace image, and publish", 
   installed.restore();
 });
 
+test("workspace opens the editor by default and remembers closed across reload", async () => {
+  async function flush() {
+    for (let i = 0; i < 12; i += 1) {
+      await Promise.resolve();
+    }
+  }
+
+  const installed = installDocument();
+  let editorStarts = 0;
+  let editorStops = 0;
+  let pref = undefined;
+  const host = {
+    config: {
+      async get() {
+        const open = pref === undefined ? true : pref !== false;
+        return {
+          project_path: "/tmp/bot",
+          telemetryEnabled: false,
+          game_frontend_url: "http://localhost:8080",
+          editor_url: "http://localhost:8082",
+          workspace_editor_open: open,
+          workspaceEditorOpen: open,
+        };
+      },
+      async set(patch) {
+        if (Object.prototype.hasOwnProperty.call(patch, "workspace_editor_open")) {
+          pref = patch.workspace_editor_open !== false;
+        }
+        return this.get();
+      },
+    },
+    server: {
+      async start() { return { ok: true }; },
+      async status() { return { ok: true, running: false }; },
+    },
+    docker: {
+      async ensureEditor() {
+        editorStarts += 1;
+        return { ok: true, url: "http://localhost:8082" };
+      },
+      async stopEditor() {
+        editorStops += 1;
+        return { ok: true };
+      },
+    },
+  };
+
+  const outlet = installed.document.createElement("div");
+  renderAppFrame(outlet, {
+    host,
+    dialogs: { notify() {}, confirm() { return Promise.resolve(false); } },
+  });
+  await flush();
+  assert.equal(editorStarts, 1);
+  assert.ok(outlet.querySelector(".workspace-main--editor-open"));
+  assert.ok(outlet.querySelector("#editor_frame"));
+  assert.equal(outlet.querySelector('button[title="Close editor"]') !== null, true);
+
+  outlet.querySelector('button[title="Close editor"]').click();
+  await flush();
+  assert.equal(editorStops, 1);
+  assert.equal(pref, false);
+  assert.equal(outlet.querySelector('button[title="Open editor"]') !== null, true);
+  installed.restore();
+
+  const reloaded = installDocument();
+  const reloadedOutlet = reloaded.document.createElement("div");
+  const startsBeforeReload = editorStarts;
+  renderAppFrame(reloadedOutlet, {
+    host,
+    dialogs: { notify() {}, confirm() { return Promise.resolve(false); } },
+  });
+  await flush();
+  assert.equal(editorStarts, startsBeforeReload);
+  assert.equal(reloadedOutlet.querySelector(".workspace-main--editor-open"), null);
+  assert.equal(reloadedOutlet.querySelector('button[title="Open editor"]') !== null, true);
+  reloaded.restore();
+});
+
 test("status footer shows build version on every area and update notice when newer", async () => {
   const installed = installDocument();
   const outlet = installed.document.createElement("div");
@@ -356,6 +446,8 @@ test("status footer shows build version on every area and update notice when new
           apiVersion: "v1.0.1",
           game_frontend_url: "http://localhost:8080",
           editor_url: "http://localhost:8082",
+          workspace_editor_open: false,
+          workspaceEditorOpen: false,
         };
       },
     },
@@ -383,9 +475,9 @@ test("status footer shows build version on every area and update notice when new
     host,
     dialogs: { notify() {}, confirm() { return Promise.resolve(false); } },
   });
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let i = 0; i < 12; i += 1) {
+    await Promise.resolve();
+  }
 
   assert.ok(outlet.querySelector(".app-shell"));
   assert.ok(outlet.querySelector(".app-status-bar"));
@@ -424,6 +516,8 @@ test("status footer defaults build version to dev when config omits it", async (
           telemetryEnabled: false,
           game_frontend_url: "http://localhost:8080",
           editor_url: "http://localhost:8082",
+          workspace_editor_open: false,
+          workspaceEditorOpen: false,
         };
       },
     },
@@ -464,6 +558,8 @@ test("workspace loads match config from app settings into game controls", async 
           telemetryEnabled: false,
           game_frontend_url: "http://localhost:8080",
           editor_url: "http://localhost:8082",
+          workspace_editor_open: false,
+          workspaceEditorOpen: false,
         };
       },
       async matchGet() {
@@ -504,9 +600,9 @@ test("workspace loads match config from app settings into game controls", async 
     host,
     dialogs: { notify() {}, confirm() { return Promise.resolve(false); } },
   });
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let i = 0; i < 12; i += 1) {
+    await Promise.resolve();
+  }
 
   assert.equal(matchGets, 1);
   assert.equal(outlet.querySelector("#team-side-switch").getAttribute("aria-checked"), "true");
@@ -539,6 +635,8 @@ test("workspace hydrates power control from already-running API/live status", as
           telemetryEnabled: false,
           game_frontend_url: "http://localhost:8080",
           editor_url: "http://localhost:8082",
+          workspace_editor_open: false,
+          workspaceEditorOpen: false,
         };
       },
     },
@@ -634,6 +732,8 @@ test("settings API debug preference persists and arms only the api source", asyn
     debugMode: false,
     game_frontend_url: "http://localhost:8080",
     editor_url: "http://localhost:8082",
+    workspace_editor_open: false,
+    workspaceEditorOpen: false,
   };
   const host = {
     config: {
@@ -713,6 +813,8 @@ test("a saved API debug preference arms only the api source on load", async () =
           telemetryEnabled: false,
           debug_mode: true,
           debugMode: true,
+          workspace_editor_open: false,
+          workspaceEditorOpen: false,
         };
       },
     },

@@ -58,8 +58,29 @@ export function createDialogController(options = {}) {
         emit();
       });
     },
+    /**
+     * Blocking text prompt. Resolves to the trimmed string on confirm, or null on cancel.
+     * Prefer this over window.prompt — Electron does not support native prompt dialogs.
+     */
+    prompt(request) {
+      if (blocking) {
+        return Promise.reject(new Error("A dialog is already open"));
+      }
+      return new Promise((resolve) => {
+        blocking = {
+          kind: "prompt",
+          title: request.title,
+          body: request.body || "",
+          confirmLabel: request.confirmLabel || "OK",
+          cancelLabel: request.cancelLabel || "Cancel",
+          value: typeof request.defaultValue === "string" ? request.defaultValue : "",
+          resolve,
+        };
+        emit();
+      });
+    },
     busy(request = {}) {
-      if (blocking?.kind === "confirm") {
+      if (blocking?.kind === "confirm" || blocking?.kind === "prompt") {
         throw new Error("A dialog is already open");
       }
       blocking = {
@@ -113,12 +134,21 @@ export function createDialogController(options = {}) {
       return notice.id;
     },
     answer(confirmed) {
-      if (!blocking || blocking.kind !== "confirm") {
+      if (!blocking || (blocking.kind !== "confirm" && blocking.kind !== "prompt")) {
         return;
       }
-      const { resolve } = blocking;
+      const current = blocking;
+      const { resolve } = current;
       blocking = null;
       emit();
+      if (current.kind === "prompt") {
+        if (!confirmed) {
+          resolve(null);
+          return;
+        }
+        resolve(typeof current.value === "string" ? current.value : "");
+        return;
+      }
       resolve(Boolean(confirmed));
     },
     dismiss,

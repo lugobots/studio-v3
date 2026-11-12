@@ -33,8 +33,6 @@ const MATCH_KEYS = [
   "game_speed",
   "opponent_team",
   "saved_positions",
-  "home_bots_active",
-  "away_bots_active",
 ];
 
 /** Runtime Docker image name/tag keys (V1-compatible + bot_setup_*). */
@@ -62,8 +60,6 @@ const MATCH_DEFAULTS = {
   game_speed: "normal",
   opponent_team: "default",
   saved_positions: [],
-  home_bots_active: Array.from({ length: BOT_ROSTER_SIZE }, () => true),
-  away_bots_active: Array.from({ length: BOT_ROSTER_SIZE }, () => true),
 };
 
 /** Studio V1 defaults for runtime image settings (level-1 is consumed now; others reserved). */
@@ -195,8 +191,9 @@ function normalizeBotsActive(value) {
 
 /**
  * Normalized app-level match prefs from user.json data.
- * Missing or invalid keys use defaults (home, no golden skip, normal, default, [], all bots active).
+ * Missing or invalid keys use defaults (home, no golden skip, normal, default, []).
  * opponent_team holds opponent mode values (default/zombies/statues/kids/defenses).
+ * Legacy home_bots_active / away_bots_active keys are ignored (session-only desired-active).
  */
 function matchConfig(data) {
   const source = data && typeof data === "object" && !Array.isArray(data) ? data : {};
@@ -207,8 +204,6 @@ function matchConfig(data) {
     game_speed: pickAllowed(source.game_speed, GAME_SPEEDS, MATCH_DEFAULTS.game_speed),
     opponent_team: pickAllowed(source.opponent_team, OPPONENT_MODES, MATCH_DEFAULTS.opponent_team),
     saved_positions: positions,
-    home_bots_active: normalizeBotsActive(source.home_bots_active),
-    away_bots_active: normalizeBotsActive(source.away_bots_active),
   };
 }
 
@@ -256,6 +251,17 @@ function telemetryEnabled(data) {
  */
 function appearance(data) {
   return data && data.appearance === "light" ? "light" : "dark";
+}
+
+/**
+ * Workspace editor open preference in user.json (`workspace_editor_open`).
+ * Missing/invalid values default to open (true). Only boolean false is closed.
+ */
+function workspaceEditorOpen(data) {
+  if (!data || !Object.prototype.hasOwnProperty.call(data, "workspace_editor_open")) {
+    return true;
+  }
+  return data.workspace_editor_open !== false;
 }
 
 /**
@@ -332,6 +338,7 @@ module.exports = {
   matchSettingsForApi,
   telemetryEnabled,
   appearance,
+  workspaceEditorOpen,
   apiDebugEnabled,
   projectReady,
   botPaths,

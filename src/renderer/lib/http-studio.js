@@ -94,6 +94,17 @@ export function createHttpStudio({
     return storage.getItem("lugo-studio-appearance") === "light" ? "light" : "dark";
   }
 
+  function workspaceEditorOpen() {
+    if (!storage) {
+      return true;
+    }
+    const saved = storage.getItem("lugo-studio-workspace-editor-open");
+    if (saved === null) {
+      return true;
+    }
+    return saved !== "off";
+  }
+
   return {
     host: "web",
     versions: { node: "", chrome: "", electron: "" },
@@ -121,6 +132,8 @@ export function createHttpStudio({
           telemetryEnabled: telemetryEnabled(),
           telemetry_enabled: telemetryEnabled(),
           appearance: appearance(),
+          workspaceEditorOpen: workspaceEditorOpen(),
+          workspace_editor_open: workspaceEditorOpen(),
           measurementId: "",
           appVersion: "web",
           app_version: "web",
@@ -136,6 +149,12 @@ export function createHttpStudio({
           storage.setItem(
             "lugo-studio-appearance",
             patch.appearance === "light" ? "light" : "dark",
+          );
+        }
+        if (storage && Object.prototype.hasOwnProperty.call(patch, "workspace_editor_open")) {
+          storage.setItem(
+            "lugo-studio-workspace-editor-open",
+            patch.workspace_editor_open === false ? "off" : "on",
           );
         }
         return this.get();

@@ -60,14 +60,41 @@ export function mountDialogs(documentRef, controller = dialogs, onAction) {
         const { track, label } = renderBusyProgress(documentRef, blocking);
         card.append(track, label);
       } else {
+        let input = null;
+        if (blocking.kind === "prompt") {
+          input = documentRef.createElement("input");
+          input.type = "text";
+          input.className = "dialog-input";
+          input.setAttribute("aria-label", blocking.title || "Value");
+          input.value = typeof blocking.value === "string" ? blocking.value : "";
+          input.addEventListener("input", () => {
+            blocking.value = input.value;
+          });
+          input.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              blocking.value = input.value;
+              controller.answer(true);
+            }
+          });
+          card.append(input);
+        }
         const actions = documentRef.createElement("div");
         actions.className = "dialog-actions";
         const cancel = button(blocking.cancelLabel, "button");
         cancel.addEventListener("click", () => controller.answer(false));
         const confirm = button(blocking.confirmLabel, "button button-primary");
-        confirm.addEventListener("click", () => controller.answer(true));
+        confirm.addEventListener("click", () => {
+          if (input) {
+            blocking.value = input.value;
+          }
+          controller.answer(true);
+        });
         actions.append(cancel, confirm);
         card.append(actions);
+        if (input && typeof input.focus === "function") {
+          queueMicrotask(() => input.focus());
+        }
       }
       backdrop.append(card);
     } else {

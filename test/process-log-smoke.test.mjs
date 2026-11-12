@@ -20,6 +20,8 @@ function createSession(initial = {}) {
     debugMode: false,
     game_frontend_url: "http://localhost:8080",
     editor_url: "http://localhost:8082",
+    workspace_editor_open: false,
+    workspaceEditorOpen: false,
     ...initial,
   };
   let onLines = null;

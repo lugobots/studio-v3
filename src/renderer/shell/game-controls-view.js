@@ -204,7 +204,15 @@ async function savePositionsFromApi(state, onChange, host, dialogs) {
   ) {
     return;
   }
-  const rawName = typeof globalThis.prompt === "function" ? globalThis.prompt("Pick a name:") : null;
+  let rawName = null;
+  if (typeof dialogs?.prompt === "function") {
+    rawName = await dialogs.prompt({
+      title: "Save positions",
+      body: "Pick a name for this position preset.",
+      confirmLabel: "Save",
+      cancelLabel: "Cancel",
+    });
+  }
   const name = typeof rawName === "string" ? rawName.trim() : "";
   if (!name) {
     return;
@@ -285,7 +293,7 @@ async function toggleBotActive(state, onChange, host, dialogs, team, number) {
     active: nextActive,
   });
   onChange(next);
-  persistBotActiveSettings(host, next);
+  persistBotActiveSettings();
 
   if (!state.serverRunning) {
     return;

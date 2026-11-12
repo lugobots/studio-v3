@@ -185,9 +185,7 @@ test("match and position actions do not invent a request", () => {
   assert.equal(golden.skipGolden, true);
 });
 
-test("applyMatchConfig loads side, speed, opponent, golden skip, positions, and bot active", () => {
-  const homeActive = Array.from({ length: 11 }, (_, i) => i !== 2);
-  const awayActive = Array.from({ length: 11 }, (_, i) => i === 10);
+test("applyMatchConfig loads side, speed, opponent, golden skip, and positions; ignores bot active", () => {
   const loaded = applyMatchConfig(initialGameControls(), {
     team_side: "away",
     skip_to_golden_goal: true,
@@ -199,8 +197,8 @@ test("applyMatchConfig loads side, speed, opponent, golden skip, positions, and 
       "legacy-string",
       { ball: {} },
     ],
-    home_bots_active: homeActive,
-    away_bots_active: awayActive,
+    home_bots_active: Array.from({ length: 11 }, () => false),
+    away_bots_active: Array.from({ length: 11 }, () => false),
   });
   assert.equal(loaded.side, "away");
   assert.equal(loaded.skipGolden, true);
@@ -208,39 +206,44 @@ test("applyMatchConfig loads side, speed, opponent, golden skip, positions, and 
   assert.equal(loaded.opponent, "kids");
   assert.deepEqual(loaded.positions, ["corner", "kickoff", "legacy-string"]);
   assert.equal(loaded.serverRunning, false);
-  assert.equal(loaded.home[2].active, false);
-  assert.equal(loaded.home[0].active, true);
-  assert.equal(loaded.away[10].active, true);
-  assert.equal(loaded.away[0].active, false);
+  assert.equal(loaded.home.every((row) => row.active), true);
+  assert.equal(loaded.away.every((row) => row.active), true);
   assert.deepEqual(matchSettingsPatch(loaded), {
     team_side: "away",
     skip_to_golden_goal: true,
     game_speed: "fast",
     opponent_team: "kids",
   });
-  assert.deepEqual(botActiveSettingsPatch(loaded), {
-    home_bots_active: homeActive,
-    away_bots_active: awayActive,
-  });
-  assert.equal(Object.hasOwn(botActiveSettingsPatch(loaded), "home_bots_logs"), false);
   assert.equal(Object.hasOwn(matchSettingsForApi(loaded), "server_logs"), false);
-  const withLogs = reduceGameControl(loaded, { type: "set-bot", team: "home", number: 1, control: "logs" });
-  assert.equal(withLogs.home[0].logs, true);
-  assert.deepEqual(botActiveSettingsPatch(withLogs).home_bots_active, homeActive);
-  assert.equal(Object.hasOwn(botActiveSettingsPatch(withLogs), "logs"), false);
   assert.deepEqual(matchSettingsForApi(loaded), {
     team_side: "away",
     skip_to_golden_goal: true,
     game_speed: "fast",
     opponent_mode: "kids",
   });
+});
 
-  const invalid = applyMatchConfig(initialGameControls(), {
-    home_bots_active: [false],
-    away_bots_active: "nope",
+test("set-server-running enables every bot when the server comes up", () => {
+  let state = reduceGameControl(initialGameControls(), {
+    type: "set-bot",
+    team: "home",
+    number: 3,
+    control: "active",
+    active: false,
   });
-  assert.equal(invalid.home.every((row) => row.active), true);
-  assert.equal(invalid.away.every((row) => row.active), true);
+  state = reduceGameControl(state, {
+    type: "set-bot",
+    team: "away",
+    number: 1,
+    control: "active",
+    active: false,
+  });
+  assert.equal(state.home[2].active, false);
+  assert.equal(state.away[0].active, false);
+  state = reduceGameControl(state, { type: "set-server-running", running: true });
+  assert.equal(state.serverRunning, true);
+  assert.equal(state.home.every((row) => row.active), true);
+  assert.equal(state.away.every((row) => row.active), true);
 });
 
 test("upsertPositionPreset adds or replaces a named snapshot", () => {
@@ -291,7 +294,7 @@ test("persistMatchSettings writes while stopped and skips while the server is ru
   assert.equal(patches.length, 1);
 });
 
-test("persistBotActiveSettings writes while the server is up or down", async () => {
+test("persistBotActiveSettings is a no-op", async () => {
   const patches = [];
   const host = {
     config: {
@@ -301,29 +304,14 @@ test("persistBotActiveSettings writes while the server is up or down", async () 
       },
     },
   };
-  let state = reduceGameControl(initialGameControls(), {
+  const state = reduceGameControl(initialGameControls(), {
     type: "set-bot",
     team: "home",
     number: 3,
     control: "active",
     active: false,
   });
-  await persistBotActiveSettings(host, state);
-  assert.equal(patches.length, 1);
-  assert.equal(patches[0].home_bots_active[2], false);
-  assert.equal(patches[0].home_bots_active[0], true);
-  assert.equal(patches[0].away_bots_active.every(Boolean), true);
-
-  state = reduceGameControl(state, { type: "set-server-running", running: true });
-  state = reduceGameControl(state, {
-    type: "set-bot",
-    team: "away",
-    number: 11,
-    control: "active",
-    active: false,
-  });
-  await persistBotActiveSettings(host, state);
-  assert.equal(patches.length, 2);
-  assert.equal(patches[1].away_bots_active[10], false);
-  assert.equal(Object.hasOwn(patches[1], "game_speed"), false);
+  assert.equal(await persistBotActiveSettings(host, state), undefined);
+  assert.equal(patches.length, 0);
+  assert.deepEqual(botActiveSettingsPatch(state).home_bots_active[2], false);
 });

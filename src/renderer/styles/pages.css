@@ -572,6 +572,13 @@ h1 {
   background: var(--panel);
 }
 
+.dialog-input {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  box-sizing: border-box;
+}
+
 .dialog-card-busy {
   pointer-events: none;
 }
