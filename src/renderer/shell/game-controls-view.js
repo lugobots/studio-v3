@@ -1,4 +1,5 @@
 import { reportResult } from "../lib/dialogs.js";
+import { createGameControlIcon } from "./game-control-icons.js";
 import {
   activeBotSlots,
   applyMatchConfig,
@@ -14,17 +15,17 @@ import {
 const SVG = "http://www.w3.org/2000/svg";
 
 const SPEEDS = [
-  { id: "slow", title: "Slow speed", color: "#60a5fa" },
-  { id: "normal", title: "Normal Speed", color: "#22c55e" },
-  { id: "fast", title: "Fast speed", color: "#f59e0b" },
+  { id: "slow", title: "Slow speed", color: "#60a5fa", icon: "speed-slow" },
+  { id: "normal", title: "Normal Speed", color: "#22c55e", icon: "speed-normal" },
+  { id: "fast", title: "Fast speed", color: "#f59e0b", icon: "speed-fast" },
 ];
 
 const OPPONENTS = [
-  { id: "default", title: "Normal game", color: "#60a5fa" },
-  { id: "zombies", title: "Zombies mode", color: "#ef4444" },
-  { id: "statues", title: "Statues mode", color: "#a78bfa" },
-  { id: "kids", title: "Kids mode", color: "#22c55e" },
-  { id: "defenses", title: "Defensing mode", color: "#f59e0b" },
+  { id: "default", title: "Normal game", color: "#60a5fa", icon: "opponent-default" },
+  { id: "zombies", title: "Zombies mode", color: "#ef4444", icon: "opponent-zombies" },
+  { id: "statues", title: "Statues mode", color: "#a78bfa", icon: "opponent-statues" },
+  { id: "kids", title: "Kids mode", color: "#22c55e", icon: "opponent-kids" },
+  { id: "defenses", title: "Defensing mode", color: "#f59e0b", icon: "opponent-defenses" },
 ];
 
 function icon(color, parts) {
@@ -50,6 +51,32 @@ function icon(color, parts) {
     svg.append(node);
   }
   return svg;
+}
+
+function botActiveIcon(row) {
+  if (row.running) {
+    return createGameControlIcon("bot-running", { color: "#22c55e" });
+  }
+  if (row.active) {
+    return createGameControlIcon("bot-active", { color: "#60a5fa" });
+  }
+  return createGameControlIcon("bot-inactive", { color: "#94a3b8" });
+}
+
+function controlGroup(label, className, locked) {
+  const group = document.createElement("section");
+  group.className = `game-ctrl-group ${className}`;
+  group.dataset.locked = locked ? "true" : "false";
+  group.setAttribute("aria-disabled", locked ? "true" : "false");
+  const title = document.createElement("h2");
+  title.className = "game-ctrl-group-label";
+  title.textContent = label;
+  const divider = document.createElement("hr");
+  divider.className = "game-ctrl-divider";
+  const body = document.createElement("div");
+  body.className = "game-ctrl-group-body";
+  group.append(title, divider, body);
+  return { group, body };
 }
 
 function heading(text) {
@@ -349,16 +376,25 @@ async function toggleBotLogs(state, onChange, host, team, number, onOpenLogs, on
   onLogsDisarmed?.(source);
 }
 
-export function renderGameControls(parent, { state, onChange, host, dialogs, onOpenLogs, onLogsDisarmed }) {
+export function renderGameControls(parent, {
+  state,
+  onChange,
+  host,
+  dialogs,
+  onOpenLogs,
+  onLogsDisarmed,
+  editor = null,
+  onToggleEditor = null,
+}) {
   const root = document.createElement("div");
   root.className = "game-ctrl";
 
-  const server = document.createElement("div");
-  server.className = "action_block start_stop_buttons game-ctrl-section";
-  server.append(heading("Server"));
+  const session = document.createElement("div");
+  session.className = "action_block start_stop_buttons game-ctrl-section";
+  session.append(heading("Session"));
   const serverTitle = state.serverRunning ? "Stops the Game Server" : "Starts the Game Server";
   const serverColor = state.serverRunning ? "#22c55e" : "#ef4444";
-  server.append(controlButton({
+  session.append(controlButton({
     title: serverTitle,
     className: state.serverRunning ? "server-power is-running" : "server-power",
     onClick: () => {
@@ -373,18 +409,41 @@ export function renderGameControls(parent, { state, onChange, host, dialogs, onO
       ["path", { d: "M7 7.5a6.5 6.5 0 1 0 10 0" }],
     ]),
   }));
-  server.append(controlButton({
+  session.append(controlButton({
     title: "Server logs",
     pressed: Boolean(state.serverLogs),
-    text: state.serverLogs ? "X" : "📄",
+    className: state.serverLogs ? "logs-toggle is-armed" : "logs-toggle",
+    graphic: createGameControlIcon("logs", { color: state.serverLogs ? "#60a5fa" : "#94a3b8" }),
     onClick: () => {
       void toggleServerLogs(state, onChange, host, onOpenLogs, onLogsDisarmed);
     },
   }));
-  root.append(server);
+  if (typeof onToggleEditor === "function") {
+    const editorOpen = Boolean(editor?.open);
+    const editorStarting = Boolean(editor?.starting);
+    const editorTitle = editorOpen
+      ? (editorStarting ? "Starting editor…" : "Close editor")
+      : "Open editor";
+    session.append(controlButton({
+      title: editorTitle,
+      pressed: editorOpen,
+      disabled: editorStarting,
+      className: editorOpen ? "editor-toggle is-open" : "editor-toggle",
+      graphic: createGameControlIcon(
+        editorOpen ? "editor-close" : "editor",
+        { color: editorOpen ? "#60a5fa" : "#94a3b8" },
+      ),
+      onClick: () => {
+        onToggleEditor();
+      },
+    }));
+  }
+  root.append(session);
 
   const playLocked = !state.serverRunning;
+  const settingsLocked = Boolean(state.serverRunning);
 
+  const live = controlGroup("Live", "game-ctrl-live", playLocked);
   const match = document.createElement("div");
   match.className = "action_block start_stop_buttons game-ctrl-section";
   match.append(heading("Match"));
@@ -403,36 +462,29 @@ export function renderGameControls(parent, { state, onChange, host, dialogs, onO
       ["path", { d: "M4 4v5h5" }],
     ]),
   }));
-  root.append(match);
+  live.body.append(match);
+  live.body.append(teamBlock("home", "Home", state, onChange, host, dialogs, onOpenLogs, onLogsDisarmed));
+  live.body.append(teamBlock("away", "Away", state, onChange, host, dialogs, onOpenLogs, onLogsDisarmed));
+  live.body.append(positionsBlock(state, onChange, host, dialogs, playLocked));
+  root.append(live.group);
 
-  const play = document.createElement("div");
-  play.className = "game-ctrl-play";
-  play.style.opacity = state.serverRunning ? "1" : "0.3";
-  play.append(teamBlock("home", "Home", state, onChange, host, dialogs, onOpenLogs, onLogsDisarmed));
-  play.append(teamBlock("away", "Away", state, onChange, host, dialogs, onOpenLogs, onLogsDisarmed));
-  play.append(positionsBlock(state, onChange, host, dialogs, playLocked));
-  root.append(play);
-
-  const settings = document.createElement("div");
-  settings.className = "game-ctrl-settings";
-  settings.style.opacity = state.serverRunning ? "0.2" : "1";
-  const settingsLocked = Boolean(state.serverRunning);
-  settings.append(configBlock(state, onChange, host, settingsLocked));
-  settings.append(choiceBlock(
+  const prep = controlGroup("Prep", "game-ctrl-prep", settingsLocked);
+  prep.body.append(configBlock(state, onChange, host, settingsLocked));
+  prep.body.append(choiceBlock(
     "Game speed",
     SPEEDS,
     state.speed,
     (id) => dispatchSettings(state, onChange, host, { type: "set-speed", speed: id }),
     settingsLocked,
   ));
-  settings.append(choiceBlock(
+  prep.body.append(choiceBlock(
     "Opponent mode",
     OPPONENTS,
     state.opponent,
     (id) => dispatchSettings(state, onChange, host, { type: "set-opponent", opponent: id }),
     settingsLocked,
   ));
-  root.append(settings);
+  root.append(prep.group);
 
   parent.append(root);
   return root;
@@ -463,13 +515,15 @@ function teamBlock(team, label, state, onChange, host, dialogs, onOpenLogs, onLo
       controlButton({
         title: "Active",
         pressed: Boolean(row.active),
-        text: row.running ? "🟢" : (row.active ? "○" : "·"),
+        graphic: botActiveIcon(row),
         className: activeClasses,
         onClick: () => toggleBotActive(state, onChange, host, dialogs, team, player),
       }),
       controlButton({
         title: "Ver logs",
-        text: row.logs ? "X" : "📄",
+        pressed: Boolean(row.logs),
+        className: row.logs ? "logs-toggle is-armed" : "logs-toggle",
+        graphic: createGameControlIcon("logs", { color: row.logs ? "#60a5fa" : "#94a3b8" }),
         onClick: () => {
           void toggleBotLogs(state, onChange, host, team, player, onOpenLogs, onLogsDisarmed);
         },
@@ -593,7 +647,7 @@ function choiceBlock(label, choices, selected, onPick, disabled = false) {
       pressed: choice.id === selected,
       disabled,
       onClick: () => onPick(choice.id),
-      graphic: icon(choice.color, [["circle", { cx: "12", cy: "12", r: "6" }]]),
+      graphic: createGameControlIcon(choice.icon, { color: choice.color }),
     }));
   }
   wrap.append(title, row);

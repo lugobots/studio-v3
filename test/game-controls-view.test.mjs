@@ -5,7 +5,7 @@ import { initialGameControls } from "../src/renderer/shell/game-controls.js";
 import { renderGameControls } from "../src/renderer/shell/game-controls-view.js";
 import { installDocument, leafText } from "./dom-stub.mjs";
 
-const SECTIONS = ["Server", "Match", "Home", "Away", "Positions", "Config", "Game speed", "Opponent mode"];
+const SECTIONS = ["Session", "Match", "Home", "Away", "Positions", "Config", "Game speed", "Opponent mode"];
 
 function mountPanel({
   serverStart = async () => ({ ok: true }),
@@ -23,6 +23,8 @@ function mountPanel({
   promptAnswer = null,
   initialState = null,
   initialSavedPositions = [],
+  editor = { open: false, starting: false },
+  onToggleEditor = null,
 } = {}) {
   const installed = installDocument();
   const previousPrompt = globalThis.prompt;
@@ -154,6 +156,8 @@ function mountPanel({
       state,
       host,
       dialogs,
+      editor,
+      onToggleEditor: onToggleEditor || (() => {}),
       onChange(next) {
         state = next;
         paint();
@@ -203,6 +207,19 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   assert.deepEqual(headings, SECTIONS);
   assert.equal(panel.parent.querySelector(".game-ctrl") !== null, true);
 
+  const live = panel.parent.querySelector(".game-ctrl-live");
+  const prep = panel.parent.querySelector(".game-ctrl-prep");
+  assert.equal(live !== null, true);
+  assert.equal(prep !== null, true);
+  assert.equal(live.querySelector("h2")?.textContent, "Live");
+  assert.equal(prep.querySelector("h2")?.textContent, "Prep");
+  assert.equal(live.dataset.locked, "true");
+  assert.equal(prep.dataset.locked, "false");
+  const rootChildren = panel.parent.querySelector(".game-ctrl").children.map((node) => node.className);
+  assert.equal(rootChildren[0].includes("game-ctrl-section"), true);
+  assert.equal(rootChildren[1].includes("game-ctrl-live"), true);
+  assert.equal(rootChildren[2].includes("game-ctrl-prep"), true);
+
   const labels = leafText(panel.parent);
   assert.equal(labels.includes("Open bot"), false);
   assert.equal(labels.includes("Start match"), false);
@@ -212,12 +229,31 @@ test("workspace game panel shows the v2 sections and local controls", async () =
   assert.equal(panel.button("Stops the Game Server"), null);
   assert.equal(panel.button("Starts the match") !== null, true);
   assert.equal(panel.button("Resets the match") !== null, true);
+  assert.equal(panel.button("Open editor") !== null, true);
+  assert.equal(panel.button("Open editor").querySelector("svg")?.getAttribute("data-icon"), "editor");
+  assert.equal(panel.button("Server logs").querySelector("svg")?.getAttribute("data-icon"), "logs");
+  assert.equal(panel.button("Slow speed").querySelector("svg")?.getAttribute("data-icon"), "speed-slow");
+  assert.equal(panel.button("Normal Speed").querySelector("svg")?.getAttribute("data-icon"), "speed-normal");
+  assert.equal(panel.button("Fast speed").querySelector("svg")?.getAttribute("data-icon"), "speed-fast");
+  assert.equal(panel.button("Normal game").querySelector("svg")?.getAttribute("data-icon"), "opponent-default");
+  assert.equal(panel.button("Zombies mode").querySelector("svg")?.getAttribute("data-icon"), "opponent-zombies");
+  assert.equal(panel.button("Statues mode").querySelector("svg")?.getAttribute("data-icon"), "opponent-statues");
+  assert.equal(panel.button("Kids mode").querySelector("svg")?.getAttribute("data-icon"), "opponent-kids");
+  assert.equal(panel.button("Defensing mode").querySelector("svg")?.getAttribute("data-icon"), "opponent-defenses");
 
   for (const team of panel.parent.querySelectorAll(".bot_actions")) {
     assert.equal(team.querySelectorAll('button[title="Active"]').length, 11);
     assert.equal(team.querySelectorAll('button[title="Start"]').length, 0);
     assert.equal(team.querySelectorAll('button[title="Kill"]').length, 0);
     assert.equal(team.querySelectorAll('button[title="Ver logs"]').length, 11);
+    assert.equal(
+      team.querySelector('button[title="Active"]').querySelector("svg")?.getAttribute("data-icon"),
+      "bot-active",
+    );
+    assert.equal(
+      team.querySelector('button[title="Ver logs"]').querySelector("svg")?.getAttribute("data-icon"),
+      "logs",
+    );
     const numbers = team.querySelectorAll(".bot-number").map((node) => node.textContent);
     assert.deepEqual(numbers, ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]);
   }
@@ -274,6 +310,8 @@ test("workspace game panel shows the v2 sections and local controls", async () =
     opponent_mode: "zombies",
   });
   assert.equal(panel.button("Stops the Game Server") !== null, true);
+  assert.equal(panel.parent.querySelector(".game-ctrl-live").dataset.locked, "false");
+  assert.equal(panel.parent.querySelector(".game-ctrl-prep").dataset.locked, "true");
   assert.equal(panel.button("Fast speed").disabled, true);
   assert.equal(panel.button("Zombies mode").disabled, true);
   assert.equal(panel.parent.querySelector("#team-side-switch").getAttribute("aria-disabled"), "true");
@@ -726,6 +764,8 @@ test("server log control stays interactive while match config is locked and call
 test("game control styles are scoped to the side menu", () => {
   const css = readFileSync(new URL("../src/renderer/styles/pages.css", import.meta.url), "utf8");
   assert.match(css, /\.side-menu \.game-ctrl/);
+  assert.match(css, /\.side-menu \.game-ctrl-group\[data-locked="true"\]/);
+  assert.match(css, /\.side-menu \.game-ctrl-group-label/);
   assert.match(css, /48px 240px/);
   assert.match(css, /168px 240px/);
   assert.match(css, /\.app-status-bar\s*\{/);
