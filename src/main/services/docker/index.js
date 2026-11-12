@@ -2,9 +2,11 @@
 
 const { execFile, spawn } = require("node:child_process");
 const { CHANNELS } = require("../../../shared/ipc-channels");
-const { DEFAULTS, imageFrom } = require("../../../shared/ports");
+const { DEFAULTS, imageFrom, portsFrom } = require("../../../shared/ports");
+const runtimePorts = require("../runtime-ports");
 const { editorRunArgs, runArgs } = require("./args");
 const { waitEditorReady } = require("./editor-ready");
+const { resolveHostPorts } = require("./free-ports");
 const { ensureLevel1Binary } = require("./level1");
 const { removeOk, stopStudioContainers } = require("./stop");
 
@@ -115,6 +117,39 @@ async function containerIsRunning(name = DEFAULTS.containerName) {
   return running.ok && running.stdout.trim() === "true";
 }
 
+function hostPortFromBindings(portsJson, containerPort) {
+  const bindings = portsJson && portsJson[`${containerPort}/tcp`];
+  if (!Array.isArray(bindings) || !bindings[0]) {
+    return "";
+  }
+  return String(bindings[0].HostPort || "");
+}
+
+/**
+ * Read published host ports from a running container.
+ * Container-side ports are the preferred env defaults (stable listen ports).
+ */
+async function publishedHostPorts(name, keys) {
+  const preferred = portsFrom();
+  const inspected = await exec("docker", ["inspect", "-f", "{{json .NetworkSettings.Ports}}", name]);
+  if (!inspected.ok) {
+    return null;
+  }
+  let portsJson;
+  try {
+    portsJson = JSON.parse(inspected.stdout.trim() || "{}");
+  } catch {
+    return null;
+  }
+  const result = {};
+  for (const key of keys) {
+    const containerPort = preferred[key];
+    const host = hostPortFromBindings(portsJson, containerPort);
+    result[key] = host || containerPort;
+  }
+  return result;
+}
+
 async function ensureNamedContainer(name, args) {
   if (await containerIsRunning(name)) {
     return { ok: true, name };
@@ -160,6 +195,47 @@ async function runningContainerState(name = DEFAULTS.containerName) {
   };
 }
 
+/**
+ * Resolve host publish ports and build `docker run` args for the API container.
+ * Exported for focused tests without talking to Docker.
+ */
+async function prepareApiRunArgs(projectPath, hostProjectPath = "", level1 = null, env = process.env) {
+  const preferred = portsFrom(env);
+  let hostPorts;
+  try {
+    hostPorts = await resolveHostPorts({
+      api: preferred.api,
+      gameServer: preferred.gameServer,
+      gameFrontend: preferred.gameFrontend,
+    });
+  } catch (error) {
+    return { ok: false, error: error.message || "Could not find a free host port" };
+  }
+  return {
+    ok: true,
+    hostPorts,
+    args: runArgs(projectPath, env, hostProjectPath, level1, hostPorts),
+  };
+}
+
+/**
+ * Resolve host publish port and build `docker run` args for the editor container.
+ */
+async function prepareEditorRunArgs(projectPath, env = process.env) {
+  const preferred = portsFrom(env);
+  let hostPorts;
+  try {
+    hostPorts = await resolveHostPorts({ vsCode: preferred.vsCode });
+  } catch (error) {
+    return { ok: false, error: error.message || "Could not find a free host port" };
+  }
+  return {
+    ok: true,
+    hostPorts,
+    args: editorRunArgs(projectPath, env, hostPorts),
+  };
+}
+
 async function ensureContainer(projectPath, hostProjectPath = "", level1 = null) {
   const expectedOpponent = (level1 && level1.hostBinaryPath) || "";
   const current = await runningContainerState();
@@ -168,19 +244,30 @@ async function ensureContainer(projectPath, hostProjectPath = "", level1 = null)
     current.hostPath === hostProjectPath &&
     current.opponentHostPath === expectedOpponent
   ) {
-    return { ok: true, name: DEFAULTS.containerName };
+    const hostPorts =
+      (await publishedHostPorts(DEFAULTS.containerName, ["api", "gameServer", "gameFrontend"])) ||
+      portsFrom();
+    runtimePorts.setApiHostPorts(hostPorts);
+    return { ok: true, name: DEFAULTS.containerName, hostPorts };
   }
   if (current.running) {
     await stopContainer();
   }
-  return ensureNamedContainer(
-    DEFAULTS.containerName,
-    runArgs(projectPath, process.env, hostProjectPath, level1),
-  );
+  const prepared = await prepareApiRunArgs(projectPath, hostProjectPath, level1);
+  if (!prepared.ok) {
+    return prepared;
+  }
+  const started = await ensureNamedContainer(DEFAULTS.containerName, prepared.args);
+  if (!started.ok) {
+    return started;
+  }
+  runtimePorts.setApiHostPorts(prepared.hostPorts);
+  return { ok: true, name: DEFAULTS.containerName, hostPorts: prepared.hostPorts };
 }
 
 async function stopEditor() {
   const editor = await exec("docker", ["rm", "-f", DEFAULTS.editorContainerName], 20000);
+  runtimePorts.clearEditorHostPort();
   return { ok: removeOk(editor) };
 }
 
@@ -195,15 +282,36 @@ async function recentLogs(name = DEFAULTS.containerName) {
 }
 
 async function ensureEditor(projectPath) {
-  const started = await ensureNamedContainer(DEFAULTS.editorContainerName, editorRunArgs(projectPath));
+  if (await containerIsRunning(DEFAULTS.editorContainerName)) {
+    const hostPorts =
+      (await publishedHostPorts(DEFAULTS.editorContainerName, ["vsCode"])) || {
+        vsCode: portsFrom().vsCode,
+      };
+    runtimePorts.setEditorHostPort(hostPorts.vsCode);
+    return { ok: true, name: DEFAULTS.editorContainerName, hostPorts };
+  }
+  const prepared = await prepareEditorRunArgs(projectPath);
+  if (!prepared.ok) {
+    notify({ mode: "notify", title: "Editor", body: prepared.error });
+    return prepared;
+  }
+  const started = await ensureNamedContainer(DEFAULTS.editorContainerName, prepared.args);
   if (!started.ok) {
     notify({ mode: "notify", title: "Editor", body: started.error });
+    return started;
   }
-  return started;
+  runtimePorts.setEditorHostPort(prepared.hostPorts.vsCode);
+  return {
+    ok: true,
+    name: DEFAULTS.editorContainerName,
+    hostPorts: prepared.hostPorts,
+  };
 }
 
 async function stopContainer() {
-  return stopStudioContainers(async (name) => exec("docker", ["rm", "-f", name], 20000));
+  const result = await stopStudioContainers(async (name) => exec("docker", ["rm", "-f", name], 20000));
+  runtimePorts.clearAll();
+  return result;
 }
 
 module.exports = {
@@ -220,4 +328,7 @@ module.exports = {
   stopContainer,
   stopEditor,
   recentLogs,
+  prepareApiRunArgs,
+  prepareEditorRunArgs,
+  publishedHostPorts,
 };

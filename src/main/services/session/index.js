@@ -23,7 +23,7 @@ const { createLevel1Ready } = require("./level1-ready");
 const { createServerControls } = require("./server-controls");
 const { createLogControls } = require("./log-controls");
 const { describeStartup } = require("../../../shared/startup-progress");
-const { editorUrl } = require("../../../shared/ports");
+const { sessionEditorUrl } = require("../session-urls");
 
 let webContents = null;
 let watchGeneration = 0;
@@ -202,15 +202,16 @@ async function startEditor() {
   if (!started.ok) {
     return { ok: false, error: started.error || "Could not start the editor" };
   }
-  const ready = await docker.waitEditorReady({ url: editorUrl() });
+  const url = sessionEditorUrl();
+  const ready = await docker.waitEditorReady({ url });
   if (!ready.ok) {
     return {
       ok: false,
       error: ready.error || "Editor did not become reachable",
-      url: ready.url || editorUrl(),
+      url: ready.url || url,
     };
   }
-  return { ok: true, url: ready.url || editorUrl() };
+  return { ok: true, url: ready.url || url };
 }
 
 async function stopEditor() {

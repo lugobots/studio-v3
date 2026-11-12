@@ -4,8 +4,11 @@
 // Routes under /api include health, studio/status, init/setup-new-bot, server/start,
 // server/status, server/stop, server/status/ws, game/start, and bot/publish.
 
+const runtimePorts = require("../runtime-ports");
+
 function apiBase() {
-  const port = process.env.LUGO_STUDIO_API_PORT || "8081";
+  const resolved = runtimePorts.getApiHostPorts();
+  const port = (resolved && resolved.api) || process.env.LUGO_STUDIO_API_PORT || "8081";
   return `http://127.0.0.1:${port}/api`;
 }
 

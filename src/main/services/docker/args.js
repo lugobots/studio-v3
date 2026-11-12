@@ -12,9 +12,16 @@ const { DEFAULTS, editorImageFrom, imageFrom, portsFrom } = require("../../../sh
  * @param {NodeJS.ProcessEnv} [env]
  * @param {string} [hostProjectPath]
  * @param {{ hostBinaryPath?: string, containerBinaryPath?: string }} [level1]
+ * @param {{ api?: string, gameServer?: string, gameFrontend?: string }} [hostPorts]
+ *        Resolved host publish ports. Container listen ports stay on preferred env defaults.
  */
-function runArgs(projectPath, env = process.env, hostProjectPath = "", level1 = null) {
+function runArgs(projectPath, env = process.env, hostProjectPath = "", level1 = null, hostPorts = null) {
   const ports = portsFrom(env);
+  const host = {
+    api: (hostPorts && hostPorts.api) || ports.api,
+    gameServer: (hostPorts && hostPorts.gameServer) || ports.gameServer,
+    gameFrontend: (hostPorts && hostPorts.gameFrontend) || ports.gameFrontend,
+  };
   const image = imageFrom(env);
   const args = [
     "run",
@@ -24,11 +31,11 @@ function runArgs(projectPath, env = process.env, hostProjectPath = "", level1 = 
     "-v",
     `${projectPath}:${DEFAULTS.mountTarget}`,
     "-p",
-    `${ports.api}:${ports.api}`,
+    `${host.api}:${ports.api}`,
     "-p",
-    `${ports.gameServer}:${ports.gameServer}`,
+    `${host.gameServer}:${ports.gameServer}`,
     "-p",
-    `${ports.gameFrontend}:${ports.gameFrontend}`,
+    `${host.gameFrontend}:${ports.gameFrontend}`,
     "-e",
     `LUGO_STUDIO_API_PORT=${ports.api}`,
     "-e",
@@ -59,8 +66,14 @@ function runArgs(projectPath, env = process.env, hostProjectPath = "", level1 = 
   return args;
 }
 
-function editorRunArgs(projectPath, env = process.env) {
+/**
+ * @param {string} projectPath
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {{ vsCode?: string }} [hostPorts] resolved host publish port for the editor
+ */
+function editorRunArgs(projectPath, env = process.env, hostPorts = null) {
   const ports = portsFrom(env);
+  const hostVsCode = (hostPorts && hostPorts.vsCode) || ports.vsCode;
   const image = editorImageFrom(env);
   return [
     "run",
@@ -70,7 +83,7 @@ function editorRunArgs(projectPath, env = process.env) {
     "-v",
     `${projectPath}:${DEFAULTS.mountTarget}`,
     "-p",
-    `${ports.vsCode}:${ports.vsCode}`,
+    `${hostVsCode}:${ports.vsCode}`,
     "-e",
     `PORT=${ports.vsCode}`,
     "-e",

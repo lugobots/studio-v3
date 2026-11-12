@@ -69,3 +69,27 @@ test("editor container publishes only the editor port", () => {
   assert.ok(args.includes("LUGO_VS_CODE_PORT=8082"));
   assert.equal(args.at(-1), "lugobots/vs-code-for-lugo:latest");
 });
+
+test("studio container remaps host ports while keeping container listen ports", () => {
+  const args = runArgs("/bots/demo", {}, "", null, {
+    api: "18081",
+    gameServer: "15000",
+    gameFrontend: "18080",
+  });
+  assert.ok(args.includes("18081:8081"));
+  assert.ok(args.includes("15000:5000"));
+  assert.ok(args.includes("18080:8080"));
+  assert.equal(args.includes("8081:8081"), false);
+  assert.equal(args.includes("8080:8080"), false);
+  assert.ok(args.includes("LUGO_STUDIO_API_PORT=8081"));
+  assert.ok(args.includes("LUGO_STUDIO_GAME_SERVER_PORT=5000"));
+  assert.ok(args.includes("LUGO_STUDIO_GAME_FRONTEND_PORT=8080"));
+});
+
+test("editor container remaps host port while keeping container listen port", () => {
+  const args = editorRunArgs("/bots/demo", {}, { vsCode: "18082" });
+  assert.ok(args.includes("18082:8082"));
+  assert.equal(args.includes("8082:8082"), false);
+  assert.ok(args.includes("PORT=8082"));
+  assert.ok(args.includes("LUGO_VS_CODE_PORT=8082"));
+});

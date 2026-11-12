@@ -1,6 +1,6 @@
 "use strict";
 
-const { editorUrl } = require("../../../shared/ports");
+const { sessionEditorUrl } = require("../session-urls");
 
 const EDITOR_READY_DEADLINE_MS = 45000;
 const EDITOR_READY_INTERVAL_MS = 500;
@@ -10,7 +10,7 @@ const EDITOR_READY_INTERVAL_MS = 500;
  * Does not start the container — call ensureEditor first.
  */
 async function waitEditorReady({
-  url = editorUrl(),
+  url = sessionEditorUrl(),
   deadlineMs = EDITOR_READY_DEADLINE_MS,
   intervalMs = EDITOR_READY_INTERVAL_MS,
   fetchImpl = globalThis.fetch,

@@ -6,7 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const store = require("./store");
 const pkg = require("../../../../package.json");
-const { editorUrl, gameFrontendUrl } = require("../../../shared/ports");
+const { sessionEditorUrl, sessionGameFrontendUrl } = require("../session-urls");
 const studioApi = require("../studio-api");
 
 function filePath() {
@@ -23,13 +23,15 @@ function view(record) {
     projectCreated: store.projectReady(data, fs.existsSync),
     telemetryEnabled: store.telemetryEnabled(data),
     appearance: store.appearance(data),
+    workspaceEditorOpen: store.workspaceEditorOpen(data),
+    workspace_editor_open: store.workspaceEditorOpen(data),
     debugMode: store.apiDebugEnabled(data),
     measurementId: process.env.STUDIO_GA_MEASUREMENT_ID || "",
     appVersion: pkg.version,
     apiVersion,
     studio_api_version: apiVersion,
-    game_frontend_url: gameFrontendUrl(),
-    editor_url: editorUrl(),
+    game_frontend_url: sessionGameFrontendUrl(),
+    editor_url: sessionEditorUrl(),
   };
 }
 

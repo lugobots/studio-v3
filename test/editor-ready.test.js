@@ -20,6 +20,22 @@ test("waitEditorReady succeeds when the editor URL answers", async () => {
   assert.equal(calls, 1);
 });
 
+test("waitEditorReady polls a remapped editor host port URL", async () => {
+  const urls = [];
+  const result = await waitEditorReady({
+    url: "http://localhost:18082",
+    deadlineMs: 1000,
+    intervalMs: 10,
+    fetchImpl: async (url) => {
+      urls.push(url);
+      return { status: 200 };
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.url, "http://localhost:18082");
+  assert.deepEqual(urls, ["http://localhost:18082"]);
+});
+
 test("waitEditorReady fails after the deadline when fetch keeps erroring", async () => {
   const result = await waitEditorReady({
     url: "http://localhost:8082",

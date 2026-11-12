@@ -2,6 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const runtimePorts = require("../src/main/services/runtime-ports");
 const studioApi = require("../src/main/services/studio-api");
 
 function respond(status, body) {
@@ -49,6 +50,19 @@ class FakeWebSocket {
 }
 
 FakeWebSocket.instances = [];
+
+test("apiBase uses session resolved API host port when set", () => {
+  runtimePorts.clearAll();
+  assert.equal(studioApi.apiBase(), "http://127.0.0.1:8081/api");
+  runtimePorts.setApiHostPorts({
+    api: "18081",
+    gameServer: "15000",
+    gameFrontend: "18080",
+  });
+  assert.equal(studioApi.apiBase(), "http://127.0.0.1:18081/api");
+  runtimePorts.clearAll();
+  assert.equal(studioApi.apiBase(), "http://127.0.0.1:8081/api");
+});
 
 test("healthy caches API version from health response", async () => {
   studioApi.resetApiVersionCache();
