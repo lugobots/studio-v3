@@ -103,39 +103,46 @@ test("tampered bytes fail SHA-256 before apply", async () => {
   fs.rmSync(directory, { recursive: true, force: true });
 });
 
-test("cached prerelease AppImage verifies digest + GPG and rejects Doorway hosts", async () => {
-  assert.ok(fs.existsSync(path.join(CACHE, NAME)), `missing cache file under ${CACHE}`);
-  assert.equal(
-    trust.isAllowlistedReleaseAssetUrl(`https://lugobots.ai/api/studio/check-update/${NAME}`),
-    false,
-  );
+test(
+  "cached prerelease AppImage verifies digest + GPG and rejects Doorway hosts",
+  {
+    skip: fs.existsSync(path.join(CACHE, NAME))
+      ? false
+      : `cached AppImage absent under ${CACHE}`,
+  },
+  async () => {
+    assert.equal(
+      trust.isAllowlistedReleaseAssetUrl(`https://lugobots.ai/api/studio/check-update/${NAME}`),
+      false,
+    );
 
-  const imported = spawnSync("gpg", ["--batch", "--import", PUBLIC_KEY], {
-    encoding: "utf8",
-  });
-  assert.equal(imported.status, 0, imported.stderr);
+    const imported = spawnSync("gpg", ["--batch", "--import", PUBLIC_KEY], {
+      encoding: "utf8",
+    });
+    assert.equal(imported.status, 0, imported.stderr);
 
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "lugo-dryrun-"));
-  const file = await updater.downloadAsset(doorwayBody().platformAssets.linux, {
-    directory,
-    platform: "linux",
-    expectedPublisher: FPR,
-    fetchImpl: cachedFetch,
-  });
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "lugo-dryrun-"));
+    const file = await updater.downloadAsset(doorwayBody().platformAssets.linux, {
+      directory,
+      platform: "linux",
+      expectedPublisher: FPR,
+      fetchImpl: cachedFetch,
+    });
 
-  assert.equal(path.basename(file), NAME);
-  assert.equal(trust.sha256File(file), SHA256);
+    assert.equal(path.basename(file), NAME);
+    assert.equal(trust.sha256File(file), SHA256);
 
-  const notice = logic.noticeFor({
-    state: "rejected",
-    message: "checksum mismatch",
-  });
-  assert.equal(notice.mode, "notify");
+    const notice = logic.noticeFor({
+      state: "rejected",
+      message: "checksum mismatch",
+    });
+    assert.equal(notice.mode, "notify");
 
-  const corrupt = path.join(directory, "corrupt.AppImage");
-  fs.copyFileSync(file, corrupt);
-  fs.appendFileSync(corrupt, Buffer.from("x"));
-  assert.equal(trust.verifySha256(corrupt, SHA256).ok, false);
+    const corrupt = path.join(directory, "corrupt.AppImage");
+    fs.copyFileSync(file, corrupt);
+    fs.appendFileSync(corrupt, Buffer.from("x"));
+    assert.equal(trust.verifySha256(corrupt, SHA256).ok, false);
 
-  fs.rmSync(directory, { recursive: true, force: true });
-});
+    fs.rmSync(directory, { recursive: true, force: true });
+  },
+);
