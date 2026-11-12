@@ -115,6 +115,9 @@ function createNode(tag) {
       if (name === "id") {
         this.id = String(value);
       }
+      if (name === "class") {
+        this.className = String(value);
+      }
       if (name === "title") {
         this.title = String(value);
       }

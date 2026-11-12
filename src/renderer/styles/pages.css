@@ -890,10 +890,54 @@ select {
   color: var(--text);
 }
 
+.side-menu .game-ctrl-group {
+  margin: 4px 0 10px;
+  padding: 6px 4px 4px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+.side-menu .game-ctrl-group-label {
+  margin: 0 4px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted, #94a3b8);
+}
+
 .side-menu .game-ctrl-divider {
   border: 0;
   border-top: 1px solid var(--control-border);
-  margin: 10px 4px;
+  margin: 6px 4px 8px;
+}
+
+.side-menu .game-ctrl-group[data-locked="true"] {
+  border-color: var(--control-border);
+  background: color-mix(in srgb, var(--control-deep) 70%, transparent);
+  filter: grayscale(0.35);
+  opacity: 0.72;
+}
+
+.side-menu .game-ctrl-group[data-locked="true"] .game-ctrl-group-label {
+  color: var(--control-hover-border);
+}
+
+.side-menu .game-ctrl-group[data-locked="true"] .start_stop_buttons button:disabled,
+.side-menu .game-ctrl-group[data-locked="true"] .position-btn:disabled,
+.side-menu .game-ctrl-group[data-locked="true"] select:disabled,
+.side-menu .game-ctrl-group[data-locked="true"] input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.side-menu .game-ctrl .logs-toggle.is-armed {
+  color: #60a5fa;
+}
+
+.side-menu .game-ctrl .bot_actions button svg {
+  display: block;
+  pointer-events: none;
 }
 
 .side-menu .game-ctrl-section {

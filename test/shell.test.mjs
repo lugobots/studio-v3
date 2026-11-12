@@ -26,11 +26,11 @@ test("a confirm dialog stays open until it is answered", async () => {
   assert.equal(dialogs.snapshot().blocking, null);
 });
 
-test("areas expose workspace image action without pinned profile or settings", () => {
+test("areas expose workspace menu without image action or pinned profile or settings", () => {
   const workspace = menuFor("workspace");
   const settings = menuFor("settings");
   const build = menuFor("build");
-  assert.deepEqual(workspace.actions, ["image"]);
+  assert.deepEqual(workspace.actions, []);
   assert.deepEqual(workspace.pinned, []);
   assert.equal(workspace.areaId, "workspace");
   assert.deepEqual(settings.actions, []);
@@ -250,8 +250,9 @@ test("the shell shows the game panel, area rail, workspace image, and publish", 
   assert.ok(outlet.querySelector('[data-area="profile"]'));
   assert.ok(outlet.querySelector('[data-area="settings"]'));
   assert.equal(labels().includes("Editor"), false);
-  assert.equal(labels().includes("Open editor"), true);
-  assert.equal(labels().includes("Studio image"), true);
+  assert.equal(labels().includes("Open editor"), false);
+  assert.equal(labels().includes("Studio image"), false);
+  assert.equal(outlet.querySelector('button[title="Open editor"]') !== null, true);
   assert.equal(labels().includes("Open bot"), false);
   assert.equal(labels().includes("Start match"), false);
   assert.equal(labels().includes("Publish bot"), false);
@@ -259,6 +260,10 @@ test("the shell shows the game panel, area rail, workspace image, and publish", 
   assert.equal(outlet.querySelector(".publish-form"), null);
   assert.equal(outlet.querySelector('[aria-label="Bot URI"]'), null);
   assert.equal(outlet.querySelector(".game-ctrl") !== null, true);
+  assert.equal(
+    outlet.querySelectorAll("h3").some((node) => node.textContent === "Session"),
+    true,
+  );
   const overlay = outlet.querySelector(".game-start-overlay");
   assert.ok(overlay);
   const panelStart = outlet.querySelector(".game-start-control");
@@ -284,7 +289,7 @@ test("the shell shows the game panel, area rail, workspace image, and publish", 
   assert.equal(runningFrame.src, "http://localhost:8080");
   assert.equal(Boolean(runningFrame.hidden), false);
 
-  outlet.querySelectorAll("button").find((button) => button.textContent === "Open editor").click();
+  outlet.querySelector('button[title="Open editor"]').click();
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(editorStarts, 1);
@@ -298,7 +303,7 @@ test("the shell shows the game panel, area rail, workspace image, and publish", 
   assert.equal(Boolean(editorFrame.hidden), false);
   assert.equal(outlet.querySelector("#game_frame").src, "http://localhost:8080");
 
-  outlet.querySelectorAll("button").find((button) => button.textContent === "Close editor").click();
+  outlet.querySelector('button[title="Close editor"]').click();
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(editorStops, 1);
@@ -309,13 +314,14 @@ test("the shell shows the game panel, area rail, workspace image, and publish", 
 
   outlet.querySelector('[data-area="settings"]').click();
   assert.equal(outlet.querySelector(".game-ctrl"), null);
-  assert.equal(labels().includes("Open editor"), false);
+  assert.equal(outlet.querySelector('button[title="Open editor"]'), null);
   assert.equal(labels().includes("Studio image"), false);
   assert.ok(outlet.querySelector(".app-status-version"));
 
   outlet.querySelector('[data-area="workspace"]').click();
   assert.ok(outlet.querySelector(".game-ctrl"));
-  assert.equal(labels().includes("Studio image"), true);
+  assert.equal(labels().includes("Studio image"), false);
+  assert.equal(outlet.querySelector('button[title="Open editor"]') !== null, true);
   assert.ok(outlet.querySelector(".app-status-version"));
   assert.equal(started, 0);
   assert.equal(serverStarts, 1);

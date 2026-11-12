@@ -110,7 +110,7 @@ test("process log smoke: defaults stay quiet, arming shows tagged lines, and rel
   const serverLogs = () => outlet.querySelector('button[title="Server logs"]');
   const verLogs = () => outlet.querySelector('button[title="Ver logs"]');
   assert.equal(serverLogs().getAttribute("aria-pressed"), "false");
-  assert.equal(verLogs().textContent, "📄");
+  assert.equal(verLogs().querySelector("svg")?.getAttribute("data-icon"), "logs");
   assert.deepEqual(session.arms, []);
   assert.equal(session.subscriptions(), 0);
   assert.equal(session.streaming(), false);
@@ -182,7 +182,10 @@ test("process log smoke: defaults stay quiet, arming shows tagged lines, and rel
   await flush();
   assert.deepEqual(reloaded.arms, ["api"]);
   assert.equal(reloadedOutlet.querySelector('button[title="Server logs"]').getAttribute("aria-pressed"), "false");
-  assert.equal(reloadedOutlet.querySelector('button[title="Ver logs"]').textContent, "📄");
+  assert.equal(
+    reloadedOutlet.querySelector('button[title="Ver logs"]').querySelector("svg")?.getAttribute("data-icon"),
+    "logs",
+  );
   assert.equal(reloaded.subscriptions(), 0);
   reloadedDoc.restore();
 });
@@ -199,7 +202,7 @@ test("closing a log tab disarms the source and syncs Ver logs off while keeping 
   outlet.querySelector('button[title="Server logs"]').click();
   outlet.querySelector('button[title="Ver logs"]').click();
   await flush();
-  assert.equal(outlet.querySelector('button[title="Ver logs"]').textContent, "X");
+  assert.equal(outlet.querySelector('button[title="Ver logs"]').getAttribute("aria-pressed"), "true");
   assert.equal(outlet.querySelector('button[title="Server logs"]').getAttribute("aria-pressed"), "true");
 
   const homeChip = outlet
@@ -209,7 +212,7 @@ test("closing a log tab disarms the source and syncs Ver logs off while keeping 
   await flush();
 
   assert.ok(session.disarms.includes("home/1"));
-  assert.equal(outlet.querySelector('button[title="Ver logs"]').textContent, "📄");
+  assert.equal(outlet.querySelector('button[title="Ver logs"]').getAttribute("aria-pressed"), "false");
   assert.equal(outlet.querySelector('button[title="Server logs"]').getAttribute("aria-pressed"), "true");
   assert.equal(buttonByText(outlet, "Hide logs") !== undefined, true);
   assert.equal(
@@ -278,7 +281,7 @@ test("bot active and log toggles keep game and editor iframes mounted", async ()
   renderAppFrame(outlet, { host: session.host, dialogs });
   await flush();
 
-  buttonByText(outlet, "Open editor").click();
+  outlet.querySelector('button[title="Open editor"]').click();
   await flush();
 
   const gameBefore = outlet.querySelector("#game_frame");

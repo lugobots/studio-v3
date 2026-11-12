@@ -383,6 +383,14 @@ export function renderAppFrame(outlet, { host, dialogs }) {
       host,
       dialogs,
       onChange: applyGameControlUpdate,
+      editor: state.editor,
+      onToggleEditor() {
+        if (state.editor.open) {
+          void closeEditor();
+        } else {
+          void openEditor();
+        }
+      },
       onOpenLogs(source) {
         processLogs.noteArmed(source);
         processLogs.openDrawer(source);
@@ -391,36 +399,6 @@ export function renderAppFrame(outlet, { host, dialogs }) {
         processLogs.noteDisarmed(source);
       },
     });
-
-    const editorToggle = document.createElement("button");
-    editorToggle.type = "button";
-    editorToggle.className = "menu-item";
-    editorToggle.dataset.action = state.editor.open ? "close-editor" : "open-editor";
-    editorToggle.disabled = Boolean(state.editor.starting);
-    editorToggle.textContent = state.editor.open
-      ? state.editor.starting
-        ? "Starting editor…"
-        : "Close editor"
-      : "Open editor";
-    editorToggle.addEventListener("click", () => {
-      if (state.editor.open) {
-        void closeEditor();
-      } else {
-        void openEditor();
-      }
-    });
-    actions.append(editorToggle);
-
-    const area = areaById("workspace");
-    for (const action of area.actions) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "menu-item";
-      button.dataset.action = action.id;
-      button.textContent = action.label;
-      button.addEventListener("click", () => runAction(action.id));
-      actions.append(button);
-    }
   }
 
   function paintSettingsLateral(config) {
@@ -842,17 +820,6 @@ export function renderAppFrame(outlet, { host, dialogs }) {
 
     section.append(split, processLogHost);
     return section;
-  }
-
-  async function runAction(id) {
-    if (id === "image") {
-      const result = await host.docker.pull();
-      if (result.unsupported || result.ok === false) {
-        await reportResult(dialogs, result);
-        return;
-      }
-      dialogs.notify({ title: "Studio image", body: "Pull started. Progress stays in notifications." });
-    }
   }
 
   refreshConfig();

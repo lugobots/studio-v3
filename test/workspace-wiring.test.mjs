@@ -185,7 +185,7 @@ test("workspace wiring hits API for server, match, and reset; locked settings an
     assert.equal(editorStarts, 0);
     assert.equal(outlet.querySelector("#editor_frame"), null);
 
-    outlet.querySelectorAll("button").find((button) => button.textContent === "Open editor").click();
+    outlet.querySelector('button[title="Open editor"]').click();
     await flush();
     assert.equal(editorStarts, 1);
     assert.ok(outlet.querySelector(".workspace-main--editor-open"));
@@ -196,7 +196,7 @@ test("workspace wiring hits API for server, match, and reset; locked settings an
     assert.equal(editorFrame.src, "http://localhost:8082");
     assert.equal(Boolean(editorFrame.hidden), false);
 
-    outlet.querySelectorAll("button").find((button) => button.textContent === "Close editor").click();
+    outlet.querySelector('button[title="Close editor"]').click();
     await flush();
     assert.equal(editorStops, 1);
     assert.equal(outlet.querySelector(".editor-panel"), null);

@@ -5,7 +5,7 @@ export const AREAS = [
     label: "Workspace",
     icon: "code",
     group: "main",
-    actions: [{ id: "image", label: "Studio image" }],
+    actions: [],
   },
   {
     id: "build",
