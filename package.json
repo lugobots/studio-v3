@@ -1,6 +1,6 @@
 {
   "name": "studio-v3",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Studio v3 desktop application",
   "main": "src/main/main.js",
   "scripts": {
