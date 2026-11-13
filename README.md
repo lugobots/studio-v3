@@ -33,15 +33,17 @@ This launches the Electron window. `npm start` does the same thing.
 
 ## Studio API Docker image version
 
-The Studio API binary embeds a build version (default `dev`) and exposes it on `GET /api/health` as `version`. Release builds must inject the same string into the binary and the image tag:
+The Studio API binary embeds a build version (default `dev`) and exposes it on `GET /api/health` as `version`. Official release builds inject the **GitHub version tag** into the binary and publish the same string as the Docker Hub tag (for example `v0.2.0`):
 
 ```bash
 # Development (binary version stays "dev")
 docker build -t lugobots/studio-v3-api:latest .
 
-# Release (binary version and image tag both "1.2.3")
-docker build --build-arg VERSION=1.2.3 -t lugobots/studio-v3-api:1.2.3 .
+# Release (binary version and image tag both match the GitHub tag, e.g. v0.2.0)
+docker build --build-arg VERSION=v0.2.0 -t lugobots/studio-v3-api:v0.2.0 .
 ```
+
+On every `v*` GitHub tag, the **Build release** workflow also publishes `lugobots/studio-v3-api:<github-tag>` (and `:latest`) to Docker Hub. A GitHub version without that Hub tag is not a complete, ready-to-use Studio distribution. See [docs/release-hardening.md](docs/release-hardening.md).
 
 ## Official downloads and signing
 

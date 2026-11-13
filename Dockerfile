@@ -1,8 +1,8 @@
 # Studio V3 API image.
 # Development builds: docker build -t lugobots/studio-v3-api:latest .
 #   (VERSION defaults to "dev" in the binary.)
-# Release builds: inject and tag the same version string, e.g.
-#   docker build --build-arg VERSION=1.2.3 -t lugobots/studio-v3-api:1.2.3 .
+# Release builds: inject and tag the same GitHub version tag string, e.g.
+#   docker build --build-arg VERSION=v0.2.0 -t lugobots/studio-v3-api:v0.2.0 .
 # Electron starts this container with command `api`
 # (see src/main/services/docker/args.js), mounts the bot at /home/coder/project,
 # and sets LUGO_STUDIO_API_PORT / LUGO_HOST_PROJECT_PATH.

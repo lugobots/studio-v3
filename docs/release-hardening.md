@@ -21,17 +21,31 @@ Checklist for making `lugobots/studio-v3` safe to publish from as a public repo.
 | Secret | Status | Purpose |
 |--------|--------|---------|
 | `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE` | **Enrolled** | Detached signatures for Linux AppImages |
+| `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` | **Enrolled** | Push `lugobots/studio-v3-api` on tagged **Build release** runs |
 | `CSC_LINK` / `CSC_KEY_PASSWORD` | Deferred | macOS Developer ID (requires Apple Developer Program fee) |
 | `APPLE_API_KEY` / `APPLE_API_KEY_ID` / `APPLE_API_ISSUER` | Deferred | notarytool notarization (same paid membership) |
 | `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD` | Deferred | Windows Authenticode / later Azure Trusted Signing (commercial) |
 
 Never commit private signing material. Public Linux key: `docs/keys/studio-v3-release.asc` (fingerprint in `docs/signing.md`).
 
+### Docker Hub image publish (Environment `build`)
+
+On every GitHub version tag `v*`, **Build release** builds Electron artifacts **and** publishes `lugobots/studio-v3-api:<github-tag>` (and `:latest`) to Docker Hub. The Hub tag and the image `VERSION` build-arg MUST be the same string as the GitHub tag (for example `v0.2.0`), not a stripped `0.2.0`.
+
+Enrollment:
+
+```bash
+gh secret set DOCKERHUB_USERNAME --env build --repo lugobots/studio-v3
+gh secret set DOCKERHUB_TOKEN --env build --repo lugobots/studio-v3
+```
+
+A GitHub version without `lugobots/studio-v3-api:<tag>` on Docker Hub is **not** a ready-to-use Studio distribution (installer GitHub Release approval remains a separate Publish step).
+
 ## In-repo controls (this change)
 
 - Release workflows under `.github/workflows/` with Actions **pinned by commit SHA**
 - `npm` lockfile (`package-lock.json`) for reproducible installs
-- Split **Build release** (artifacts only) vs **Publish release** (Environment `publish`)
+- Split **Build release** (artifacts + Hub API image on tags) vs **Publish release** (Environment `publish` for GitHub Release installers)
 - CODEOWNERS on workflows, `package.json` build config, updater, and verify docs
 
 ## Operator verification
@@ -39,5 +53,17 @@ Never commit private signing material. Public Linux key: `docs/keys/studio-v3-re
 After settings are applied, confirm:
 
 1. `gh api repos/lugobots/studio-v3/environments` lists `build` and `publish`
-2. Publishing without Environment approval cannot create a Release
-3. A `workflow_dispatch` of **Build release** produces Windows/macOS/Linux artifacts + `SHA256SUMS` without creating a Release
+2. `gh secret list --env build --repo lugobots/studio-v3` includes `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`
+3. Publishing without Environment approval cannot create a Release
+4. A `workflow_dispatch` of **Build release** produces Windows/macOS/Linux artifacts + `SHA256SUMS` without creating a Release
+5. A tagged **Build release** (`v*`) publishes `lugobots/studio-v3-api:<tag>` to Docker Hub and the image health version matches that tag
+
+## Ready-to-use checklist (distribution)
+
+Do **not** call a Studio GitHub version ready-to-use until all of the following are true for tag `T`:
+
+1. Desktop build artifacts for `T` exist on the CI path (and the GitHub Release is published when installers are required)
+2. Docker Hub has `lugobots/studio-v3-api:T` (same string as the GitHub tag)
+3. For the VS Code helper version authors are expected to pull, Docker Hub has `lugobots/vs-code-for-lugo:<helper-tag>` matching that helper repo’s GitHub tag (see `lugobots/lugo-vs-code` `IMAGE.md`)
+
+Hub image publish happens on the tagged **Build** workflow; installer GitHub Release still goes through **Publish release** approval.
