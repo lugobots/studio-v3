@@ -120,7 +120,7 @@ function platformLabel(platform) {
 
 function interpret(body, current, platform = process.platform, options = {}) {
   if (!body || typeof body.version !== "string") {
-    return { state: "error", message: "Doorway returned an unusable version check" };
+    return { state: "error", message: "The Lugo Bots platform returned an unusable version check" };
   }
   if (!(body.newer === true && compareSemver(body.version, current) === 1)) {
     return { state: "current", version: body.version };
@@ -141,7 +141,7 @@ function interpret(body, current, platform = process.platform, options = {}) {
       state: "error",
       version: body.version,
       message:
-        "Doorway did not provide an allowlisted GitHub Release asset with SHA-256 for this platform",
+        "The Lugo Bots platform did not provide a valid update package for this platform",
     };
   }
 
@@ -180,7 +180,7 @@ function noticeFor(result) {
     return {
       mode: "notify",
       title: "Update check failed",
-      body: result.message || "Doorway could not be reached",
+      body: result.message || "The official website could not be reached",
     };
   }
   return null;

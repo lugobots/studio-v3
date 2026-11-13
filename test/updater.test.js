@@ -58,7 +58,7 @@ test("legacy Doorway artifact-only payloads are rejected (no GitHub URL)", () =>
     "win32",
   );
   assert.equal(result.state, "error");
-  assert.match(result.message, /allowlisted GitHub Release/);
+  assert.match(result.message, /valid update package/i);
 });
 
 test("Doorway/S3 style download hosts are not allowlisted", () => {

@@ -37,7 +37,7 @@ async function check(fetchImpl = global.fetch, platform = process.platform) {
     const body = await response.json();
     return logic.interpret(body, version, platform);
   } catch (error) {
-    return { state: "error", message: error.message || "Doorway could not be reached" };
+    return { state: "error", message: error.message || "The official website could not be reached" };
   }
 }
 
@@ -155,7 +155,7 @@ async function download(artifactOrAsset, fetchImpl = global.fetch, options = {})
     return downloadAsset(artifactOrAsset, { ...options, fetchImpl });
   }
   throw new Error(
-    "Studio updates must download from allowlisted GitHub Release asset URLs (Doorway/S3 hosts are rejected)",
+    "Studio updates must download from allowlisted GitHub Release asset URLs",
   );
 }
 
