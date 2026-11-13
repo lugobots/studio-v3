@@ -7,6 +7,7 @@ const CHANNELS = {
     progress: "docker:progress",
     ensureEditor: "docker:ensure-editor",
     stopEditor: "docker:stop-editor",
+    openInstallPage: "docker:open-install-page",
   },
   config: {
     get: "config:get",

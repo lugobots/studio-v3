@@ -113,6 +113,7 @@ export function createHttpStudio({
       pull: async () => desktopOnly(),
       ensureEditor: async () => desktopOnly(),
       stopEditor: async () => desktopOnly(),
+      openInstallPage: async () => desktopOnly(),
       onProgress: () => () => {},
     },
     config: {

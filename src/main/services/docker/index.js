@@ -8,6 +8,7 @@ const { editorRunArgs, runArgs } = require("./args");
 const { waitEditorReady } = require("./editor-ready");
 const { resolveHostPorts } = require("./free-ports");
 const { ensureLevel1Binary } = require("./level1");
+const { buildDockerStatus } = require("./status");
 const { removeOk, stopStudioContainers } = require("./stop");
 
 let webContents = null;
@@ -47,15 +48,19 @@ function exec(command, args, timeout = 8000) {
 async function getStatus() {
   const info = await exec("docker", ["info"], 5000);
   if (!info.ok) {
-    return { running: false, image: imageFrom(), imagePresent: false, pull: pullState };
+    return buildDockerStatus({
+      info,
+      image: imageFrom(),
+      pull: pullState,
+    });
   }
   const inspected = await exec("docker", ["image", "inspect", imageFrom()]);
-  return {
-    running: true,
+  return buildDockerStatus({
+    info,
     image: imageFrom(),
     imagePresent: inspected.ok,
     pull: pullState,
-  };
+  });
 }
 
 function startPull() {

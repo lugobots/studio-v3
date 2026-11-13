@@ -1,10 +1,15 @@
 export interface DockerStatus {
   running?: boolean;
+  /** False when the Docker CLI executable is missing (ENOENT). */
+  installed?: boolean;
+  /** Why Docker is unavailable when `running` is false. */
+  reason?: "not_installed" | "not_running" | null;
   image?: string;
   imagePresent?: boolean;
   unsupported?: boolean;
   ok?: boolean;
   error?: string;
+  pull?: { status?: string; message?: string };
 }
 
 export interface StartupStep {
@@ -43,6 +48,7 @@ export interface StudioApi {
     pull: () => Promise<DockerStatus>;
     ensureEditor: () => Promise<{ ok: boolean; url?: string; error?: string }>;
     stopEditor: () => Promise<{ ok: boolean; error?: string }>;
+    openInstallPage: () => Promise<{ ok: boolean; error?: string }>;
     onProgress: (callback: (payload: unknown) => void) => () => void;
   };
   config: {
