@@ -80,7 +80,11 @@ export function renderStartupScreen(outlet, doc = globalThis.document) {
   const steps = doc.createElement("ol");
   steps.className = "api-gate-steps";
 
-  page.append(image, kicker, status, detail, percent, track, steps);
+  const logs = doc.createElement("pre");
+  logs.className = "api-gate-logs";
+  logs.hidden = true;
+
+  page.append(image, kicker, status, detail, percent, track, steps, logs);
   outlet.append(page);
 
   let disposed = false;
@@ -104,6 +108,15 @@ export function renderStartupScreen(outlet, doc = globalThis.document) {
     spinner.hidden = !busy;
     track.classList.toggle("is-busy", busy);
     steps.replaceChildren(...(progress.steps || []).map((step) => renderStep(doc, step)));
+    const logLines = Array.isArray(progress.logs) ? progress.logs : [];
+    if (logLines.length > 0) {
+      logs.hidden = false;
+      logs.textContent = logLines.join("\n");
+      logs.scrollTop = logs.scrollHeight;
+    } else {
+      logs.hidden = true;
+      logs.textContent = "";
+    }
   }
 
   apply(latest.phase === "ready" ? INITIAL : latest);

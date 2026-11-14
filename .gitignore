@@ -5,3 +5,5 @@ out/
 .DS_Store
 Thumbs.db
 *.code-workspace
+api/studio-v3-api-linux
+api/vendor/github.com/lugobots/frontend/web/app/static/dist/

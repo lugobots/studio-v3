@@ -2,6 +2,7 @@ import { noteStartupProgress } from "../../components/startup-screen.js";
 import { createPageHeader } from "../../components/page-header.js";
 import { getHost } from "../../lib/api.js";
 import { dialogs, reportResult } from "../../lib/dialogs.js";
+import { setGateMessage } from "../../lib/gate-message.js";
 import { navigate } from "../../lib/router.js";
 import { consumeStartProjectFromShell } from "../../lib/start-project-entry.js";
 
@@ -107,6 +108,13 @@ export function renderStartProject(outlet, documentRef = globalThis.document, de
       }
       if (!created.ok) {
         closed = true;
+        if (created.route === "/api-error" || created.prepareFailed) {
+          setGateMessage(
+            created.message || created.error || "Could not install bot dependencies.",
+          );
+          navigateTo("/api-error");
+          return;
+        }
         if (shown) {
           navigateTo("/start-project");
         }

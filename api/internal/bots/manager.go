@@ -153,7 +153,7 @@ func (m *Manager) StartMatch(cfg Config, active []Slot) error {
 		if err := os.MkdirAll(cfg.CacheDir, 0o755); err != nil {
 			return fmt.Errorf("create cache dir: %w", err)
 		}
-		if err := m.preparePlayer(lang, cfg); err != nil {
+		if err := m.preparePlayer(lang, cfg, nil); err != nil {
 			return fmt.Errorf("prepare player bots: %w", err)
 		}
 	}
@@ -199,7 +199,7 @@ func (m *Manager) StartBot(cfg Config, slot Slot) error {
 		if err := os.MkdirAll(cfg.CacheDir, 0o755); err != nil {
 			return fmt.Errorf("create cache dir: %w", err)
 		}
-		if err := m.preparePlayer(lang, cfg); err != nil {
+		if err := m.preparePlayer(lang, cfg, nil); err != nil {
 			return fmt.Errorf("prepare player bots: %w", err)
 		}
 	} else {
@@ -242,29 +242,33 @@ func (m *Manager) startSlotLocked(lang Language, cfg Config, slot Slot) error {
 	return nil
 }
 
-func (m *Manager) preparePlayer(lang Language, cfg Config) error {
-	run := m.runSyncFn()
+func (m *Manager) preparePlayer(lang Language, cfg Config, onLog func(string)) error {
+	if prepareAlreadyReady(lang, cfg.ProjectRoot, cfg.CacheDir) {
+		return nil
+	}
+	run := m.runSyncLogged(onLog)
 	switch lang {
 	case LangGo:
 		cmd, env := goPrepareCommand(cfg.ProjectRoot, cfg.CacheDir)
-		return run(cfg.ProjectRoot, cmd, env)
+		if err := run(cfg.ProjectRoot, cmd, env); err != nil {
+			return err
+		}
 	case LangPython:
 		for _, cmd := range pythonPrepareCommands(cfg.ProjectRoot) {
 			if err := run(cfg.ProjectRoot, cmd, nil); err != nil {
 				return err
 			}
 		}
-		return nil
 	case LangTypeScript:
 		for _, cmd := range jsPrepareCommands() {
 			if err := run(cfg.ProjectRoot, cmd, nil); err != nil {
 				return err
 			}
 		}
-		return nil
 	default:
 		return fmt.Errorf("unsupported language %q", lang)
 	}
+	return writePrepareStamp(lang, cfg.ProjectRoot)
 }
 
 func (m *Manager) startPlayer(lang Language, cfg Config, slot Slot) error {
@@ -353,6 +357,36 @@ func (m *Manager) runSyncFn() func(dir, command string, env map[string]string) e
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("%w: %s", err, truncate(string(out), 2048))
+		}
+		return nil
+	}
+}
+
+func (m *Manager) runSyncLogged(onLog func(string)) func(dir, command string, env map[string]string) error {
+	base := m.runSyncFn()
+	return func(dir, command string, env map[string]string) error {
+		if onLog != nil {
+			onLog("$ " + command)
+		}
+		if m.RunSync != nil {
+			err := base(dir, command, env)
+			if err != nil && onLog != nil {
+				onLog(err.Error())
+			}
+			return err
+		}
+		cmd := exec.Command("sh", "-c", command)
+		cmd.Dir = dir
+		cmd.Env = mergeEnv(env)
+		out, err := cmd.CombinedOutput()
+		text := string(out)
+		if onLog != nil && text != "" {
+			for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+				onLog(line)
+			}
+		}
+		if err != nil {
+			return fmt.Errorf("%w: %s", err, truncate(text, 2048))
 		}
 		return nil
 	}

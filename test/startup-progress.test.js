@@ -47,7 +47,7 @@ test("image download lines become a percent and a readable amount", () => {
   );
 });
 
-test("creating a bot adds a setup step before the api wait", () => {
+test("creating a bot adds setup and deps steps before the api wait", () => {
   const setup = describeStartup({
     flow: "create",
     phase: "setup",
@@ -57,7 +57,7 @@ test("creating a bot adds a setup step before the api wait", () => {
   });
   assert.equal(setup.flow, "create");
   assert.equal(setup.label, "Setting up the bot");
-  assert.equal(setup.percent, 74);
+  assert.equal(setup.percent, 72);
   assert.equal(
     describeStartup({
       flow: "create",
@@ -83,13 +83,27 @@ test("creating a bot adds a setup step before the api wait", () => {
       ["Preparing the Studio image", "done"],
       ["Starting the Studio API", "done"],
       ["Setting up the bot", "current"],
+      ["Installing bot dependencies", "pending"],
       ["Waiting for the Studio API", "pending"],
     ],
   );
   assert.equal(
     describeStartup({ flow: "create", phase: "setup", elapsedMs: 120000, deadlineMs: 120000 }).percent,
-    81,
+    80,
   );
+
+  const deps = describeStartup({
+    flow: "create",
+    phase: "deps",
+    detail: "Installing Python packages.",
+    elapsedMs: 0,
+    deadlineMs: 300000,
+    logs: ["$ pip install"],
+  });
+  assert.equal(deps.label, "Installing bot dependencies");
+  assert.equal(deps.percent, 82);
+  assert.deepEqual(deps.logs, ["$ pip install"]);
+  assert.equal(deps.steps.find((step) => step.id === "deps").state, "current");
 
   const waiting = describeStartup({
     flow: "create",
@@ -97,6 +111,7 @@ test("creating a bot adds a setup step before the api wait", () => {
     detail: "Waiting for the API to respond.",
   });
   assert.equal(waiting.steps.find((step) => step.id === "setup").state, "done");
+  assert.equal(waiting.steps.find((step) => step.id === "deps").state, "done");
   assert.equal(waiting.steps.find((step) => step.id === "health").state, "current");
 });
 
@@ -106,6 +121,7 @@ test("the health wait creeps forward until the api is ready", () => {
     describeStartup({ phase: "health", elapsedMs: 180000, deadlineMs: 180000 }).percent,
     94,
   );
+  assert.equal(describeStartup({ flow: "create", phase: "health", elapsedMs: 0 }).percent, 90);
   const ready = describeStartup({ phase: "ready", detail: "Opening Studio." });
   assert.equal(ready.percent, 100);
   assert.equal(ready.label, "Studio API is ready");

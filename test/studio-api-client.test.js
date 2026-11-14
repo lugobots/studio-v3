@@ -96,6 +96,27 @@ test("studio api client posts server and match start routes", async () => {
   assert.equal(calls[1].method, "POST");
 });
 
+test("studio api client prepare dependencies and logs", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, method: options.method || "GET" });
+    if (String(url).endsWith("/init/prepare-logs")) {
+      return respond(200, { running: true, lines: ["$ npm install"] });
+    }
+    return respond(200, { status: "OK" });
+  };
+
+  await studioApi.prepareDependencies(fetchImpl);
+  const logs = await studioApi.prepareLogs(fetchImpl);
+
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].url, /\/api\/init\/prepare-dependencies$/);
+  assert.equal(calls[0].method, "POST");
+  assert.match(calls[1].url, /\/api\/init\/prepare-logs$/);
+  assert.equal(calls[1].method, "GET");
+  assert.deepEqual(logs.lines, ["$ npm install"]);
+});
+
 test("studio api client posts match settings on server match and bot routes", async () => {
   const calls = [];
   const fetchImpl = async (url, options = {}) => {

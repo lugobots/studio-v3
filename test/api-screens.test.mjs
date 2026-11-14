@@ -67,12 +67,13 @@ test("loading screen shows bot setup while a new bot is created", () => {
     phase: "setup",
     label: "Setting up the bot",
     detail: "Downloading the Python bot template. This can take a minute.",
-    percent: 74,
+    percent: 72,
     steps: [
       { id: "docker", label: "Checking Docker", state: "done" },
       { id: "image", label: "Preparing the Studio image", state: "done" },
       { id: "container", label: "Starting the Studio API", state: "done" },
       { id: "setup", label: "Setting up the bot", state: "current" },
+      { id: "deps", label: "Installing bot dependencies", state: "pending" },
       { id: "health", label: "Waiting for the Studio API", state: "pending" },
     ],
   });
@@ -82,7 +83,48 @@ test("loading screen shows bot setup while a new bot is created", () => {
   assert.ok(copy.includes("Creating your bot"));
   assert.ok(copy.includes("Setting up the bot"));
   assert.ok(copy.includes("Downloading the Python bot template. This can take a minute."));
-  assert.ok(copy.includes("74%"));
+  assert.ok(copy.includes("72%"));
+  noteStartupProgress({
+    phase: "docker",
+    label: "Checking Docker",
+    detail: "Checking Docker and your bot.",
+    percent: 12,
+    steps: [
+      { id: "docker", label: "Checking Docker", state: "current" },
+      { id: "image", label: "Preparing the Studio image", state: "pending" },
+      { id: "container", label: "Starting the Studio API", state: "pending" },
+      { id: "health", label: "Waiting for the Studio API", state: "pending" },
+    ],
+  });
+});
+
+test("loading screen shows dependency install progress and logs during create", () => {
+  noteStartupProgress({
+    flow: "create",
+    phase: "deps",
+    label: "Installing bot dependencies",
+    detail: "Installing Python dependencies. 12s elapsed.",
+    percent: 85,
+    logs: ["$ pip install -r requirements.txt", "Collecting lugo4py"],
+    steps: [
+      { id: "docker", label: "Checking Docker", state: "done" },
+      { id: "image", label: "Preparing the Studio image", state: "done" },
+      { id: "container", label: "Starting the Studio API", state: "done" },
+      { id: "setup", label: "Setting up the bot", state: "done" },
+      { id: "deps", label: "Installing bot dependencies", state: "current" },
+      { id: "health", label: "Waiting for the Studio API", state: "pending" },
+    ],
+  });
+  const outlet = new El("div");
+  renderApiLoading(outlet, documentStub());
+  const page = outlet.children[0];
+  const copy = allTexts(page);
+  assert.ok(copy.includes("Installing bot dependencies"));
+  assert.ok(copy.includes("Installing Python dependencies. 12s elapsed."));
+  const log = page.children.find((child) => child.className === "api-gate-logs");
+  assert.ok(log);
+  assert.equal(log.hidden, false);
+  assert.ok(String(log.textContent).includes("Collecting lugo4py"));
   noteStartupProgress({
     phase: "docker",
     label: "Checking Docker",

@@ -1,6 +1,7 @@
 "use strict";
 
 const SETUP_STEP = { id: "setup", label: "Setting up the bot" };
+const DEPS_STEP = { id: "deps", label: "Installing bot dependencies" };
 
 const STEPS = [
   { id: "docker", label: "Checking Docker" },
@@ -13,8 +14,9 @@ const BASE_PERCENT = {
   docker: 12,
   image: 36,
   container: 64,
-  setup: 74,
-  health: 82,
+  setup: 72,
+  deps: 82,
+  health: 90,
   ready: 100,
 };
 
@@ -22,7 +24,7 @@ function stepList(flow) {
   if (flow !== "create") {
     return STEPS;
   }
-  return [STEPS[0], STEPS[1], STEPS[2], SETUP_STEP, STEPS[3]];
+  return [STEPS[0], STEPS[1], STEPS[2], SETUP_STEP, DEPS_STEP, STEPS[3]];
 }
 
 function toBytes(value, unit) {
@@ -96,6 +98,7 @@ function describeStartup({
   elapsedMs = 0,
   deadlineMs = 180000,
   flow = "startup",
+  logs = [],
 } = {}) {
   const stepsSource = stepList(flow);
   const order = [...stepsSource.map((step) => step.id), "ready"];
@@ -116,11 +119,17 @@ function describeStartup({
   }
   if (known === "setup") {
     const ratio = deadlineMs > 0 ? Math.min(1, Math.max(0, elapsedMs / deadlineMs)) : 0;
-    percent = Math.round(74 + ratio * 7);
+    percent = Math.round(72 + ratio * 8);
+  }
+  if (known === "deps") {
+    const ratio = deadlineMs > 0 ? Math.min(1, Math.max(0, elapsedMs / deadlineMs)) : 0;
+    percent = Math.round(82 + ratio * 6);
   }
   if (known === "health") {
     const ratio = deadlineMs > 0 ? Math.min(1, Math.max(0, elapsedMs / deadlineMs)) : 0;
-    percent = Math.round(82 + ratio * 12);
+    const base = flow === "create" ? 90 : 82;
+    const span = flow === "create" ? 8 : 12;
+    percent = Math.round(base + ratio * span);
   }
   const steps = stepsSource.map((step) => {
     const stepIndex = order.indexOf(step.id);
@@ -140,6 +149,7 @@ function describeStartup({
     detail: readable,
     percent,
     steps,
+    logs: Array.isArray(logs) ? logs.map((line) => String(line)) : [],
   };
 }
 

@@ -35,7 +35,8 @@ type Deps struct {
 	Registry *procreg.Registry
 	Starter  gameruntime.Starter
 	Match    bots.Starter
-	Logs     *processLogHub // optional; tests inject a shared hub
+	Prepper  bots.ProjectPrepper // optional; defaults from Match or a new Manager
+	Logs     *processLogHub      // optional; tests inject a shared hub
 }
 
 // NewMux returns the Studio V3 API HTTP handler with default deps.
@@ -54,6 +55,13 @@ func NewMuxWith(deps Deps) http.Handler {
 	if deps.Match == nil {
 		deps.Match = bots.New(deps.Registry)
 	}
+	if deps.Prepper == nil {
+		if mgr, ok := deps.Match.(bots.ProjectPrepper); ok {
+			deps.Prepper = mgr
+		} else {
+			deps.Prepper = bots.New(deps.Registry)
+		}
+	}
 	if deps.Logs == nil {
 		deps.Logs = newProcessLogHub()
 	}
@@ -67,6 +75,8 @@ func NewMuxWith(deps Deps) http.Handler {
 	api := &api{
 		starter:  deps.Starter,
 		match:    deps.Match,
+		prepper:  deps.Prepper,
+		prepare:  newPrepareHub(),
 		registry: deps.Registry,
 		status:   newStatusHub(),
 		logs:     deps.Logs,
@@ -75,6 +85,8 @@ func NewMuxWith(deps Deps) http.Handler {
 	mux.HandleFunc("GET /api/health", handleHealth)
 	mux.HandleFunc("GET /api/studio/status", handleStudioStatus)
 	mux.HandleFunc("POST /api/init/setup-new-bot", handleSetupNewBot)
+	mux.HandleFunc("POST /api/init/prepare-dependencies", api.handlePrepareDependencies)
+	mux.HandleFunc("GET /api/init/prepare-logs", api.handlePrepareLogs)
 	mux.HandleFunc("POST /api/bot/publish", handlePublish)
 	mux.HandleFunc("POST /api/server/start", api.handleServerStart)
 	mux.HandleFunc("GET /api/server/status", api.handleServerStatus)
@@ -96,6 +108,8 @@ func NewMuxWith(deps Deps) http.Handler {
 type api struct {
 	starter      gameruntime.Starter
 	match        bots.Starter
+	prepper      bots.ProjectPrepper
+	prepare      *prepareHub
 	registry     *procreg.Registry
 	status       *statusHub
 	logs         *processLogHub

@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createBot } = require("../src/main/services/bots/actions");
+const { createBot, prepareBotDeps } = require("../src/main/services/bots/actions");
 
 function harness(overrides) {
   const calls = [];
@@ -24,6 +24,10 @@ function harness(overrides) {
     },
     setup: async (language) => {
       calls.push(`setup:${language}`);
+      return { ok: true };
+    },
+    prepare: async (language) => {
+      calls.push(`prepare:${language}`);
       return { ok: true };
     },
     watch: () => {
@@ -102,8 +106,83 @@ test("accepting an overwrite calls setup and saves only after the folder is comp
   const result = await createBot(deps);
   assert.equal(result.ok, true);
   assert.equal(calls.includes("setup:typescript"), true);
+  assert.equal(calls.includes("prepare:typescript"), true);
   assert.equal(calls.includes("save"), true);
   assert.ok(calls.indexOf("setup:typescript") < calls.indexOf("save"));
+  assert.ok(calls.indexOf("save") < calls.indexOf("prepare:typescript"));
+  assert.ok(calls.indexOf("prepare:typescript") < calls.indexOf("watch"));
+});
+
+test("create waits for prepare before watching the workspace", async () => {
+  let checks = 0;
+  const { calls, deps } = harness({
+    overwrite: true,
+    listEntries: () => ({ exists: true, entries: [] }),
+    check: () => {
+      checks += 1;
+      return checks === 1
+        ? { ok: false, error: "That folder is not a Lugo bot (.lugo/info.json is missing)." }
+        : { ok: true };
+    },
+  });
+  const result = await createBot(deps);
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    calls.filter((call) => ["setup:python", "prepare:python", "save", "watch"].includes(call)),
+    ["setup:python", "save", "prepare:python", "watch"],
+  );
+});
+
+test("prepare failure stays on the api error path and does not watch", async () => {
+  let checks = 0;
+  const { calls, deps } = harness({
+    overwrite: true,
+    listEntries: () => ({ exists: true, entries: [] }),
+    check: () => {
+      checks += 1;
+      return checks === 1
+        ? { ok: false, error: "That folder is not a Lugo bot (.lugo/info.json is missing)." }
+        : { ok: true };
+    },
+    prepare: async () => ({ ok: false, error: "pip failed" }),
+  });
+  const result = await createBot(deps);
+  assert.equal(result.ok, false);
+  assert.equal(result.prepareFailed, true);
+  assert.equal(result.route, "/api-error");
+  assert.equal(result.error, "pip failed");
+  assert.equal(calls.includes("save"), true);
+  assert.equal(calls.includes("watch"), false);
+});
+
+test("prepare-only retry does not call setup", async () => {
+  const calls = [];
+  const result = await prepareBotDeps({
+    folder: "/bots/ready",
+    language: "go",
+    check: () => ({ ok: true }),
+    remember: async (folder) => {
+      calls.push("save");
+      return { project_path: folder };
+    },
+    stop: async () => {
+      calls.push("stop");
+      return { ok: true };
+    },
+    start: async () => {
+      calls.push("start");
+      return { ok: true };
+    },
+    prepare: async (language) => {
+      calls.push(`prepare:${language}`);
+      return { ok: true };
+    },
+    watch: () => {
+      calls.push("watch");
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(calls, ["stop", "start", "prepare:go", "save", "watch"]);
 });
 
 test("a failed setup does not save bot_paths", async () => {

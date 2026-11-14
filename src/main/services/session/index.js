@@ -4,7 +4,7 @@ const { app, dialog } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { CHANNELS } = require("../../../shared/ipc-channels");
-const { createBot, inspectDirectory, openBot } = require("../bots/actions");
+const { createBot, inspectDirectory, openBot, prepareBotDeps } = require("../bots/actions");
 const { checkBotCompatibility } = require("../bots/compatibility");
 const config = require("../config");
 const docker = require("../docker");
@@ -30,6 +30,8 @@ let webContents = null;
 let watchGeneration = 0;
 let serverControls = null;
 let logControls = null;
+/** @type {{ folder: string, language: string } | null} */
+let pendingPrepareRetry = null;
 let lastProgress = describeStartup({
   phase: "docker",
   detail: "Checking Docker and your bot.",
@@ -68,6 +70,11 @@ function emitProgress(input) {
 
 function currentProgress() {
   return lastProgress;
+}
+
+/** Invalidate any in-flight startWatch loop so stop/create cannot race it. */
+function cancelWatch() {
+  watchGeneration += 1;
 }
 
 function emptyProjectDir() {
@@ -246,6 +253,13 @@ async function retry() {
   if (!status.running) {
     return { route: "/docker-check" };
   }
+  if (pendingPrepareRetry && pendingPrepareRetry.folder) {
+    const folder = pendingPrepareRetry.folder;
+    const language = pendingPrepareRetry.language;
+    if (checkBotCompatibility(folder).ok) {
+      return prepareOnly({ folder, language });
+    }
+  }
   watchGeneration += 1;
   await docker.stopContainer();
   const saved = await config.get();
@@ -265,10 +279,12 @@ async function open(folder) {
     folder,
     check: checkBotCompatibility,
     remember: (dir) => config.rememberBot(dir),
-    stop: () => docker.stopContainer(),
+    stop: async () => {
+      cancelWatch();
+      return docker.stopContainer();
+    },
     start: (dir) => ensureApiContainer(dir, dir),
     watch: (dir, route) => {
-      watchGeneration += 1;
       startWatch(dir, route);
     },
   });
@@ -280,30 +296,16 @@ const LANGUAGE_LABEL = {
   typescript: "JavaScript",
 };
 
-async function create({ folder, language, overwrite }) {
-  let creating = false;
-  return createBot({
-    folder,
-    language,
-    overwrite: Boolean(overwrite),
-    check: checkBotCompatibility,
-    listEntries: inspectDirectory,
-    remember: (dir) => config.rememberBot(dir),
-    onWork: (kind) => {
-      creating = kind === "create";
-      if (creating) {
-        emitProgress({
-          flow: "create",
-          phase: "docker",
-          detail: "Checking the folder you chose.",
-        });
-        return;
-      }
-      emitProgress({ phase: "container", detail: "Opening this bot." });
+function createFlowHelpers(getCreating) {
+  return {
+    stop: async () => {
+      cancelWatch();
+      return docker.stopContainer();
     },
-    stop: () => docker.stopContainer(),
     start: async (dir) => {
-      const flow = creating ? "create" : "startup";
+      const creating = getCreating();
+      const flow = creating || creating === "prepare" ? "create" : "startup";
+      const isCreate = flow === "create";
       emitProgress({ flow, phase: "image", detail: "Preparing the Studio image." });
       const image = await docker.ensureImage();
       if (!image.ok) {
@@ -321,13 +323,13 @@ async function create({ folder, language, overwrite }) {
       emitProgress({
         flow,
         phase: "container",
-        detail: creating ? "Starting the API that will create the bot." : "Starting the Studio API.",
+        detail: isCreate ? "Starting the API that will create the bot." : "Starting the Studio API.",
       });
       const container = await docker.ensureContainer(dir, dir, level1);
       if (!container.ok) {
         return container;
       }
-      if (!creating) {
+      if (!isCreate) {
         return studioApi.waitUntilReady(undefined, HEALTH_DEADLINE_MS / HEALTH_INTERVAL_MS);
       }
       const startedAt = Date.now();
@@ -352,6 +354,131 @@ async function create({ folder, language, overwrite }) {
       } finally {
         clearInterval(timer);
       }
+    },
+    prepare: async (lang) => runPrepareDependencies(lang),
+    watch: (dir, route) => {
+      watchGeneration += 1;
+      startWatch(dir, route, getCreating() ? "create" : "startup");
+    },
+  };
+}
+
+async function runPrepareDependencies(lang) {
+  const template = LANGUAGE_LABEL[lang] || "bot";
+  const deadlineMs = 300000;
+  const startedAt = Date.now();
+  let lines = [];
+  const reportDeps = async () => {
+    const elapsedMs = Date.now() - startedAt;
+    const seconds = Math.round(elapsedMs / 1000);
+    try {
+      const body = await studioApi.prepareLogs();
+      if (body && Array.isArray(body.lines)) {
+        lines = body.lines;
+      }
+    } catch {
+      // Keep the last known lines if the poll fails mid-prepare.
+    }
+    emitProgress({
+      flow: "create",
+      phase: "deps",
+      detail:
+        seconds < 2
+          ? `Installing ${template} dependencies. This can take a few minutes.`
+          : `Installing ${template} dependencies. ${seconds}s elapsed.`,
+      elapsedMs,
+      deadlineMs,
+      logs: lines.slice(-40),
+    });
+  };
+  const attemptPrepare = async () => {
+    await reportDeps();
+    const timer = setInterval(() => {
+      void reportDeps();
+    }, 1000);
+    try {
+      const body = await studioApi.prepareDependencies();
+      await reportDeps();
+      return { ok: true, body };
+    } catch (error) {
+      await reportDeps();
+      return { ok: false, error };
+    } finally {
+      clearInterval(timer);
+    }
+  };
+
+  let result = await attemptPrepare();
+  // Transient connection drops mid-install (seen as "fetch failed") — retry once;
+  // prepare is idempotent via .studio/deps.stamp when artifacts already exist.
+  if (
+    !result.ok &&
+    result.error &&
+    /fetch failed|ECONNRESET|socket hang up|network/i.test(String(result.error.message || ""))
+  ) {
+    result = await attemptPrepare();
+  }
+  if (result.ok) {
+    pendingPrepareRetry = null;
+    return actionResult(result.body);
+  }
+  const error = result.error || new Error("Could not install bot dependencies.");
+  const outdatedImage =
+    Number(error && error.status) === 404 ||
+    /404 page not found/i.test(String((error && error.message) || ""));
+  const message = outdatedImage
+    ? "This Studio API image is too old for dependency install. Rebuild lugobots/studio-v3-api:latest and try again."
+    : error.message;
+  return { ok: false, error: message };
+}
+
+async function prepareOnly({ folder, language }) {
+  let mode = "prepare";
+  const helpers = createFlowHelpers(() => mode);
+  const result = await prepareBotDeps({
+    folder,
+    language,
+    check: checkBotCompatibility,
+    remember: (dir) => config.rememberBot(dir),
+    onWork: () => {
+      mode = "prepare";
+      emitProgress({
+        flow: "create",
+        phase: "deps",
+        detail: "Retrying bot dependency install.",
+      });
+    },
+    ...helpers,
+  });
+  if (result.prepareFailed) {
+    pendingPrepareRetry = { folder, language: language || "" };
+  } else if (result.ok) {
+    pendingPrepareRetry = null;
+  }
+  return result;
+}
+
+async function create({ folder, language, overwrite }) {
+  let creating = false;
+  const helpers = createFlowHelpers(() => creating);
+  const result = await createBot({
+    folder,
+    language,
+    overwrite: Boolean(overwrite),
+    check: checkBotCompatibility,
+    listEntries: inspectDirectory,
+    remember: (dir) => config.rememberBot(dir),
+    onWork: (kind) => {
+      creating = kind === "create";
+      if (creating) {
+        emitProgress({
+          flow: "create",
+          phase: "docker",
+          detail: "Checking the folder you chose.",
+        });
+        return;
+      }
+      emitProgress({ phase: "container", detail: "Opening this bot." });
     },
     setup: async (lang) => {
       const startedAt = Date.now();
@@ -381,11 +508,17 @@ async function create({ folder, language, overwrite }) {
         clearInterval(timer);
       }
     },
-    watch: (dir, route) => {
-      watchGeneration += 1;
-      startWatch(dir, route, creating ? "create" : "startup");
-    },
+    ...helpers,
   });
+  if (result.prepareFailed) {
+    pendingPrepareRetry = {
+      folder: result.folder || folder,
+      language: result.language || language || "",
+    };
+  } else if (result.ok) {
+    pendingPrepareRetry = null;
+  }
+  return result;
 }
 
 async function remove(folder) {

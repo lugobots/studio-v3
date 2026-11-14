@@ -193,3 +193,48 @@ test("a failed setup returns to the bot screen and reports the error", async () 
   assert.deepEqual(navigated, ["/api-loading", "/start-project"]);
   assert.equal(reports[0].error, "clone failed");
 });
+
+test("a prepare failure opens the api error screen", async () => {
+  const doc = { createElement: (tag) => new El(tag) };
+  globalThis.document = doc;
+  const navigated = [];
+  const reports = [];
+  let notify = () => {};
+  const outlet = new El("div");
+  renderStartProject(outlet, doc, {
+    navigate: (path) => navigated.push(path),
+    reportResult: async (_prompt, result) => {
+      reports.push(result);
+    },
+    host: {
+      startup: {
+        onProgress: (callback) => {
+          notify = callback;
+          return () => {};
+        },
+      },
+      project: {
+        pickFolder: async () => ({ ok: true, folder: "/bots/new" }),
+        create: async () => {
+          notify({
+            flow: "create",
+            phase: "deps",
+            label: "Installing bot dependencies",
+          });
+          return {
+            ok: false,
+            prepareFailed: true,
+            route: "/api-error",
+            error: "pip failed",
+            message: "pip failed",
+          };
+        },
+      },
+    },
+  });
+
+  const form = walk(outlet).find((node) => node.tag === "form");
+  await form.listeners[0]({ preventDefault() {} });
+  assert.deepEqual(navigated, ["/api-loading", "/api-error"]);
+  assert.equal(reports.length, 0);
+});

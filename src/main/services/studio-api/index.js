@@ -1,8 +1,9 @@
 "use strict";
 
 // Client talks to the V3-owned API in lugobots/studio-v3-api:latest (command `api`).
-// Routes under /api include health, studio/status, init/setup-new-bot, server/start,
-// server/status, server/stop, server/status/ws, game/start, and bot/publish.
+// Routes under /api include health, studio/status, init/setup-new-bot,
+// init/prepare-dependencies, init/prepare-logs, server/start, server/status,
+// server/stop, server/status/ws, game/start, and bot/publish.
 
 const runtimePorts = require("../runtime-ports");
 
@@ -216,6 +217,14 @@ async function setupBot(language, fetchImpl) {
   );
 }
 
+async function prepareDependencies(fetchImpl = global.fetch) {
+  return request("/init/prepare-dependencies", { method: "POST" }, fetchImpl);
+}
+
+async function prepareLogs(fetchImpl = global.fetch) {
+  return request("/init/prepare-logs", { method: "GET" }, fetchImpl);
+}
+
 async function publishBot({ botUri, tag }, fetchImpl) {
   const body = new URLSearchParams({ bot_uri: botUri, tag });
   return request(
@@ -305,6 +314,8 @@ module.exports = {
   stopBot,
   botStatus,
   setupBot,
+  prepareDependencies,
+  prepareLogs,
   publishBot,
   armLogSource,
   disarmLogSource,
