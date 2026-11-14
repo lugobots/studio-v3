@@ -3,6 +3,8 @@ package server
 import (
 	"net/http"
 	"sync"
+
+	"studio-v3/api/internal/projectfs"
 )
 
 const prepareLogCap = 400
@@ -69,6 +71,7 @@ func (a *api) handlePrepareDependencies(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": text})
 		return
 	}
+	_ = projectfs.ChownToCoder(root)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
 }
 

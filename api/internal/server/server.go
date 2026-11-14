@@ -20,6 +20,7 @@ import (
 	"studio-v3/api/internal/gameremote"
 	"studio-v3/api/internal/gameruntime"
 	"studio-v3/api/internal/procreg"
+	"studio-v3/api/internal/projectfs"
 )
 
 const gameResetTimeout = 3 * time.Second
@@ -147,6 +148,7 @@ func handleSetupNewBot(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": text})
 		return
 	}
+	_ = projectfs.ChownToCoder(dest)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
 }
 

@@ -286,8 +286,25 @@ async function recentLogs(name = DEFAULTS.containerName) {
   return line.slice(0, 300);
 }
 
+/**
+ * Make the mounted bot writable by the VS Code helper (`coder`, uid 1000).
+ * The API container writes templates/deps as root; without this, saves EACCES.
+ */
+async function fixProjectOwnershipForEditor() {
+  if (!(await containerIsRunning(DEFAULTS.containerName))) {
+    return { ok: false, reason: "api-not-running" };
+  }
+  const result = await exec(
+    "docker",
+    ["exec", DEFAULTS.containerName, "chown", "-R", "1000:1000", DEFAULTS.mountTarget],
+    60000,
+  );
+  return { ok: result.ok, error: result.ok ? "" : (result.stderr || result.stdout || "").trim() };
+}
+
 async function ensureEditor(projectPath) {
   if (await containerIsRunning(DEFAULTS.editorContainerName)) {
+    await fixProjectOwnershipForEditor();
     const hostPorts =
       (await publishedHostPorts(DEFAULTS.editorContainerName, ["vsCode"])) || {
         vsCode: portsFrom().vsCode,
@@ -305,6 +322,7 @@ async function ensureEditor(projectPath) {
     notify({ mode: "notify", title: "Editor", body: started.error });
     return started;
   }
+  await fixProjectOwnershipForEditor();
   runtimePorts.setEditorHostPort(prepared.hostPorts.vsCode);
   return {
     ok: true,
