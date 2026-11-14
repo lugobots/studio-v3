@@ -331,6 +331,9 @@ func TestPrepareCommandsPerLanguage(t *testing.T) {
 	if cmd == "" || env["GOCACHE"] == "" {
 		t.Fatalf("go prepare incomplete: %q %#v", cmd, env)
 	}
+	if strings.Contains(cmd, " -C ") || strings.HasPrefix(cmd, "go build -C ") {
+		t.Fatalf("go prepare must not use -C (Go 1.19 in API image): %q", cmd)
+	}
 	if jsPrepareCommands()[0] != "npm install" {
 		t.Fatalf("js prepare = %#v", jsPrepareCommands())
 	}

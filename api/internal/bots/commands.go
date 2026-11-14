@@ -35,7 +35,9 @@ func goBinaryPath(cacheDir string) string {
 }
 
 func goPrepareCommand(projectRoot, cacheDir string) (string, map[string]string) {
-	cmd := fmt.Sprintf("go build -C %s -o %s main.go", shellQuote(projectRoot), shellQuote(goBinaryPath(cacheDir)))
+	// Do not use `go build -C`: Debian bookworm's golang-go is 1.19, and -C
+	// arrived in Go 1.20. runSync already sets cmd.Dir to projectRoot.
+	cmd := fmt.Sprintf("go build -o %s main.go", shellQuote(goBinaryPath(cacheDir)))
 	env := map[string]string{
 		"GOCACHE":    filepath.Join(cacheDir, "go-cache"),
 		"GOMODCACHE": filepath.Join(cacheDir, "go-mod-cache"),
