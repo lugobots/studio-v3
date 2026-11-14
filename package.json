@@ -6,6 +6,8 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
+    "build:api": "docker build -t lugobots/studio-v3-api:latest .",
+    "dev:rebuild-api": "npm run build:api && docker rm -f lugo-studio-v3 && npm run dev",
     "test": "node --test",
     "pack:win": "electron-builder --win portable --x64 --publish never",
     "pack:mac": "electron-builder --mac dmg zip --x64 --arm64 --publish never",

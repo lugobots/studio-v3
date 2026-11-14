@@ -31,7 +31,8 @@ func withAPIDebug(a *api, next http.Handler) http.Handler {
 			path = "/"
 		}
 		// The log transport itself must not echo into the hub it is streaming.
-		if strings.HasPrefix(path, "/api/logs/") {
+		// Health probes are polled continuously and should stay out of the hub.
+		if path == "/api/health" || strings.HasPrefix(path, "/api/logs/") {
 			return
 		}
 		a.debugf("%s %s", r.Method, path)

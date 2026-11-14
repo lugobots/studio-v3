@@ -54,11 +54,22 @@ func TestAPIDebugOnTagsLinesAsAPI(t *testing.T) {
 		t.Fatalf("arm status %d body %s", armRR.Code, armRR.Body.String())
 	}
 
+	// Health probes must not spam the hub even while api debug is armed.
 	healthReq := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	healthRR := httptest.NewRecorder()
 	mux.ServeHTTP(healthRR, healthReq)
 	if healthRR.Code != http.StatusOK {
 		t.Fatalf("health status %d", healthRR.Code)
+	}
+	if hub.Len() != 0 {
+		t.Fatalf("health probe retained %d lines, want 0", hub.Len())
+	}
+
+	statusReq := httptest.NewRequest(http.MethodGet, "/api/studio/status", nil)
+	statusRR := httptest.NewRecorder()
+	mux.ServeHTTP(statusRR, statusReq)
+	if statusRR.Code != http.StatusOK {
+		t.Fatalf("studio status %d", statusRR.Code)
 	}
 
 	lines := hub.Snapshot()
@@ -69,15 +80,18 @@ func TestAPIDebugOnTagsLinesAsAPI(t *testing.T) {
 		if line.Source != "api" {
 			t.Fatalf("line source = %q, want api (text %q)", line.Source, line.Text)
 		}
-	}
-	var sawHealth bool
-	for _, line := range lines {
 		if strings.Contains(line.Text, "GET /api/health") {
-			sawHealth = true
+			t.Fatalf("lines = %#v, health probe must not appear", lines)
 		}
 	}
-	if !sawHealth {
-		t.Fatalf("lines = %#v, want a GET /api/health debug line", lines)
+	var sawStatus bool
+	for _, line := range lines {
+		if strings.Contains(line.Text, "GET /api/studio/status") {
+			sawStatus = true
+		}
+	}
+	if !sawStatus {
+		t.Fatalf("lines = %#v, want a GET /api/studio/status debug line", lines)
 	}
 	if hub.Armed("server") || hub.Armed("home/1") || hub.Armed("away/2") {
 		t.Fatal("arming api debug also armed bot or game-server capture")
@@ -91,7 +105,7 @@ func TestAPIDebugOnTagsLinesAsAPI(t *testing.T) {
 		t.Fatalf("disarm status %d", disarmRR.Code)
 	}
 	before := hub.Len()
-	again := httptest.NewRequest(http.MethodGet, "/api/studio/status", nil)
+	again := httptest.NewRequest(http.MethodGet, "/api/server/status", nil)
 	againRR := httptest.NewRecorder()
 	mux.ServeHTTP(againRR, again)
 	if hub.Len() != before {

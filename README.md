@@ -31,6 +31,14 @@ npm run dev
 
 This launches the Electron window. `npm start` does the same thing.
 
+After changing Go code under `api/`, rebuild the Studio API image and recreate the container before starting:
+
+```powershell
+npm run dev:rebuild-api
+```
+
+That runs `docker build -t lugobots/studio-v3-api:latest .`, removes any existing `lugo-studio-v3` container, then starts Electron. Use `npm run build:api` if you only need the image rebuild.
+
 ## Studio API Docker image version
 
 The Studio API binary embeds a build version (default `dev`) and exposes it on `GET /api/health` as `version`. Official release builds inject the **GitHub version tag** into the binary and publish the same string as the Docker Hub tag (for example `v0.2.0`):
