@@ -1,3 +1,10 @@
+import {
+  DEFAULT_HORIZONTAL,
+  DEFAULT_LOGS,
+  clampHorizontal,
+  clampLogs,
+} from "../shell/workspace-split.js";
+
 function statusWsUrl(baseUrl) {
   return `${baseUrl.replace(/^http/, "ws")}/server/status/ws`;
 }
@@ -105,6 +112,17 @@ export function createHttpStudio({
     return saved !== "off";
   }
 
+  function readSplitFraction(key, clampFn, fallback) {
+    if (!storage) {
+      return fallback;
+    }
+    const raw = storage.getItem(key);
+    if (raw === null) {
+      return fallback;
+    }
+    return clampFn(raw);
+  }
+
   return {
     host: "web",
     versions: { node: "", chrome: "", electron: "" },
@@ -135,6 +153,16 @@ export function createHttpStudio({
           appearance: appearance(),
           workspaceEditorOpen: workspaceEditorOpen(),
           workspace_editor_open: workspaceEditorOpen(),
+          workspace_split_horizontal: readSplitFraction(
+            "lugo-studio-workspace-split-horizontal",
+            clampHorizontal,
+            DEFAULT_HORIZONTAL,
+          ),
+          workspace_split_logs: readSplitFraction(
+            "lugo-studio-workspace-split-logs",
+            clampLogs,
+            DEFAULT_LOGS,
+          ),
           measurementId: "",
           appVersion: "web",
           app_version: "web",
@@ -156,6 +184,18 @@ export function createHttpStudio({
           storage.setItem(
             "lugo-studio-workspace-editor-open",
             patch.workspace_editor_open === false ? "off" : "on",
+          );
+        }
+        if (storage && Object.prototype.hasOwnProperty.call(patch, "workspace_split_horizontal")) {
+          storage.setItem(
+            "lugo-studio-workspace-split-horizontal",
+            String(clampHorizontal(patch.workspace_split_horizontal)),
+          );
+        }
+        if (storage && Object.prototype.hasOwnProperty.call(patch, "workspace_split_logs")) {
+          storage.setItem(
+            "lugo-studio-workspace-split-logs",
+            String(clampLogs(patch.workspace_split_logs)),
           );
         }
         return this.get();

@@ -12,6 +12,17 @@ import { gameFrontendUrl } from "./game-frontend.js";
 import { editorUrl } from "./editor-url.js";
 import { markStartProjectFromShell } from "../lib/start-project-entry.js";
 import { renderRailBotCombobox, switchBotProject } from "./settings-bot-projects.js";
+import {
+  DEFAULT_HORIZONTAL,
+  DEFAULT_LOGS,
+  clampHorizontal,
+  clampLogs,
+  horizontalFromPointer,
+  logsFromPointer,
+  applyHorizontalSplit,
+  applyLogsSplit,
+  setFramesPointerEvents,
+} from "./workspace-split.js";
 
 function statusRunning(payload) {
   if (!payload || typeof payload !== "object") {
@@ -199,9 +210,123 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
   const processLogHost = document.createElement("div");
   processLogHost.className = "process-log-drawer-host";
   processLogs.mount(processLogHost);
+  const logsSplitter = document.createElement("div");
+  logsSplitter.className = "workspace-splitter workspace-splitter--vertical";
+  logsSplitter.setAttribute("role", "separator");
+  logsSplitter.setAttribute("aria-orientation", "horizontal");
+  logsSplitter.title = "Resize logs";
+  logsSplitter.hidden = true;
   // Reuse across paint() so log toggles / control refreshes do not reload the match frontend.
   let gameFrame = null;
   let editorFrame = null;
+  let horizontalShare = DEFAULT_HORIZONTAL;
+  let logsShare = DEFAULT_LOGS;
+  let workspaceMainEl = null;
+
+  function syncSplitsFromConfig(config) {
+    horizontalShare = clampHorizontal(config?.workspace_split_horizontal);
+    logsShare = clampLogs(config?.workspace_split_logs);
+  }
+
+  function syncLogHostExpanded() {
+    const open = Boolean(processLogs.snapshot()?.open);
+    processLogHost.dataset.expanded = String(open);
+    logsSplitter.hidden = !open;
+    applyLogsSplit(workspaceMainEl, logsShare, { expanded: open });
+  }
+
+  processLogs.onChange(() => {
+    syncLogHostExpanded();
+  });
+
+  async function persistSplitPrefs(patch) {
+    if (typeof host?.config?.set !== "function") {
+      return;
+    }
+    try {
+      state.config = await host.config.set(patch);
+      syncSplitsFromConfig(state.config);
+    } catch {
+      // Preference write is best-effort; live layout still follows the drag.
+    }
+  }
+
+  function bindHorizontalSplitter(handle, split, gamePanel, editorPanel) {
+    handle.addEventListener("pointerdown", (event) => {
+      if (event.button != null && event.button !== 0) {
+        return;
+      }
+      event.preventDefault();
+      handle.setPointerCapture?.(event.pointerId);
+      setFramesPointerEvents([gameFrame, editorFrame], false);
+      const onMove = (moveEvent) => {
+        const rect = split.getBoundingClientRect?.() || { left: 0, width: 0 };
+        horizontalShare = horizontalFromPointer(moveEvent.clientX, rect.left, rect.width);
+        applyHorizontalSplit(gamePanel, editorPanel, horizontalShare);
+      };
+      const onUp = () => {
+        handle.releasePointerCapture?.(event.pointerId);
+        handle.removeEventListener("pointermove", onMove);
+        handle.removeEventListener("pointerup", onUp);
+        handle.removeEventListener("pointercancel", onUp);
+        setFramesPointerEvents([gameFrame, editorFrame], true);
+        void persistSplitPrefs({ workspace_split_horizontal: horizontalShare });
+      };
+      handle.addEventListener("pointermove", onMove);
+      handle.addEventListener("pointerup", onUp);
+      handle.addEventListener("pointercancel", onUp);
+    });
+  }
+
+  function bindVerticalSplitter(handle) {
+    handle.addEventListener("pointerdown", (event) => {
+      if (event.button != null && event.button !== 0) {
+        return;
+      }
+      if (!processLogs.snapshot()?.open) {
+        return;
+      }
+      event.preventDefault();
+      handle.setPointerCapture?.(event.pointerId);
+      setFramesPointerEvents([gameFrame, editorFrame], false);
+      const onMove = (moveEvent) => {
+        const main = workspaceMainEl;
+        const rect = main?.getBoundingClientRect?.() || { top: 0, height: 0 };
+        logsShare = logsFromPointer(moveEvent.clientY, rect.top, rect.height);
+        applyLogsSplit(main, logsShare, { expanded: true });
+      };
+      const onUp = () => {
+        handle.releasePointerCapture?.(event.pointerId);
+        handle.removeEventListener("pointermove", onMove);
+        handle.removeEventListener("pointerup", onUp);
+        handle.removeEventListener("pointercancel", onUp);
+        setFramesPointerEvents([gameFrame, editorFrame], true);
+        void persistSplitPrefs({ workspace_split_logs: logsShare });
+      };
+      handle.addEventListener("pointermove", onMove);
+      handle.addEventListener("pointerup", onUp);
+      handle.addEventListener("pointercancel", onUp);
+    });
+  }
+
+  bindVerticalSplitter(logsSplitter);
+
+  function onWindowResize() {
+    horizontalShare = clampHorizontal(horizontalShare);
+    logsShare = clampLogs(logsShare);
+    if (workspaceMainEl) {
+      const gamePanel = workspaceMainEl.querySelector(".game-panel");
+      const editorPanel = workspaceMainEl.querySelector(".editor-panel");
+      if (editorPanel) {
+        applyHorizontalSplit(gamePanel, editorPanel, horizontalShare);
+      }
+      syncLogHostExpanded();
+    }
+  }
+
+  if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+    window.addEventListener("resize", onWindowResize);
+  }
 
   function applyServerStatus(payload) {
     const running = statusRunning(payload);
@@ -297,6 +422,7 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
 
   async function refreshConfig() {
     state.config = await host.config.get();
+    syncSplitsFromConfig(state.config);
     applyAppearance(document, state.config?.appearance);
     paint();
     await syncApiDebug(state.config);
@@ -826,6 +952,7 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     section.className = state.editor.open
       ? "workspace-main workspace-main--editor-open"
       : "workspace-main";
+    workspaceMainEl = section;
 
     const split = document.createElement("div");
     split.className = state.editor.open ? "workspace-split" : "workspace-split workspace-split--game-only";
@@ -868,8 +995,9 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
 
     split.append(panel);
 
+    let editorPanel = null;
     if (state.editor.open) {
-      const editorPanel = document.createElement("div");
+      editorPanel = document.createElement("div");
       editorPanel.className = "editor-panel";
       const url = state.editor.url || config?.editor_url || editorUrl();
       editorPanel.dataset.editorUrl = url;
@@ -889,12 +1017,21 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
           : state.editor.error || "Editor unavailable";
         editorPanel.append(placeholder);
       }
-      split.append(editorPanel);
+
+      const hSplit = document.createElement("div");
+      hSplit.className = "workspace-splitter workspace-splitter--horizontal";
+      hSplit.setAttribute("role", "separator");
+      hSplit.setAttribute("aria-orientation", "vertical");
+      hSplit.title = "Resize game and editor";
+      bindHorizontalSplitter(hSplit, split, panel, editorPanel);
+      split.append(hSplit, editorPanel);
+      applyHorizontalSplit(panel, editorPanel, horizontalShare);
     } else if (editorFrame) {
       hideEditorFrame(editorFrame);
     }
 
-    section.append(split, processLogHost);
+    syncLogHostExpanded();
+    section.append(split, logsSplitter, processLogHost);
     return section;
   }
 

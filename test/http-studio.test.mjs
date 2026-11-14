@@ -57,6 +57,36 @@ test("web adapter opens the shell when health and status succeed", async () => {
   assert.equal(next.route, "/main");
 });
 
+test("web adapter persists clamped workspace split fractions", async () => {
+  const storage = {
+    map: new Map(),
+    getItem(key) {
+      return this.map.has(key) ? this.map.get(key) : null;
+    },
+    setItem(key, value) {
+      this.map.set(key, String(value));
+    },
+  };
+  const studio = createHttpStudio({
+    fetchImpl: async () => respond(200, { status: "OK", version: "dev" }),
+    storage,
+  });
+  const defaults = await studio.config.get();
+  assert.equal(defaults.workspace_split_horizontal, 0.5);
+  assert.equal(defaults.workspace_split_logs, 0.2);
+
+  const patched = await studio.config.set({
+    workspace_split_horizontal: 0.01,
+    workspace_split_logs: 0.9,
+  });
+  assert.equal(patched.workspace_split_horizontal, 1 / 11);
+  assert.equal(patched.workspace_split_logs, 1 / 3);
+
+  const again = await studio.config.get();
+  assert.equal(again.workspace_split_horizontal, 1 / 11);
+  assert.equal(again.workspace_split_logs, 1 / 3);
+});
+
 test("web adapter config.get forwards API health build version", async () => {
   const studioDev = createHttpStudio({
     fetchImpl: async (url) => {

@@ -3,6 +3,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const workspaceSplit = require("../../../shared/workspace-split");
 
 const V1_KEYS = [
   "install_unique_id",
@@ -168,7 +169,13 @@ function applyPatch(current, patch) {
   const next = { ...(current || {}) };
   for (const [key, value] of Object.entries(patch || {})) {
     if (value !== undefined) {
-      next[key] = value;
+      if (key === "workspace_split_horizontal") {
+        next[key] = workspaceSplit.clampHorizontal(value);
+      } else if (key === "workspace_split_logs") {
+        next[key] = workspaceSplit.clampLogs(value);
+      } else {
+        next[key] = value;
+      }
     }
   }
   return next;
@@ -265,6 +272,28 @@ function workspaceEditorOpen(data) {
 }
 
 /**
+ * Game share of the Workspace horizontal split (`workspace_split_horizontal`).
+ * Missing/invalid → equal panes; otherwise clamped to the 10:1 band.
+ */
+function workspaceSplitHorizontal(data) {
+  if (!data || !Object.prototype.hasOwnProperty.call(data, "workspace_split_horizontal")) {
+    return workspaceSplit.DEFAULT_HORIZONTAL;
+  }
+  return workspaceSplit.clampHorizontal(data.workspace_split_horizontal);
+}
+
+/**
+ * Logs share of Workspace main height (`workspace_split_logs`).
+ * Missing/invalid → default; otherwise clamped to ≤ 1/3.
+ */
+function workspaceSplitLogs(data) {
+  if (!data || !Object.prototype.hasOwnProperty.call(data, "workspace_split_logs")) {
+    return workspaceSplit.DEFAULT_LOGS;
+  }
+  return workspaceSplit.clampLogs(data.workspace_split_logs);
+}
+
+/**
  * Persisted Studio API debug preference (user.json `debug_mode`).
  * Only boolean true is on. This does not arm game-server or per-bot capture.
  * The game frontend's live `debug_mode` event field is a different document.
@@ -339,6 +368,8 @@ module.exports = {
   telemetryEnabled,
   appearance,
   workspaceEditorOpen,
+  workspaceSplitHorizontal,
+  workspaceSplitLogs,
   apiDebugEnabled,
   projectReady,
   botPaths,

@@ -25,6 +25,8 @@ function view(record) {
     appearance: store.appearance(data),
     workspaceEditorOpen: store.workspaceEditorOpen(data),
     workspace_editor_open: store.workspaceEditorOpen(data),
+    workspace_split_horizontal: store.workspaceSplitHorizontal(data),
+    workspace_split_logs: store.workspaceSplitLogs(data),
     debugMode: store.apiDebugEnabled(data),
     measurementId: process.env.STUDIO_GA_MEASUREMENT_ID || "",
     appVersion: pkg.version,

@@ -57,6 +57,40 @@ test("workspace editor open defaults true and remembers closed", () => {
   assert.equal(store.workspaceEditorOpen(opened), true);
 });
 
+test("workspace split fractions default and clamp on patch", () => {
+  const split = require("../src/shared/workspace-split");
+  assert.equal(store.workspaceSplitHorizontal({}), split.DEFAULT_HORIZONTAL);
+  assert.equal(store.workspaceSplitLogs({}), split.DEFAULT_LOGS);
+  assert.equal(store.workspaceSplitHorizontal({ workspace_split_horizontal: "nope" }), split.DEFAULT_HORIZONTAL);
+  assert.equal(store.workspaceSplitLogs({ workspace_split_logs: Number.NaN }), split.DEFAULT_LOGS);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-split-pref-"));
+  const file = store.settingsFile(dir, "linux");
+  store.write(
+    file,
+    store.applyPatch({}, {
+      workspace_split_horizontal: 0.01,
+      workspace_split_logs: 0.9,
+    }),
+  );
+  const saved = store.read(file).data;
+  assert.equal(saved.workspace_split_horizontal, split.HORIZONTAL_MIN);
+  assert.equal(saved.workspace_split_logs, split.LOGS_MAX);
+  assert.equal(store.workspaceSplitHorizontal(saved), split.HORIZONTAL_MIN);
+  assert.equal(store.workspaceSplitLogs(saved), split.LOGS_MAX);
+
+  store.write(
+    file,
+    store.applyPatch(saved, {
+      workspace_split_horizontal: 0.7,
+      workspace_split_logs: 0.25,
+    }),
+  );
+  const mid = store.read(file).data;
+  assert.equal(mid.workspace_split_horizontal, 0.7);
+  assert.equal(mid.workspace_split_logs, 0.25);
+});
+
 test("a missing bot list is seeded from project_path", () => {
   assert.deepEqual(store.botPaths({ project_path: "/bots/demo" }), ["/bots/demo"]);
   assert.deepEqual(store.botPaths({ project_path: "" }), []);
