@@ -15,6 +15,7 @@ const {
   HEALTH_DEADLINE_MS,
   HEALTH_INTERVAL_MS,
   actionResult,
+  applyStartupDecision,
   decidePoll,
   decideStartup,
   routeForStatus,
@@ -226,9 +227,17 @@ async function next() {
     // Non-blocking: shell entry must not wait on Level-1 pull/extract.
     level1Ready.kick();
   }
-  return decideStartup({
+  const decision = decideStartup({
     dockerRunning: status.running,
     botPaths: saved.bot_paths,
+    lastProjectReady: Boolean(saved.projectCreated),
+    projectPath: typeof saved.project_path === "string" ? saved.project_path : "",
+  });
+  if (decision.resumePath) {
+    emitProgress({ phase: "container", detail: "Opening this bot." });
+  }
+  return applyStartupDecision(decision, {
+    open: (folder) => open(folder),
   });
 }
 

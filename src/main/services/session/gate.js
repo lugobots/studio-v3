@@ -3,9 +3,17 @@
 const HEALTH_INTERVAL_MS = 500;
 const HEALTH_DEADLINE_MS = 3 * 60 * 1000;
 
-function decideStartup({ dockerRunning, botPaths = [] }) {
+function decideStartup({
+  dockerRunning,
+  botPaths = [],
+  lastProjectReady = false,
+  projectPath = "",
+}) {
   if (!dockerRunning) {
     return { route: "/docker-check", watch: false };
+  }
+  if (lastProjectReady && typeof projectPath === "string" && projectPath.length > 0) {
+    return { route: "/api-loading", watch: true, resumePath: projectPath };
   }
   const saved = Array.isArray(botPaths) ? botPaths : [];
   if (saved.length === 0) {
@@ -19,6 +27,30 @@ function routeForStatus(body) {
     return "/main";
   }
   return "/start-project";
+}
+
+/**
+ * When decideStartup asks to resume, open that bot; otherwise return the decision as-is.
+ * @param {{ route: string, watch?: boolean, resumePath?: string, message?: string }} decision
+ * @param {{ open: (folder: string) => Promise<{ ok: boolean, route?: string, error?: string, message?: string }> }} deps
+ */
+async function applyStartupDecision(decision, { open }) {
+  if (!decision || !decision.resumePath) {
+    return decision;
+  }
+  const opened = await open(decision.resumePath);
+  if (!opened || opened.ok === false) {
+    return {
+      route: "/bots",
+      watch: false,
+      message: (opened && opened.error) || "Could not open the last bot.",
+    };
+  }
+  return {
+    route: opened.route || "/api-loading",
+    watch: true,
+    message: opened.message || "",
+  };
 }
 
 function decidePoll({
@@ -71,6 +103,7 @@ module.exports = {
   HEALTH_INTERVAL_MS,
   HEALTH_DEADLINE_MS,
   decideStartup,
+  applyStartupDecision,
   decidePoll,
   routeForStatus,
   actionResult,

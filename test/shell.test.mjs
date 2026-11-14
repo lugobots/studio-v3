@@ -617,7 +617,10 @@ test("workspace loads match config from app settings into game controls", async 
       .getAttribute("aria-pressed"),
     "true",
   );
-  const options = outlet.querySelector("select").querySelectorAll("option").map((node) => node.textContent);
+  const positionSelect = outlet.querySelector(".game-ctrl select")
+    || outlet.querySelectorAll("select").find((node) => !String(node.className || "").includes("area-rail-bot-select"));
+  assert.ok(positionSelect);
+  const options = positionSelect.querySelectorAll("option").map((node) => node.textContent);
   assert.deepEqual(options, ["corner", "kickoff"]);
   installed.restore();
 });
@@ -718,6 +721,86 @@ async function flushSettings() {
     await Promise.resolve();
   }
 }
+
+test("icon rail shows bot combobox under Settings with current bot selected", async () => {
+  const installed = installDocument();
+  const outlet = installed.document.createElement("div");
+  const opened = [];
+  const navigated = [];
+  const host = {
+    config: {
+      async get() {
+        return {
+          project_path: "/bots/beta",
+          bot_paths: ["/bots/alpha", "/bots/beta"],
+          telemetryEnabled: false,
+          appearance: "dark",
+          debug_mode: false,
+          debugMode: false,
+          game_frontend_url: "http://localhost:8080",
+          editor_url: "http://localhost:8082",
+          workspace_editor_open: false,
+          workspaceEditorOpen: false,
+        };
+      },
+    },
+    project: {
+      async open(folder) {
+        opened.push(folder);
+        return { ok: true, route: "/api-loading" };
+      },
+    },
+    server: {
+      async status() {
+        return { ok: true, running: false };
+      },
+    },
+  };
+  renderAppFrame(outlet, {
+    host,
+    dialogs: { notify() {}, confirm() { return Promise.resolve(false); } },
+    navigateTo: (path) => navigated.push(path),
+  });
+  await flushSettings();
+
+  const account = outlet.querySelector(".area-rail-group--account");
+  assert.ok(account);
+  const accountChildren = [...account.children];
+  const settingsIndex = accountChildren.findIndex((node) => node.getAttribute("data-area") === "settings");
+  assert.equal(settingsIndex >= 0, true);
+  const combobox = accountChildren[settingsIndex + 1];
+  assert.ok(combobox);
+  assert.match(String(combobox.className), /area-rail-bot-project/);
+  const select = combobox.querySelector(".area-rail-bot-select");
+  assert.ok(select);
+  assert.equal(select.value, "/bots/beta");
+
+  select.value = "/bots/beta";
+  select.listeners.change[0]();
+  await flushSettings();
+  assert.deepEqual(opened, []);
+  assert.deepEqual(navigated, []);
+
+  select.value = "/bots/alpha";
+  select.listeners.change[0]();
+  await flushSettings();
+  assert.deepEqual(opened, ["/bots/alpha"]);
+  assert.deepEqual(navigated, ["/api-loading"]);
+
+  select.value = "__new_bot_project__";
+  select.listeners.change[0]();
+  assert.ok(navigated.includes("/start-project"));
+
+  outlet.querySelector('[data-area="settings"]').click();
+  assert.ok(outlet.querySelector('select[aria-label="Appearance"]'));
+  assert.equal(outlet.querySelector(".tab-actions .area-rail-bot-project"), null);
+  assert.equal(outlet.querySelector(".tab-actions .settings-bot-projects"), null);
+
+  outlet.querySelector('[data-area="workspace"]').click();
+  assert.ok(outlet.querySelector(".game-ctrl"));
+  assert.equal(outlet.querySelector(".game-ctrl .area-rail-bot-project"), null);
+  installed.restore();
+});
 
 test("settings API debug preference persists and arms only the api source", async () => {
   const installed = installDocument();

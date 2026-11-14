@@ -324,6 +324,29 @@ h1 {
   font-size: 13px;
 }
 
+.area-rail-bot-project {
+  display: flex;
+  width: 100%;
+  padding: 4px 6px 8px;
+  box-sizing: border-box;
+}
+
+.area-rail-bot-select {
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.app-frame[data-rail-expanded="false"] .area-rail-bot-select {
+  font-size: 11px;
+  padding: 4px 2px;
+}
+
+.start-project-back {
+  margin-top: 12px;
+}
+
 .menu-item {
   appearance: none;
   border: 1px solid var(--border);

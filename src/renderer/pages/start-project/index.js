@@ -3,12 +3,15 @@ import { createPageHeader } from "../../components/page-header.js";
 import { getHost } from "../../lib/api.js";
 import { dialogs, reportResult } from "../../lib/dialogs.js";
 import { navigate } from "../../lib/router.js";
+import { consumeStartProjectFromShell } from "../../lib/start-project-entry.js";
 
 export function renderStartProject(outlet, documentRef = globalThis.document, deps = {}) {
   const host = deps.host || getHost();
   const prompt = deps.dialogs || dialogs;
   const report = deps.reportResult || reportResult;
   const navigateTo = deps.navigate || navigate;
+  const fromShell =
+    typeof deps.fromShell === "boolean" ? deps.fromShell : consumeStartProjectFromShell();
   const page = documentRef.createElement("section");
   page.className = "page page-card";
   page.append(
@@ -119,5 +122,18 @@ export function renderStartProject(outlet, documentRef = globalThis.document, de
   });
 
   page.append(open, form);
+
+  if (fromShell) {
+    const cancel = documentRef.createElement("button");
+    cancel.type = "button";
+    cancel.className = "button start-project-back";
+    cancel.textContent = "Cancel";
+    cancel.setAttribute("aria-label", "Back to Studio");
+    cancel.addEventListener("click", () => {
+      navigateTo("/main");
+    });
+    page.append(cancel);
+  }
+
   outlet.append(page);
 }

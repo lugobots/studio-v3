@@ -3,12 +3,15 @@ import { createAreaIcon } from "./area-icons.js";
 import { applyAppearance, normalizeAppearance } from "../lib/appearance.js";
 import { applyTelemetry } from "../lib/telemetry.js";
 import { reportResult } from "../lib/dialogs.js";
+import { navigate } from "../lib/router.js";
 import { offerUpgrade } from "../lib/upgrade-flow.js";
 import { applyMatchConfig, initialGameControls, reduceGameControl } from "./game-controls.js";
 import { renderGameControls, startServerFromApi } from "./game-controls-view.js";
 import { createProcessLogDrawer } from "./process-log-drawer.js";
 import { gameFrontendUrl } from "./game-frontend.js";
 import { editorUrl } from "./editor-url.js";
+import { markStartProjectFromShell } from "../lib/start-project-entry.js";
+import { renderRailBotCombobox, switchBotProject } from "./settings-bot-projects.js";
 
 function statusRunning(payload) {
   if (!payload || typeof payload !== "object") {
@@ -23,7 +26,7 @@ function statusRunning(payload) {
   return null;
 }
 
-export function renderAppFrame(outlet, { host, dialogs }) {
+export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate }) {
   const frame = document.createElement("div");
   frame.className = "app-frame";
 
@@ -396,6 +399,33 @@ export function renderAppFrame(outlet, { host, dialogs }) {
         account.append(button);
       } else {
         main.append(button);
+      }
+      if (area.id === "settings") {
+        account.append(
+          renderRailBotCombobox(document, {
+            config: state.config,
+            onSelectBot: async (folder) => {
+              const result = await switchBotProject({
+                folder,
+                currentPath: state.config?.project_path || "",
+                open: (path) => host.project.open(path),
+              });
+              if (result.skipped) {
+                return;
+              }
+              if (!result.ok) {
+                await reportResult(dialogs, result);
+                paintRail();
+                return;
+              }
+              navigateTo(result.route || "/api-loading");
+            },
+            onNewBotProject: () => {
+              markStartProjectFromShell();
+              navigateTo("/start-project");
+            },
+          }),
+        );
       }
     }
 

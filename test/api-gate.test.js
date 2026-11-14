@@ -4,12 +4,13 @@ const {
   HEALTH_DEADLINE_MS,
   HEALTH_INTERVAL_MS,
   actionResult,
+  applyStartupDecision,
   decidePoll,
   decideStartup,
   routeForStatus,
 } = require("../src/main/services/session/gate");
 
-test("startup shows the bot list after docker and does not watch a container", () => {
+test("startup resumes a valid last bot and otherwise lists or sets up", () => {
   assert.equal(HEALTH_INTERVAL_MS, 500);
   assert.equal(HEALTH_DEADLINE_MS, 180000);
   assert.deepEqual(decideStartup({ dockerRunning: false, botPaths: ["/bots/a"] }), {
@@ -20,12 +21,80 @@ test("startup shows the bot list after docker and does not watch a container", (
     route: "/start-project",
     watch: false,
   });
-  assert.deepEqual(decideStartup({ dockerRunning: true, botPaths: ["/bots/a"] }), {
-    route: "/bots",
-    watch: false,
-  });
+  assert.deepEqual(
+    decideStartup({
+      dockerRunning: true,
+      botPaths: ["/bots/a"],
+      lastProjectReady: false,
+      projectPath: "/bots/a",
+    }),
+    {
+      route: "/bots",
+      watch: false,
+    },
+  );
+  assert.deepEqual(
+    decideStartup({
+      dockerRunning: true,
+      botPaths: ["/bots/a", "/bots/b"],
+      lastProjectReady: true,
+      projectPath: "/bots/b",
+    }),
+    {
+      route: "/api-loading",
+      watch: true,
+      resumePath: "/bots/b",
+    },
+  );
+  assert.deepEqual(
+    decideStartup({
+      dockerRunning: true,
+      botPaths: ["/bots/a"],
+      lastProjectReady: true,
+      projectPath: "",
+    }),
+    {
+      route: "/bots",
+      watch: false,
+    },
+  );
   assert.equal(routeForStatus({ project_status: "missing" }), "/start-project");
   assert.equal(routeForStatus({ project_status: "ready" }), "/main");
+});
+
+test("applyStartupDecision opens a resumed bot and skips the bot list", async () => {
+  const opened = [];
+  const decision = decideStartup({
+    dockerRunning: true,
+    botPaths: ["/bots/a"],
+    lastProjectReady: true,
+    projectPath: "/bots/a",
+  });
+  const result = await applyStartupDecision(decision, {
+    open: async (folder) => {
+      opened.push(folder);
+      return { ok: true, route: "/api-loading" };
+    },
+  });
+  assert.deepEqual(opened, ["/bots/a"]);
+  assert.equal(result.route, "/api-loading");
+  assert.equal(result.watch, true);
+
+  const listed = await applyStartupDecision(
+    decideStartup({ dockerRunning: true, botPaths: ["/bots/a"], lastProjectReady: false }),
+    {
+      open: async () => {
+        throw new Error("must not open when not resuming");
+      },
+    },
+  );
+  assert.equal(listed.route, "/bots");
+
+  const failed = await applyStartupDecision(decision, {
+    open: async () => ({ ok: false, error: "gone" }),
+  });
+  assert.equal(failed.route, "/bots");
+  assert.match(failed.message, /gone/);
 });
 
 test("poll goes to the error screen immediately when the container is down", () => {

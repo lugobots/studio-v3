@@ -117,6 +117,48 @@ test("a new bot shows the loading screen as soon as setup starts", async () => {
   assert.deepEqual(navigated, ["/api-loading"]);
 });
 
+test("from-shell Welcome shows Cancel that returns to main", async () => {
+  const doc = { createElement: (tag) => new El(tag) };
+  globalThis.document = doc;
+  const navigated = [];
+  const outlet = new El("div");
+  renderStartProject(outlet, doc, {
+    fromShell: true,
+    navigate: (path) => navigated.push(path),
+    host: {
+      project: {
+        pickFolder: async () => ({ ok: false, cancelled: true }),
+      },
+    },
+  });
+
+  const cancel = walk(outlet).find(
+    (node) => node.tag === "button" && node.textContent === "Cancel",
+  );
+  assert.ok(cancel);
+  cancel.listeners[0]();
+  assert.deepEqual(navigated, ["/main"]);
+});
+
+test("first-run Welcome omits Cancel", () => {
+  const doc = { createElement: (tag) => new El(tag) };
+  globalThis.document = doc;
+  const outlet = new El("div");
+  renderStartProject(outlet, doc, {
+    fromShell: false,
+    host: {
+      project: {
+        pickFolder: async () => ({ ok: false, cancelled: true }),
+      },
+    },
+  });
+
+  const cancel = walk(outlet).find(
+    (node) => node.tag === "button" && node.textContent === "Cancel",
+  );
+  assert.equal(cancel, undefined);
+});
+
 test("a failed setup returns to the bot screen and reports the error", async () => {
   const doc = { createElement: (tag) => new El(tag) };
   globalThis.document = doc;
