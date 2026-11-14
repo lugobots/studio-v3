@@ -42,7 +42,9 @@ RUN apt-get update \
 
 COPY --from=build /out/studio-v3-api /usr/local/bin/studio-v3-api
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# Normalize CRLF from Windows checkouts so the shebang stays executable on Linux.
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
+  && chmod +x /usr/local/bin/docker-entrypoint.sh
 
 ENV LUGO_STUDIO_API_PORT=8081 \
     LUGO_STUDIO_GAME_SERVER_PORT=5000 \
