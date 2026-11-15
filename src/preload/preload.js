@@ -27,6 +27,10 @@ contextBridge.exposeInMainWorld("studio", {
     set: (patch) => ipcRenderer.invoke(CHANNELS.config.set, patch),
     matchGet: () => ipcRenderer.invoke(CHANNELS.config.matchGet),
     matchSet: (patch) => ipcRenderer.invoke(CHANNELS.config.matchSet, patch),
+    opponentGet: () => ipcRenderer.invoke(CHANNELS.config.opponentGet),
+    opponentSet: (source, folder) => ipcRenderer.invoke(CHANNELS.config.opponentSet, source, folder),
+    opponentRemember: (entry) => ipcRenderer.invoke(CHANNELS.config.opponentRemember, entry),
+    opponentForget: (folder) => ipcRenderer.invoke(CHANNELS.config.opponentForget, folder),
   },
   updates: {
     check: () => ipcRenderer.invoke(CHANNELS.updates.check),

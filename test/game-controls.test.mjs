@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   activeBotSlots,
   applyMatchConfig,
+  applyOpponentSourceConfig,
   botActiveSettingsPatch,
   findPositionPreset,
   initialGameControls,
@@ -31,6 +32,9 @@ test("initial game controls are a stopped local match with all bots active", () 
   assert.equal(state.skipGolden, false);
   assert.equal(state.speed, "normal");
   assert.equal(state.opponent, "default");
+  assert.equal(state.opponentSource, "level1");
+  assert.deepEqual(state.opponentProjects, []);
+  assert.equal(state.opponentProjectPath, "");
   assert.deepEqual(state.positions, []);
   assert.equal(activeBotSlots(state).length, 22);
 });
@@ -292,6 +296,82 @@ test("persistMatchSettings writes while stopped and skips while the server is ru
   const running = reduceGameControl(stopped, { type: "set-server-running", running: true });
   await persistMatchSettings(host, running);
   assert.equal(patches.length, 1);
+});
+
+test("applyOpponentSourceConfig loads source, labeled list, and path", () => {
+  const loaded = applyOpponentSourceConfig(initialGameControls(), {
+    opponent_source: "local",
+    opponent_projects: [
+      { label: "Alpha", path: "/bots/alpha" },
+      { label: "Beta", path: "/bots/beta" },
+    ],
+    opponent_project_path: "/bots/beta",
+    effective_source: "local",
+    effective_project_path: "/bots/beta",
+  });
+  assert.equal(loaded.opponentSource, "local");
+  assert.deepEqual(loaded.opponentProjects, [
+    { label: "Alpha", path: "/bots/alpha" },
+    { label: "Beta", path: "/bots/beta" },
+  ]);
+  assert.equal(loaded.opponentProjectPath, "/bots/beta");
+
+  const fallback = applyOpponentSourceConfig(loaded, {
+    opponent_source: "local",
+    opponent_projects: loaded.opponentProjects,
+    opponent_project_path: "/bots/missing",
+    effective_source: "level1",
+    effective_project_path: "",
+  });
+  assert.equal(fallback.opponentSource, "level1");
+  assert.deepEqual(fallback.opponentProjects, loaded.opponentProjects);
+});
+
+test("set-opponent is blocked when opponent source is local", () => {
+  let state = reduceGameControl(initialGameControls(), {
+    type: "set-opponent-source",
+    source: "local",
+    path: "/bots/alpha",
+  });
+  state = reduceGameControl(state, {
+    type: "set-opponent-projects",
+    projects: [{ label: "Alpha", path: "/bots/alpha" }],
+  });
+  assert.equal(state.opponentSource, "local");
+  assert.equal(state.opponent, "default");
+  const unchanged = reduceGameControl(state, { type: "set-opponent", opponent: "zombies" });
+  assert.equal(unchanged.opponent, "default");
+  assert.equal(unchanged.opponentSource, "local");
+
+  const restored = reduceGameControl(unchanged, { type: "set-opponent-source", source: "level1" });
+  assert.equal(restored.opponentSource, "level1");
+  const mode = reduceGameControl(restored, { type: "set-opponent", opponent: "kids" });
+  assert.equal(mode.opponent, "kids");
+});
+
+test("persistMatchSettings omits opponent mode while source is local", async () => {
+  const patches = [];
+  const host = {
+    config: {
+      async matchSet(patch) {
+        patches.push(patch);
+        return patch;
+      },
+    },
+  };
+  let state = reduceGameControl(initialGameControls(), {
+    type: "set-opponent-source",
+    source: "local",
+    path: "/bots/alpha",
+  });
+  state = reduceGameControl(state, { type: "set-speed", speed: "fast" });
+  await persistMatchSettings(host, state);
+  assert.deepEqual(patches, [{
+    team_side: "home",
+    skip_to_golden_goal: false,
+    game_speed: "fast",
+  }]);
+  assert.equal(Object.prototype.hasOwnProperty.call(patches[0], "opponent_team"), false);
 });
 
 test("persistBotActiveSettings is a no-op", async () => {

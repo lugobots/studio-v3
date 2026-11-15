@@ -52,8 +52,12 @@ const TEAM_SIDES = ["home", "away"];
 const GAME_SPEEDS = ["slow", "normal", "fast"];
 /** Values stored under opponent_team — opponent Level-1 MODE strings used today. */
 const OPPONENT_MODES = ["default", "zombies", "statues", "kids", "defenses"];
+/** Opponent source: official Level-1 binary or a labeled local bot project. */
+const OPPONENT_SOURCES = ["level1", "local"];
 /** Roster size for Home/Away desired-active arrays. */
 const BOT_ROSTER_SIZE = 11;
+/** In-container bind-mount target for a local opponent bot project. */
+const OPPONENT_PROJECT_CONTAINER_PATH = "/bot-opponent";
 
 const MATCH_DEFAULTS = {
   team_side: "home",
@@ -61,6 +65,12 @@ const MATCH_DEFAULTS = {
   game_speed: "normal",
   opponent_team: "default",
   saved_positions: [],
+};
+
+const OPPONENT_SOURCE_DEFAULTS = {
+  opponent_source: "level1",
+  opponent_projects: [],
+  opponent_project_path: "",
 };
 
 /** Studio V1 defaults for runtime image settings (level-1 is consumed now; others reserved). */
@@ -215,6 +225,58 @@ function matchConfig(data) {
 }
 
 /**
+ * Normalize labeled local opponent entries: keep non-empty string label+path pairs.
+ * Duplicate paths keep the last label.
+ */
+function normalizeOpponentProjects(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const byPath = new Map();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const label = typeof entry.label === "string" ? entry.label.trim() : "";
+    const folder = typeof entry.path === "string" ? entry.path.trim() : "";
+    if (!label || !folder) {
+      continue;
+    }
+    byPath.set(folder, { label, path: folder });
+  }
+  return Array.from(byPath.values());
+}
+
+/**
+ * App-level opponent source selection from user.json.
+ * Invalid local selection falls back to Level-1 without wiping the labeled list.
+ * `pathReady` decides whether a local path is still usable (defaults to always true
+ * for pure data normalization; callers pass exists/compat checks for effective source).
+ */
+function opponentSourceConfig(data, pathReady = () => true) {
+  const source = data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  const projects = normalizeOpponentProjects(source.opponent_projects);
+  const requested = pickAllowed(
+    source.opponent_source,
+    OPPONENT_SOURCES,
+    OPPONENT_SOURCE_DEFAULTS.opponent_source,
+  );
+  const storedPath =
+    typeof source.opponent_project_path === "string" ? source.opponent_project_path.trim() : "";
+  const knownPaths = new Set(projects.map((entry) => entry.path));
+  const pathOk =
+    storedPath.length > 0 && knownPaths.has(storedPath) && pathReady(storedPath) === true;
+  const effectiveSource = requested === "local" && pathOk ? "local" : "level1";
+  return {
+    opponent_source: requested,
+    opponent_projects: projects,
+    opponent_project_path: storedPath,
+    effective_source: effectiveSource,
+    effective_project_path: effectiveSource === "local" ? storedPath : "",
+  };
+}
+
+/**
  * Build a patch of only known match keys from a partial update.
  * Undefined fields are omitted so applyPatch leaves them unchanged.
  */
@@ -341,18 +403,105 @@ function forgetBot(data, folder) {
   return next;
 }
 
+/**
+ * Add or update a labeled local opponent project and select it as the active source.
+ * `compatibility` must be `{ ok: true }` or `{ ok: false, error }`; incompatible folders
+ * leave data unchanged and return `{ ok: false, error, data }`.
+ */
+function rememberOpponentProject(data, entry, compatibility) {
+  const label = entry && typeof entry.label === "string" ? entry.label.trim() : "";
+  const folder = entry && typeof entry.path === "string" ? entry.path.trim() : "";
+  if (!label || !folder) {
+    return { ok: false, error: "Opponent projects need a label and a folder path.", data };
+  }
+  if (!compatibility || compatibility.ok !== true) {
+    return {
+      ok: false,
+      error: (compatibility && compatibility.error) || "That folder is not a compatible Lugo bot.",
+      data,
+    };
+  }
+  const current = opponentSourceConfig(data);
+  const without = current.opponent_projects.filter((item) => item.path !== folder);
+  const projects = without.concat([{ label, path: folder }]);
+  const next = {
+    ...(data || {}),
+    opponent_source: "local",
+    opponent_projects: projects,
+    opponent_project_path: folder,
+  };
+  return { ok: true, data: next };
+}
+
+/**
+ * Remove a labeled opponent by path. If it was the active local selection, fall back to Level-1.
+ */
+function forgetOpponentProject(data, folder) {
+  const current = opponentSourceConfig(data);
+  const projects = current.opponent_projects.filter((item) => item.path !== folder);
+  const next = {
+    ...(data || {}),
+    opponent_projects: projects,
+  };
+  if (current.opponent_project_path === folder) {
+    next.opponent_project_path = "";
+    next.opponent_source = "level1";
+  }
+  return next;
+}
+
+/**
+ * Set the active opponent source to Level-1 or a known labeled local path.
+ * Unknown local paths leave data unchanged and return `{ ok: false, ... }`.
+ */
+function setOpponentSource(data, source, folder = "") {
+  const current = opponentSourceConfig(data);
+  if (source === "level1") {
+    return {
+      ok: true,
+      data: {
+        ...(data || {}),
+        opponent_source: "level1",
+      },
+    };
+  }
+  if (source !== "local") {
+    return { ok: false, error: "Opponent source must be level1 or local.", data };
+  }
+  const pathValue = typeof folder === "string" ? folder.trim() : "";
+  const known = current.opponent_projects.some((item) => item.path === pathValue);
+  if (!pathValue || !known) {
+    return {
+      ok: false,
+      error: "Choose a saved labeled opponent project before selecting local source.",
+      data,
+    };
+  }
+  return {
+    ok: true,
+    data: {
+      ...(data || {}),
+      opponent_source: "local",
+      opponent_project_path: pathValue,
+    },
+  };
+}
+
 module.exports = {
   V1_KEYS,
   MATCH_KEYS,
   MATCH_DEFAULTS,
+  OPPONENT_SOURCE_DEFAULTS,
   BOT_ROSTER_SIZE,
   IMAGE_KEYS,
   IMAGE_DEFAULTS,
   LEVEL1_IMAGE_BINARY_PATH,
   LEVEL1_CONTAINER_BINARY_PATH,
+  OPPONENT_PROJECT_CONTAINER_PATH,
   TEAM_SIDES,
   GAME_SPEEDS,
   OPPONENT_MODES,
+  OPPONENT_SOURCES,
   settingsFile,
   read,
   write,
@@ -365,6 +514,8 @@ module.exports = {
   matchConfig,
   matchPatch,
   matchSettingsForApi,
+  normalizeOpponentProjects,
+  opponentSourceConfig,
   telemetryEnabled,
   appearance,
   workspaceEditorOpen,
@@ -375,4 +526,7 @@ module.exports = {
   botPaths,
   rememberBot,
   forgetBot,
+  rememberOpponentProject,
+  forgetOpponentProject,
+  setOpponentSource,
 };

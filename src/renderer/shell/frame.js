@@ -5,7 +5,12 @@ import { applyTelemetry } from "../lib/telemetry.js";
 import { reportResult } from "../lib/dialogs.js";
 import { navigate } from "../lib/router.js";
 import { offerUpgrade } from "../lib/upgrade-flow.js";
-import { applyMatchConfig, initialGameControls, reduceGameControl } from "./game-controls.js";
+import {
+  applyMatchConfig,
+  applyOpponentSourceConfig,
+  initialGameControls,
+  reduceGameControl,
+} from "./game-controls.js";
 import { renderGameControls, startServerFromApi } from "./game-controls-view.js";
 import { createProcessLogDrawer } from "./process-log-drawer.js";
 import { gameFrontendUrl } from "./game-frontend.js";
@@ -447,7 +452,12 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     }
     try {
       const match = await host.config.matchGet();
-      state.game = applyMatchConfig(state.game, match);
+      let next = applyMatchConfig(state.game, match);
+      if (typeof host?.config?.opponentGet === "function") {
+        const opponent = await host.config.opponentGet();
+        next = applyOpponentSourceConfig(next, opponent);
+      }
+      state.game = next;
       paint();
     } catch {
       // Keep defaults when match prefs are unavailable.

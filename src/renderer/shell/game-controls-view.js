@@ -3,6 +3,7 @@ import { createGameControlIcon } from "./game-control-icons.js";
 import {
   activeBotSlots,
   applyMatchConfig,
+  applyOpponentSourceConfig,
   findPositionPreset,
   markActiveBotsRunning,
   matchSettingsForApi,
@@ -124,9 +125,66 @@ function dispatchSettings(state, onChange, host, action) {
   if (state.serverRunning) {
     return;
   }
+  if (action?.type === "set-opponent" && state.opponentSource === "local") {
+    return;
+  }
   const next = reduceGameControl(state, action);
   onChange(next);
   void persistMatchSettings(host, next);
+}
+
+async function selectOpponentSource(state, onChange, host, dialogs, source, folder = "") {
+  if (state.serverRunning || !host?.config?.opponentSet) {
+    return;
+  }
+  const result = await host.config.opponentSet(source, folder);
+  if (!result?.ok) {
+    if (dialogs) {
+      await reportResult(
+        dialogs,
+        result || { ok: false, error: "Could not change the opponent source." },
+      );
+    }
+    return;
+  }
+  onChange(applyOpponentSourceConfig(state, result.data || result));
+}
+
+async function addOpponentFolder(state, onChange, host, dialogs) {
+  if (state.serverRunning || !host?.project?.pickFolder || !host?.config?.opponentRemember) {
+    return;
+  }
+  const picked = await host.project.pickFolder();
+  if (!picked?.ok) {
+    if (picked && !picked.cancelled && dialogs) {
+      await reportResult(dialogs, picked);
+    }
+    return;
+  }
+  let rawLabel = null;
+  if (typeof dialogs?.prompt === "function") {
+    rawLabel = await dialogs.prompt({
+      title: "Opponent project label",
+      body: "Pick a label for this opponent project.",
+      confirmLabel: "Add",
+      cancelLabel: "Cancel",
+    });
+  }
+  const label = typeof rawLabel === "string" ? rawLabel.trim() : "";
+  if (!label) {
+    return;
+  }
+  const result = await host.config.opponentRemember({ label, path: picked.folder });
+  if (!result?.ok) {
+    if (dialogs) {
+      await reportResult(
+        dialogs,
+        result || { ok: false, error: "Could not add the opponent project." },
+      );
+    }
+    return;
+  }
+  onChange(applyOpponentSourceConfig(state, result.data || result));
 }
 
 export async function startServerFromApi(state, onChange, host, dialogs) {
@@ -450,31 +508,34 @@ export function renderGameControls(parent, {
 
   const playLocked = !state.serverRunning;
   const settingsLocked = Boolean(state.serverRunning);
+  const opponentModeLocked = settingsLocked || state.opponentSource === "local";
 
-  const live = controlGroup("Live", "game-ctrl-live", playLocked);
-  const match = document.createElement("div");
-  match.className = "action_block start_stop_buttons game-ctrl-section";
-  match.append(heading("Match"));
-  match.append(controlButton({
-    title: "Starts the match",
-    disabled: playLocked,
-    onClick: () => startMatchFromApi(state, onChange, host, dialogs),
-    graphic: icon("#22c55e", [["polygon", { points: "8,5 19,12 8,19", fill: "#22c55e", stroke: "#22c55e" }]]),
-  }));
-  match.append(controlButton({
-    title: "Resets the match",
-    disabled: playLocked,
-    onClick: () => resetMatchFromApi(state, host, dialogs),
-    graphic: icon("#f59e0b", [
-      ["path", { d: "M4 12a8 8 0 1 0 2.3-5.7" }],
-      ["path", { d: "M4 4v5h5" }],
-    ]),
-  }));
-  live.body.append(match);
-  live.body.append(teamBlock("home", "Home", state, onChange, host, dialogs, onOpenLogs, onLogsDisarmed));
-  live.body.append(teamBlock("away", "Away", state, onChange, host, dialogs, onOpenLogs, onLogsDisarmed));
-  live.body.append(positionsBlock(state, onChange, host, dialogs, playLocked));
-  root.append(live.group);
+  if (state.serverRunning) {
+    const live = controlGroup("Live", "game-ctrl-live", playLocked);
+    const match = document.createElement("div");
+    match.className = "action_block start_stop_buttons game-ctrl-section";
+    match.append(heading("Match"));
+    match.append(controlButton({
+      title: "Starts the match",
+      disabled: playLocked,
+      onClick: () => startMatchFromApi(state, onChange, host, dialogs),
+      graphic: icon("#22c55e", [["polygon", { points: "8,5 19,12 8,19", fill: "#22c55e", stroke: "#22c55e" }]]),
+    }));
+    match.append(controlButton({
+      title: "Resets the match",
+      disabled: playLocked,
+      onClick: () => resetMatchFromApi(state, host, dialogs),
+      graphic: icon("#f59e0b", [
+        ["path", { d: "M4 12a8 8 0 1 0 2.3-5.7" }],
+        ["path", { d: "M4 4v5h5" }],
+      ]),
+    }));
+    live.body.append(match);
+    live.body.append(teamBlock("home", "Home", state, onChange, host, dialogs, onOpenLogs, onLogsDisarmed));
+    live.body.append(teamBlock("away", "Away", state, onChange, host, dialogs, onOpenLogs, onLogsDisarmed));
+    live.body.append(positionsBlock(state, onChange, host, dialogs, playLocked));
+    root.append(live.group);
+  }
 
   const prep = controlGroup("Prep", "game-ctrl-prep", settingsLocked);
   prep.body.append(configBlock(state, onChange, host, settingsLocked));
@@ -485,12 +546,13 @@ export function renderGameControls(parent, {
     (id) => dispatchSettings(state, onChange, host, { type: "set-speed", speed: id }),
     settingsLocked,
   ));
+  prep.body.append(opponentSourceBlock(state, onChange, host, dialogs, settingsLocked));
   prep.body.append(choiceBlock(
     "Opponent mode",
     OPPONENTS,
     state.opponent,
     (id) => dispatchSettings(state, onChange, host, { type: "set-opponent", opponent: id }),
-    settingsLocked,
+    opponentModeLocked,
   ));
   root.append(prep.group);
 
@@ -658,6 +720,48 @@ function choiceBlock(label, choices, selected, onPick, disabled = false) {
       graphic: createGameControlIcon(choice.icon, { color: choice.color }),
     }));
   }
+  wrap.append(title, row);
+  return wrap;
+}
+
+function opponentSourceBlock(state, onChange, host, dialogs, disabled = false) {
+  const wrap = document.createElement("div");
+  const title = document.createElement("div");
+  title.className = "game-ctrl-section-title";
+  title.append(heading("Opponent source"));
+  const row = document.createElement("div");
+  row.className = "action_block start_stop_buttons game-ctrl-section game-ctrl-opponent-source";
+  const level1Selected = state.opponentSource !== "local";
+  row.append(controlButton({
+    title: "Level-1",
+    text: "Level-1",
+    pressed: level1Selected,
+    disabled,
+    onClick: () => {
+      void selectOpponentSource(state, onChange, host, dialogs, "level1");
+    },
+  }));
+  for (const project of state.opponentProjects || []) {
+    const selected = state.opponentSource === "local"
+      && state.opponentProjectPath === project.path;
+    row.append(controlButton({
+      title: project.label,
+      text: project.label,
+      pressed: selected,
+      disabled,
+      onClick: () => {
+        void selectOpponentSource(state, onChange, host, dialogs, "local", project.path);
+      },
+    }));
+  }
+  row.append(controlButton({
+    title: "Add opponent project",
+    text: "Add…",
+    disabled,
+    onClick: () => {
+      void addOpponentFolder(state, onChange, host, dialogs);
+    },
+  }));
   wrap.append(title, row);
   return wrap;
 }

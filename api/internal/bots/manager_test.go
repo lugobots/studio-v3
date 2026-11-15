@@ -562,6 +562,108 @@ func TestManagerStopStartBotIsolatesSlot(t *testing.T) {
 	}
 }
 
+func TestOpponentProjectFromEnv(t *testing.T) {
+	t.Setenv("LUGO_STUDIO_OPPONENT_PROJECT", "")
+	if got := OpponentProjectFromEnv(); got != "" {
+		t.Fatalf("empty env = %q", got)
+	}
+	t.Setenv("LUGO_STUDIO_OPPONENT_PROJECT", " /bot-opponent ")
+	if got := OpponentProjectFromEnv(); got != "/bot-opponent" {
+		t.Fatalf("env = %q", got)
+	}
+}
+
+func TestManagerLocalOpponentProjectStartsWithoutMODE(t *testing.T) {
+	player := t.TempDir()
+	if err := os.WriteFile(filepath.Join(player, "go.mod"), []byte("module player\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opponent := t.TempDir()
+	if err := os.WriteFile(filepath.Join(opponent, "requirements.txt"), []byte("lugo4py\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reg := procreg.New()
+	mgr := New(reg)
+	mgr.RunSync = func(dir, command string, env map[string]string) error { return nil }
+
+	var started []map[string]string
+	var dirs []string
+	var commands []string
+	mgr.StartProcess = func(dir, command string, env map[string]string) (*procreg.Child, error) {
+		dirs = append(dirs, dir)
+		commands = append(commands, command)
+		cp := map[string]string{}
+		for k, v := range env {
+			cp[k] = v
+		}
+		started = append(started, cp)
+		return procreg.StartChild("sleep", "60")
+	}
+
+	cfg := Config{
+		ProjectRoot:         player,
+		OpponentProjectRoot: opponent,
+		GRPCURL:             "localhost:5123",
+		PlayerSide:          SideHome,
+		OpponentMode:        "zombies",
+		OpponentBinary:      filepath.Join(t.TempDir(), "unused-binary"),
+	}
+	if err := mgr.StartMatch(cfg, []Slot{
+		{Side: SideHome, Number: 1},
+		{Side: SideAway, Number: 2},
+	}); err != nil {
+		t.Fatalf("StartMatch: %v", err)
+	}
+	t.Cleanup(func() { _ = reg.ShutdownAll() })
+
+	if len(started) != 2 {
+		t.Fatalf("started %d, want 2", len(started))
+	}
+	if dirs[1] != opponent {
+		t.Fatalf("opponent dir = %q, want %q", dirs[1], opponent)
+	}
+	if strings.Contains(commands[1], "unused-binary") {
+		t.Fatalf("opponent still used Level-1 binary: %q", commands[1])
+	}
+	if started[1]["MODE"] != "" {
+		t.Fatalf("local opponent MODE = %q, want empty", started[1]["MODE"])
+	}
+	if started[1]["BOT_TEAM"] != SideAway || started[1]["BOT_NUMBER"] != "2" {
+		t.Fatalf("opponent env = %#v", started[1])
+	}
+	if err := reg.ShutdownAll(); err != nil {
+		t.Fatalf("ShutdownAll: %v", err)
+	}
+	if mgr.BotRunning(Slot{Side: SideHome, Number: 1}) || mgr.BotRunning(Slot{Side: SideAway, Number: 2}) {
+		t.Fatal("bots should stop with registry ShutdownAll")
+	}
+}
+
+func TestManagerLocalOpponentMissingProjectFailsClearly(t *testing.T) {
+	player := t.TempDir()
+	if err := os.WriteFile(filepath.Join(player, "package.json"), []byte(`{"name":"p"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(t.TempDir(), "no-opponent")
+	mgr := New(procreg.New())
+	mgr.RunSync = func(dir, command string, env map[string]string) error { return nil }
+	err := mgr.StartMatch(Config{
+		ProjectRoot:         player,
+		OpponentProjectRoot: missing,
+		GRPCURL:             "localhost:5000",
+	}, []Slot{{Side: SideAway, Number: 1}})
+	if err == nil {
+		t.Fatal("expected missing opponent project error")
+	}
+	if !strings.Contains(err.Error(), missing) {
+		t.Fatalf("error should name path: %q", err)
+	}
+	if !strings.Contains(err.Error(), "opponent project language") {
+		t.Fatalf("error should mention opponent project language: %q", err)
+	}
+}
+
 func assertDead(t *testing.T, pid int) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

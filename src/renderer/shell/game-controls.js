@@ -1,5 +1,6 @@
 const SPEEDS = ["slow", "normal", "fast"];
 const OPPONENTS = ["default", "zombies", "statues", "kids", "defenses"];
+const OPPONENT_SOURCES = ["level1", "local"];
 const BOT_ROSTER_SIZE = 11;
 
 function rows() {
@@ -31,6 +32,15 @@ function positionNames(saved) {
     .filter(Boolean);
 }
 
+function normalizeOpponentProjects(projects) {
+  if (!Array.isArray(projects)) {
+    return [];
+  }
+  return projects
+    .filter((entry) => entry && typeof entry.label === "string" && typeof entry.path === "string")
+    .map((entry) => ({ label: entry.label, path: entry.path }));
+}
+
 export function initialGameControls() {
   return {
     serverRunning: false,
@@ -41,6 +51,9 @@ export function initialGameControls() {
     skipGolden: false,
     speed: "normal",
     opponent: "default",
+    opponentSource: "level1",
+    opponentProjects: [],
+    opponentProjectPath: "",
     positions: [],
   };
 }
@@ -63,6 +76,9 @@ function copy(state) {
     skipGolden: state.skipGolden,
     speed: state.speed,
     opponent: state.opponent,
+    opponentSource: state.opponentSource === "local" ? "local" : "level1",
+    opponentProjects: normalizeOpponentProjects(state.opponentProjects),
+    opponentProjectPath: typeof state.opponentProjectPath === "string" ? state.opponentProjectPath : "",
     positions: state.positions.slice(),
   };
 }
@@ -92,6 +108,38 @@ export function applyMatchConfig(state, match) {
     next.positions = positionNames(match.saved_positions);
   }
   // Desired-active is session-only; ignore legacy home_bots_active / away_bots_active.
+  return next;
+}
+
+/**
+ * Apply opponent source prefs from opponentGet / config.get onto selection state.
+ * Prefers effective_source so invalid local paths render as Level-1.
+ */
+export function applyOpponentSourceConfig(state, opponent) {
+  const next = copy(state);
+  if (!opponent || typeof opponent !== "object") {
+    return next;
+  }
+  const effective = opponent.effective_source
+    || opponent.effective_opponent_source
+    || opponent.opponent_source;
+  if (OPPONENT_SOURCES.includes(effective)) {
+    next.opponentSource = effective;
+  }
+  if (Object.prototype.hasOwnProperty.call(opponent, "opponent_projects")) {
+    next.opponentProjects = normalizeOpponentProjects(opponent.opponent_projects);
+  }
+  const storedPath = typeof opponent.opponent_project_path === "string"
+    ? opponent.opponent_project_path
+    : "";
+  const effectivePath = opponent.effective_project_path
+    || opponent.effective_opponent_project_path
+    || "";
+  if (next.opponentSource === "local" && typeof effectivePath === "string" && effectivePath) {
+    next.opponentProjectPath = effectivePath;
+  } else if (typeof storedPath === "string") {
+    next.opponentProjectPath = storedPath;
+  }
   return next;
 }
 
@@ -163,13 +211,18 @@ export function findPositionPreset(savedPositions, name) {
 
 /**
  * Persist Config / speed / opponent while the server is down.
+ * Opponent mode is written only when source is Level-1.
  * No-op when locked (server running) or when matchSet is unavailable.
  */
 export function persistMatchSettings(host, state) {
   if (!host?.config?.matchSet || state.serverRunning) {
     return undefined;
   }
-  return host.config.matchSet(matchSettingsPatch(state));
+  const patch = matchSettingsPatch(state);
+  if (state.opponentSource === "local") {
+    delete patch.opponent_team;
+  }
+  return host.config.matchSet(patch);
 }
 
 /**
@@ -271,7 +324,25 @@ export function reduceGameControl(state, action) {
   }
 
   if (action.type === "set-opponent" && OPPONENTS.includes(action.opponent)) {
+    if (next.opponentSource === "local") {
+      return next;
+    }
     next.opponent = action.opponent;
+    return next;
+  }
+
+  if (action.type === "set-opponent-source" && OPPONENT_SOURCES.includes(action.source)) {
+    next.opponentSource = action.source;
+    if (typeof action.path === "string") {
+      next.opponentProjectPath = action.path;
+    } else if (action.source === "level1") {
+      // Keep stored path when switching back to Level-1 so labeled list stays intact.
+    }
+    return next;
+  }
+
+  if (action.type === "set-opponent-projects") {
+    next.opponentProjects = normalizeOpponentProjects(action.projects);
     return next;
   }
 

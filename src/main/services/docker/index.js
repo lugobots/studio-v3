@@ -9,7 +9,7 @@ const { waitEditorReady } = require("./editor-ready");
 const { resolveHostPorts } = require("./free-ports");
 const { ensureLevel1Binary } = require("./level1");
 const { buildDockerStatus } = require("./status");
-const { removeOk, stopStudioContainers } = require("./stop");
+const { isMissingContainer, removeOk, stopStudioContainers } = require("./stop");
 
 let webContents = null;
 let pullListener = () => {};
@@ -177,11 +177,17 @@ function envValue(lines, prefix) {
 
 /**
  * Inspect a running Studio API container for recreate decisions.
- * Compares LUGO_HOST_PROJECT_PATH and LUGO_HOST_OPPONENT_BOT (Level-1 cache path).
+ * Compares LUGO_HOST_PROJECT_PATH, LUGO_HOST_OPPONENT_BOT (Level-1), and
+ * LUGO_HOST_OPPONENT_PROJECT (local opponent project).
  */
 async function runningContainerState(name = DEFAULTS.containerName) {
   if (!(await containerIsRunning(name))) {
-    return { running: false, hostPath: "", opponentHostPath: "" };
+    return {
+      running: false,
+      hostPath: "",
+      opponentHostPath: "",
+      opponentProjectHostPath: "",
+    };
   }
   const inspected = await exec("docker", [
     "inspect",
@@ -190,21 +196,50 @@ async function runningContainerState(name = DEFAULTS.containerName) {
     name,
   ]);
   if (!inspected.ok) {
-    return { running: true, hostPath: null, opponentHostPath: null };
+    return {
+      running: true,
+      hostPath: null,
+      opponentHostPath: null,
+      opponentProjectHostPath: null,
+    };
   }
   const lines = inspected.stdout.split("\n");
   return {
     running: true,
     hostPath: envValue(lines, "LUGO_HOST_PROJECT_PATH="),
     opponentHostPath: envValue(lines, "LUGO_HOST_OPPONENT_BOT="),
+    opponentProjectHostPath: envValue(lines, "LUGO_HOST_OPPONENT_PROJECT="),
   };
+}
+
+/**
+ * Whether a running API container already matches the expected mounts.
+ * Exported for unit tests without talking to Docker.
+ */
+function containerMatchesExpected(current, hostProjectPath = "", level1 = null, opponentProject = null) {
+  if (!current || !current.running) {
+    return false;
+  }
+  const expectedOpponent = (level1 && level1.hostBinaryPath) || "";
+  const expectedOppProject = (opponentProject && opponentProject.hostPath) || "";
+  return (
+    current.hostPath === hostProjectPath &&
+    current.opponentHostPath === expectedOpponent &&
+    current.opponentProjectHostPath === expectedOppProject
+  );
 }
 
 /**
  * Resolve host publish ports and build `docker run` args for the API container.
  * Exported for focused tests without talking to Docker.
  */
-async function prepareApiRunArgs(projectPath, hostProjectPath = "", level1 = null, env = process.env) {
+async function prepareApiRunArgs(
+  projectPath,
+  hostProjectPath = "",
+  level1 = null,
+  env = process.env,
+  opponentProject = null,
+) {
   const preferred = portsFrom(env);
   let hostPorts;
   try {
@@ -219,7 +254,7 @@ async function prepareApiRunArgs(projectPath, hostProjectPath = "", level1 = nul
   return {
     ok: true,
     hostPorts,
-    args: runArgs(projectPath, env, hostProjectPath, level1, hostPorts),
+    args: runArgs(projectPath, env, hostProjectPath, level1, hostPorts, opponentProject),
   };
 }
 
@@ -241,14 +276,9 @@ async function prepareEditorRunArgs(projectPath, env = process.env) {
   };
 }
 
-async function ensureContainer(projectPath, hostProjectPath = "", level1 = null) {
-  const expectedOpponent = (level1 && level1.hostBinaryPath) || "";
+async function ensureContainer(projectPath, hostProjectPath = "", level1 = null, opponentProject = null) {
   const current = await runningContainerState();
-  if (
-    current.running &&
-    current.hostPath === hostProjectPath &&
-    current.opponentHostPath === expectedOpponent
-  ) {
+  if (containerMatchesExpected(current, hostProjectPath, level1, opponentProject)) {
     const hostPorts =
       (await publishedHostPorts(DEFAULTS.containerName, ["api", "gameServer", "gameFrontend"])) ||
       portsFrom();
@@ -258,7 +288,13 @@ async function ensureContainer(projectPath, hostProjectPath = "", level1 = null)
   if (current.running) {
     await stopContainer();
   }
-  const prepared = await prepareApiRunArgs(projectPath, hostProjectPath, level1);
+  const prepared = await prepareApiRunArgs(
+    projectPath,
+    hostProjectPath,
+    level1,
+    process.env,
+    opponentProject,
+  );
   if (!prepared.ok) {
     return prepared;
   }
@@ -278,6 +314,10 @@ async function stopEditor() {
 
 async function recentLogs(name = DEFAULTS.containerName) {
   const result = await exec("docker", ["logs", "--tail", "5", name], 5000);
+  // Missing container is normal during intentional recreate; do not surface daemon noise.
+  if (isMissingContainer(result.stderr) || isMissingContainer(result.stdout)) {
+    return "";
+  }
   const text = `${result.stdout}\n${result.stderr}`.trim();
   if (!text) {
     return "";
@@ -345,6 +385,7 @@ module.exports = {
   ensureImage,
   ensureLevel1,
   containerIsRunning,
+  containerMatchesExpected,
   ensureContainer,
   ensureEditor,
   waitEditorReady,

@@ -1,7 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { LEVEL1_CONTAINER_BINARY_PATH } = require("../src/main/services/config/store");
+const {
+  LEVEL1_CONTAINER_BINARY_PATH,
+  OPPONENT_PROJECT_CONTAINER_PATH,
+} = require("../src/main/services/config/store");
 const { editorRunArgs, runArgs } = require("../src/main/services/docker/args");
+const { containerMatchesExpected } = require("../src/main/services/docker");
 
 test("studio container runs the api command and does not publish the editor port", () => {
   const args = runArgs("/bots/demo", {});
@@ -56,6 +60,70 @@ test("studio container defaults container binary path when only host path is set
   const args = runArgs("/bots/demo", {}, "", { hostBinaryPath: hostBinary });
   assert.ok(args.includes(`${hostBinary}:${LEVEL1_CONTAINER_BINARY_PATH}`));
   assert.ok(args.includes(`LUGO_STUDIO_OPPONENT_BOT=${LEVEL1_CONTAINER_BINARY_PATH}`));
+});
+
+test("studio container bind-mounts a local opponent project and omits Level-1 when requested", () => {
+  const opponentHost = "/bots/rival";
+  const args = runArgs("/bots/demo", {}, "/bots/demo", null, null, {
+    hostPath: opponentHost,
+    containerPath: OPPONENT_PROJECT_CONTAINER_PATH,
+  });
+  const mount = `${opponentHost}:${OPPONENT_PROJECT_CONTAINER_PATH}`;
+  assert.ok(args.includes(mount));
+  assert.ok(args.includes(`LUGO_STUDIO_OPPONENT_PROJECT=${OPPONENT_PROJECT_CONTAINER_PATH}`));
+  assert.ok(args.includes(`LUGO_HOST_OPPONENT_PROJECT=${opponentHost}`));
+  assert.equal(args.includes("LUGO_STUDIO_OPPONENT_BOT="), false);
+  assert.equal(args.includes("LUGO_HOST_OPPONENT_BOT="), false);
+});
+
+test("Level-1 mount omits local opponent project env", () => {
+  const hostBinary = "/tmp/cache/my-bot";
+  const args = runArgs("/bots/demo", {}, "/bots/demo", { hostBinaryPath: hostBinary });
+  assert.ok(args.includes(`LUGO_HOST_OPPONENT_BOT=${hostBinary}`));
+  assert.equal(args.includes("LUGO_HOST_OPPONENT_PROJECT="), false);
+  assert.equal(args.includes("LUGO_STUDIO_OPPONENT_PROJECT="), false);
+});
+
+test("containerMatchesExpected recreates when opponent project or Level-1 path changes", () => {
+  const level1 = { hostBinaryPath: "/cache/my-bot" };
+  const local = { hostPath: "/bots/rival" };
+  const runningLevel1 = {
+    running: true,
+    hostPath: "/bots/demo",
+    opponentHostPath: "/cache/my-bot",
+    opponentProjectHostPath: "",
+  };
+  assert.equal(containerMatchesExpected(runningLevel1, "/bots/demo", level1, null), true);
+  assert.equal(containerMatchesExpected(runningLevel1, "/bots/demo", null, local), false);
+  assert.equal(
+    containerMatchesExpected(
+      {
+        running: true,
+        hostPath: "/bots/demo",
+        opponentHostPath: "",
+        opponentProjectHostPath: "/bots/rival",
+      },
+      "/bots/demo",
+      null,
+      local,
+    ),
+    true,
+  );
+  assert.equal(
+    containerMatchesExpected(
+      {
+        running: true,
+        hostPath: "/bots/demo",
+        opponentHostPath: "",
+        opponentProjectHostPath: "/bots/other",
+      },
+      "/bots/demo",
+      null,
+      local,
+    ),
+    false,
+  );
+  assert.equal(containerMatchesExpected({ running: false }, "/bots/demo", level1, null), false);
 });
 
 test("editor container publishes only the editor port", () => {

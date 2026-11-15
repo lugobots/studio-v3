@@ -371,6 +371,169 @@ test("api debug preference round-trips in user.json and stays out of match setti
   assert.equal(Object.prototype.hasOwnProperty.call(match, "home_bots_active"), false);
 });
 
+test("opponent source defaults to Level-1 and keeps labeled list on invalid local path", () => {
+  assert.deepEqual(store.opponentSourceConfig({}), {
+    opponent_source: "level1",
+    opponent_projects: [],
+    opponent_project_path: "",
+    effective_source: "level1",
+    effective_project_path: "",
+  });
+  assert.equal(store.OPPONENT_SOURCE_DEFAULTS.opponent_source, "level1");
+  assert.deepEqual(store.OPPONENT_SOURCES, ["level1", "local"]);
+  assert.equal(store.OPPONENT_PROJECT_CONTAINER_PATH, "/bot-opponent");
+
+  const projects = [
+    { label: "  Alpha  ", path: " /bots/alpha " },
+    { label: "", path: "/bots/skip" },
+    { label: "Beta", path: "/bots/beta" },
+    { label: "Alpha2", path: "/bots/alpha" },
+  ];
+  const normalized = store.normalizeOpponentProjects(projects);
+  assert.deepEqual(normalized, [
+    { label: "Alpha2", path: "/bots/alpha" },
+    { label: "Beta", path: "/bots/beta" },
+  ]);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-opponent-source-"));
+  const file = store.settingsFile(dir, "linux");
+  const ready = new Set(["/bots/alpha"]);
+  const written = store.applyPatch(
+    {},
+    {
+      opponent_source: "local",
+      opponent_projects: [
+        { label: "Alpha", path: "/bots/alpha" },
+        { label: "Gone", path: "/bots/missing" },
+      ],
+      opponent_project_path: "/bots/missing",
+      custom_flag: true,
+    },
+  );
+  store.write(file, written);
+  const saved = store.read(file).data;
+  assert.equal(saved.custom_flag, true);
+  const cfg = store.opponentSourceConfig(saved, (folder) => ready.has(folder));
+  assert.equal(cfg.opponent_source, "local");
+  assert.equal(cfg.opponent_project_path, "/bots/missing");
+  assert.deepEqual(cfg.opponent_projects, [
+    { label: "Alpha", path: "/bots/alpha" },
+    { label: "Gone", path: "/bots/missing" },
+  ]);
+  assert.equal(cfg.effective_source, "level1");
+  assert.equal(cfg.effective_project_path, "");
+
+  const valid = store.opponentSourceConfig(
+    {
+      opponent_source: "local",
+      opponent_projects: [{ label: "Alpha", path: "/bots/alpha" }],
+      opponent_project_path: "/bots/alpha",
+    },
+    (folder) => ready.has(folder),
+  );
+  assert.equal(valid.effective_source, "local");
+  assert.equal(valid.effective_project_path, "/bots/alpha");
+});
+
+test("rememberOpponentProject rejects incompatible folders and selects compatible ones", () => {
+  const { checkBotCompatibility } = require("../src/main/services/bots/compatibility");
+  const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-opponent-bad-"));
+  const realReject = store.rememberOpponentProject(
+    {},
+    { label: "Bad", path: emptyDir },
+    checkBotCompatibility(emptyDir),
+  );
+  assert.equal(realReject.ok, false);
+  assert.match(realReject.error, /info\.json/);
+
+  const base = {
+    opponent_source: "level1",
+    opponent_projects: [{ label: "Keep", path: "/bots/keep" }],
+  };
+  const rejected = store.rememberOpponentProject(
+    base,
+    { label: "Bad", path: "/bots/bad" },
+    { ok: false, error: "That folder is not a Lugo bot (.lugo/info.json is missing)." },
+  );
+  assert.equal(rejected.ok, false);
+  assert.match(rejected.error, /info\.json/);
+  assert.deepEqual(rejected.data, base);
+
+  const added = store.rememberOpponentProject(
+    base,
+    { label: "  New  ", path: " /bots/new " },
+    { ok: true },
+  );
+  assert.equal(added.ok, true);
+  assert.equal(added.data.opponent_source, "local");
+  assert.equal(added.data.opponent_project_path, "/bots/new");
+  assert.deepEqual(added.data.opponent_projects, [
+    { label: "Keep", path: "/bots/keep" },
+    { label: "New", path: "/bots/new" },
+  ]);
+
+  const updated = store.rememberOpponentProject(
+    added.data,
+    { label: "Renamed", path: "/bots/keep" },
+    { ok: true },
+  );
+  assert.equal(updated.ok, true);
+  assert.deepEqual(updated.data.opponent_projects, [
+    { label: "New", path: "/bots/new" },
+    { label: "Renamed", path: "/bots/keep" },
+  ]);
+  assert.equal(updated.data.opponent_project_path, "/bots/keep");
+});
+
+test("setOpponentSource and forgetOpponentProject switch Level-1 without wiping the list", () => {
+  const data = {
+    opponent_source: "local",
+    opponent_projects: [
+      { label: "Alpha", path: "/bots/alpha" },
+      { label: "Beta", path: "/bots/beta" },
+    ],
+    opponent_project_path: "/bots/alpha",
+  };
+  const level1 = store.setOpponentSource(data, "level1");
+  assert.equal(level1.ok, true);
+  assert.equal(level1.data.opponent_source, "level1");
+  assert.deepEqual(level1.data.opponent_projects, data.opponent_projects);
+  assert.equal(level1.data.opponent_project_path, "/bots/alpha");
+
+  const local = store.setOpponentSource(level1.data, "local", "/bots/beta");
+  assert.equal(local.ok, true);
+  assert.equal(local.data.opponent_source, "local");
+  assert.equal(local.data.opponent_project_path, "/bots/beta");
+
+  const unknown = store.setOpponentSource(data, "local", "/bots/missing");
+  assert.equal(unknown.ok, false);
+  assert.deepEqual(unknown.data, data);
+
+  const forgot = store.forgetOpponentProject(local.data, "/bots/beta");
+  assert.equal(forgot.opponent_source, "level1");
+  assert.equal(forgot.opponent_project_path, "");
+  assert.deepEqual(forgot.opponent_projects, [{ label: "Alpha", path: "/bots/alpha" }]);
+});
+
+test("opening a different player bot leaves labeled opponents intact", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-opponent-keep-"));
+  const file = store.settingsFile(dir, "linux");
+  store.write(file, {
+    project_path: "/bots/first",
+    bot_paths: ["/bots/first"],
+    opponent_source: "local",
+    opponent_projects: [{ label: "Rival", path: "/bots/rival" }],
+    opponent_project_path: "/bots/rival",
+  });
+  const afterOpen = store.rememberBot(store.read(file).data, "/bots/second");
+  store.write(file, afterOpen);
+  const saved = store.read(file).data;
+  assert.equal(saved.project_path, "/bots/second");
+  assert.equal(saved.opponent_source, "local");
+  assert.equal(saved.opponent_project_path, "/bots/rival");
+  assert.deepEqual(saved.opponent_projects, [{ label: "Rival", path: "/bots/rival" }]);
+});
+
 test("resolved Level-1 image:tag uses bot_level_1_version from user.json", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-level1-resolved-"));
   const file = store.settingsFile(dir, "linux");

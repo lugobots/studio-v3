@@ -1,12 +1,17 @@
 "use strict";
 
-const { LEVEL1_CONTAINER_BINARY_PATH } = require("../config/store");
+const {
+  LEVEL1_CONTAINER_BINARY_PATH,
+  OPPONENT_PROJECT_CONTAINER_PATH,
+} = require("../config/store");
 const { DEFAULTS, editorImageFrom, imageFrom, portsFrom } = require("../../../shared/ports");
 
 /**
  * Build `docker run` args for the Studio API container.
  * When `level1` includes a host binary path, bind-mount it at the path the API
  * bot manager expects (default `/usr/local/lib/lugo/bot-level-1`).
+ * When `opponentProject` includes a host path, bind-mount that bot project for
+ * local-project opponents (default `/bot-opponent`).
  *
  * @param {string} projectPath
  * @param {NodeJS.ProcessEnv} [env]
@@ -14,8 +19,16 @@ const { DEFAULTS, editorImageFrom, imageFrom, portsFrom } = require("../../../sh
  * @param {{ hostBinaryPath?: string, containerBinaryPath?: string }} [level1]
  * @param {{ api?: string, gameServer?: string, gameFrontend?: string }} [hostPorts]
  *        Resolved host publish ports. Container listen ports stay on preferred env defaults.
+ * @param {{ hostPath?: string, containerPath?: string }} [opponentProject]
  */
-function runArgs(projectPath, env = process.env, hostProjectPath = "", level1 = null, hostPorts = null) {
+function runArgs(
+  projectPath,
+  env = process.env,
+  hostProjectPath = "",
+  level1 = null,
+  hostPorts = null,
+  opponentProject = null,
+) {
   const ports = portsFrom(env);
   const host = {
     api: (hostPorts && hostPorts.api) || ports.api,
@@ -59,6 +72,20 @@ function runArgs(projectPath, env = process.env, hostProjectPath = "", level1 = 
       `LUGO_STUDIO_OPPONENT_BOT=${containerBinaryPath}`,
       "-e",
       `LUGO_HOST_OPPONENT_BOT=${hostBinaryPath}`,
+    );
+  }
+
+  const opponentHostPath = opponentProject && opponentProject.hostPath;
+  if (opponentHostPath) {
+    const containerPath =
+      (opponentProject && opponentProject.containerPath) || OPPONENT_PROJECT_CONTAINER_PATH;
+    args.push(
+      "-v",
+      `${opponentHostPath}:${containerPath}`,
+      "-e",
+      `LUGO_STUDIO_OPPONENT_PROJECT=${containerPath}`,
+      "-e",
+      `LUGO_HOST_OPPONENT_PROJECT=${opponentHostPath}`,
     );
   }
 

@@ -226,13 +226,8 @@ func (a *api) handleGameStart(w http.ResponseWriter, r *http.Request) {
 	}
 	a.publishStatus()
 
-	cfg := bots.Config{
-		ProjectRoot:    projectRoot(),
-		GRPCURL:        fmt.Sprintf("localhost:%d", ports.GameServer),
-		PlayerSide:     playerSideForBots(a.lastSettings.TeamSide),
-		OpponentMode:   string(a.lastSettings.OpponentMode),
-		OpponentBinary: bots.OpponentBinaryFromEnv(),
-	}
+	cfg := a.botConfig()
+	cfg.GRPCURL = fmt.Sprintf("localhost:%d", ports.GameServer)
 	// Start only the requested active set; empty means server-only (no bots).
 	if err := a.match.StartMatch(cfg, active); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": err.Error()})
@@ -364,11 +359,12 @@ func (a *api) handleBotStatus(w http.ResponseWriter, r *http.Request) {
 func (a *api) botConfig() bots.Config {
 	ports := gameruntime.PortsFromEnv()
 	return bots.Config{
-		ProjectRoot:    projectRoot(),
-		GRPCURL:        fmt.Sprintf("localhost:%d", ports.GameServer),
-		PlayerSide:     playerSideForBots(a.lastSettings.TeamSide),
-		OpponentMode:   string(a.lastSettings.OpponentMode),
-		OpponentBinary: bots.OpponentBinaryFromEnv(),
+		ProjectRoot:         projectRoot(),
+		GRPCURL:             fmt.Sprintf("localhost:%d", ports.GameServer),
+		PlayerSide:          playerSideForBots(a.lastSettings.TeamSide),
+		OpponentMode:        string(a.lastSettings.OpponentMode),
+		OpponentBinary:      bots.OpponentBinaryFromEnv(),
+		OpponentProjectRoot: bots.OpponentProjectFromEnv(),
 	}
 }
 

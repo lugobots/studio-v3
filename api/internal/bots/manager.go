@@ -41,12 +41,14 @@ type Starter interface {
 
 // Config describes how to launch player and opponent bots for one match.
 type Config struct {
-	ProjectRoot    string
-	GRPCURL        string
-	PlayerSide     string // HOME or AWAY; default HOME
-	OpponentMode   string // default "default"
-	OpponentBinary string
-	CacheDir       string
+	ProjectRoot          string
+	GRPCURL              string
+	PlayerSide           string // HOME or AWAY; default HOME
+	OpponentMode         string // default "default"; Level-1 MODE only
+	OpponentBinary       string // Level-1 binary path when OpponentProjectRoot is empty
+	OpponentProjectRoot  string // local opponent project; when set, ignore binary + MODE
+	OpponentCacheDir     string // cache under opponent project; default <root>/.cache
+	CacheDir             string
 }
 
 type botHandle struct {
@@ -87,6 +89,18 @@ func OpponentBinaryFromEnv() string {
 		return v
 	}
 	return defaultOpponentBinary
+}
+
+// OpponentProjectFromEnv reads LUGO_STUDIO_OPPONENT_PROJECT. Empty means the
+// session uses Level-1 binary opponents. When set (including the default mount
+// path), opponent slots prepare/start from that project root.
+func OpponentProjectFromEnv() string {
+	return strings.TrimSpace(os.Getenv("LUGO_STUDIO_OPPONENT_PROJECT"))
+}
+
+// UsesLocalOpponent reports whether cfg should start opponents from a project tree.
+func UsesLocalOpponent(cfg Config) bool {
+	return strings.TrimSpace(cfg.OpponentProjectRoot) != ""
 }
 
 // AllSlots returns HOME and AWAY numbers 1..11 (22 slots). Handy for tests and
@@ -144,27 +158,39 @@ func (m *Manager) StartMatch(cfg Config, active []Slot) error {
 		}
 	}
 
-	var lang Language
+	var playerLang Language
+	var opponentLang Language
 	if needPlayer {
-		lang = DetectLanguage(cfg.ProjectRoot)
-		if lang == LangUnknown {
+		playerLang = DetectLanguage(cfg.ProjectRoot)
+		if playerLang == LangUnknown {
 			return fmt.Errorf("could not detect project language in %s (need go.mod, requirements.txt, or package.json)", cfg.ProjectRoot)
 		}
 		if err := os.MkdirAll(cfg.CacheDir, 0o755); err != nil {
 			return fmt.Errorf("create cache dir: %w", err)
 		}
-		if err := m.preparePlayer(lang, cfg, nil); err != nil {
+		if err := m.preparePlayer(playerLang, cfg, nil); err != nil {
 			return fmt.Errorf("prepare player bots: %w", err)
 		}
 	}
 	if needOpponent {
-		if err := ensureOpponentBinary(cfg.OpponentBinary); err != nil {
+		if UsesLocalOpponent(cfg) {
+			opponentLang = DetectLanguage(cfg.OpponentProjectRoot)
+			if opponentLang == LangUnknown {
+				return fmt.Errorf("could not detect opponent project language in %s (need go.mod, requirements.txt, or package.json)", cfg.OpponentProjectRoot)
+			}
+			if err := os.MkdirAll(cfg.OpponentCacheDir, 0o755); err != nil {
+				return fmt.Errorf("create opponent cache dir: %w", err)
+			}
+			if err := m.prepareOpponentProject(opponentLang, cfg, nil); err != nil {
+				return fmt.Errorf("prepare opponent project: %w", err)
+			}
+		} else if err := ensureOpponentBinary(cfg.OpponentBinary); err != nil {
 			return err
 		}
 	}
 
 	for _, slot := range active {
-		if err := m.startSlotLocked(lang, cfg, slot); err != nil {
+		if err := m.startSlotLocked(playerLang, opponentLang, cfg, slot); err != nil {
 			m.stopBotsLocked()
 			return err
 		}
@@ -190,24 +216,34 @@ func (m *Manager) StartBot(cfg Config, slot Slot) error {
 	}
 	m.clearSlotLocked(slot)
 
-	var lang Language
+	var playerLang Language
+	var opponentLang Language
 	if slot.Side == cfg.PlayerSide {
-		lang = DetectLanguage(cfg.ProjectRoot)
-		if lang == LangUnknown {
+		playerLang = DetectLanguage(cfg.ProjectRoot)
+		if playerLang == LangUnknown {
 			return fmt.Errorf("could not detect project language in %s (need go.mod, requirements.txt, or package.json)", cfg.ProjectRoot)
 		}
 		if err := os.MkdirAll(cfg.CacheDir, 0o755); err != nil {
 			return fmt.Errorf("create cache dir: %w", err)
 		}
-		if err := m.preparePlayer(lang, cfg, nil); err != nil {
+		if err := m.preparePlayer(playerLang, cfg, nil); err != nil {
 			return fmt.Errorf("prepare player bots: %w", err)
 		}
-	} else {
-		if err := ensureOpponentBinary(cfg.OpponentBinary); err != nil {
-			return err
+	} else if UsesLocalOpponent(cfg) {
+		opponentLang = DetectLanguage(cfg.OpponentProjectRoot)
+		if opponentLang == LangUnknown {
+			return fmt.Errorf("could not detect opponent project language in %s (need go.mod, requirements.txt, or package.json)", cfg.OpponentProjectRoot)
 		}
+		if err := os.MkdirAll(cfg.OpponentCacheDir, 0o755); err != nil {
+			return fmt.Errorf("create opponent cache dir: %w", err)
+		}
+		if err := m.prepareOpponentProject(opponentLang, cfg, nil); err != nil {
+			return fmt.Errorf("prepare opponent project: %w", err)
+		}
+	} else if err := ensureOpponentBinary(cfg.OpponentBinary); err != nil {
+		return err
 	}
-	return m.startSlotLocked(lang, cfg, slot)
+	return m.startSlotLocked(playerLang, opponentLang, cfg, slot)
 }
 
 // StopBot stops a single slot and unregisters it from procreg. No-op when the
@@ -229,10 +265,16 @@ func (m *Manager) BotRunning(slot Slot) bool {
 	return m.botRunningLocked(slot)
 }
 
-func (m *Manager) startSlotLocked(lang Language, cfg Config, slot Slot) error {
+func (m *Manager) startSlotLocked(playerLang, opponentLang Language, cfg Config, slot Slot) error {
 	if slot.Side == cfg.PlayerSide {
-		if err := m.startPlayer(lang, cfg, slot); err != nil {
+		if err := m.startPlayer(playerLang, cfg, slot); err != nil {
 			return fmt.Errorf("start player bot %s/%d: %w", slot.Side, slot.Number, err)
+		}
+		return nil
+	}
+	if UsesLocalOpponent(cfg) {
+		if err := m.startOpponentProject(opponentLang, cfg, slot); err != nil {
+			return fmt.Errorf("start opponent bot %s/%d: %w", slot.Side, slot.Number, err)
 		}
 		return nil
 	}
@@ -242,33 +284,41 @@ func (m *Manager) startSlotLocked(lang Language, cfg Config, slot Slot) error {
 	return nil
 }
 
-func (m *Manager) preparePlayer(lang Language, cfg Config, onLog func(string)) error {
-	if prepareAlreadyReady(lang, cfg.ProjectRoot, cfg.CacheDir) {
+func (m *Manager) prepareProject(lang Language, projectRoot, cacheDir string, onLog func(string)) error {
+	if prepareAlreadyReady(lang, projectRoot, cacheDir) {
 		return nil
 	}
 	run := m.runSyncLogged(onLog)
 	switch lang {
 	case LangGo:
-		cmd, env := goPrepareCommand(cfg.ProjectRoot, cfg.CacheDir)
-		if err := run(cfg.ProjectRoot, cmd, env); err != nil {
+		cmd, env := goPrepareCommand(projectRoot, cacheDir)
+		if err := run(projectRoot, cmd, env); err != nil {
 			return err
 		}
 	case LangPython:
-		for _, cmd := range pythonPrepareCommands(cfg.ProjectRoot) {
-			if err := run(cfg.ProjectRoot, cmd, nil); err != nil {
+		for _, cmd := range pythonPrepareCommands(projectRoot) {
+			if err := run(projectRoot, cmd, nil); err != nil {
 				return err
 			}
 		}
 	case LangTypeScript:
 		for _, cmd := range jsPrepareCommands() {
-			if err := run(cfg.ProjectRoot, cmd, nil); err != nil {
+			if err := run(projectRoot, cmd, nil); err != nil {
 				return err
 			}
 		}
 	default:
 		return fmt.Errorf("unsupported language %q", lang)
 	}
-	return writePrepareStamp(lang, cfg.ProjectRoot)
+	return writePrepareStamp(lang, projectRoot)
+}
+
+func (m *Manager) preparePlayer(lang Language, cfg Config, onLog func(string)) error {
+	return m.prepareProject(lang, cfg.ProjectRoot, cfg.CacheDir, onLog)
+}
+
+func (m *Manager) prepareOpponentProject(lang Language, cfg Config, onLog func(string)) error {
+	return m.prepareProject(lang, cfg.OpponentProjectRoot, cfg.OpponentCacheDir, onLog)
 }
 
 func (m *Manager) startPlayer(lang Language, cfg Config, slot Slot) error {
@@ -284,6 +334,22 @@ func (m *Manager) startPlayer(lang Language, cfg Config, slot Slot) error {
 		return fmt.Errorf("unsupported language %q", lang)
 	}
 	return m.launch(slot, cfg.ProjectRoot, command, botEnv(slot.Side, slot.Number, cfg.GRPCURL, ""))
+}
+
+func (m *Manager) startOpponentProject(lang Language, cfg Config, slot Slot) error {
+	// Local project opponents never receive Level-1 MODE.
+	var command string
+	switch lang {
+	case LangGo:
+		command = goStartCommand(cfg.OpponentCacheDir)
+	case LangPython:
+		command = pythonStartCommand(cfg.OpponentProjectRoot)
+	case LangTypeScript:
+		command = jsStartCommand()
+	default:
+		return fmt.Errorf("unsupported language %q", lang)
+	}
+	return m.launch(slot, cfg.OpponentProjectRoot, command, botEnv(slot.Side, slot.Number, cfg.GRPCURL, ""))
 }
 
 func (m *Manager) startOpponent(cfg Config, slot Slot) error {
@@ -418,8 +484,12 @@ func normalizeConfig(cfg Config) (Config, error) {
 	if cfg.OpponentBinary == "" {
 		cfg.OpponentBinary = OpponentBinaryFromEnv()
 	}
+	cfg.OpponentProjectRoot = strings.TrimSpace(cfg.OpponentProjectRoot)
 	if cfg.CacheDir == "" {
 		cfg.CacheDir = filepath.Join(cfg.ProjectRoot, ".cache")
+	}
+	if UsesLocalOpponent(cfg) && cfg.OpponentCacheDir == "" {
+		cfg.OpponentCacheDir = filepath.Join(cfg.OpponentProjectRoot, ".cache")
 	}
 	return cfg, nil
 }

@@ -14,6 +14,10 @@ const CHANNELS = {
     set: "config:set",
     matchGet: "config:match-get",
     matchSet: "config:match-set",
+    opponentGet: "config:opponent-get",
+    opponentSet: "config:opponent-set",
+    opponentRemember: "config:opponent-remember",
+    opponentForget: "config:opponent-forget",
   },
   updates: {
     check: "updates:check",

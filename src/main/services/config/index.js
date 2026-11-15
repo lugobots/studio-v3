@@ -5,6 +5,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const store = require("./store");
+const { checkBotCompatibility } = require("../bots/compatibility");
 const pkg = require("../../../../package.json");
 const { sessionEditorUrl, sessionGameFrontendUrl } = require("../session-urls");
 const studioApi = require("../studio-api");
@@ -13,10 +14,15 @@ function filePath() {
   return store.settingsFile(app.getPath("appData"), process.platform);
 }
 
+function opponentPathReady(folder) {
+  return checkBotCompatibility(folder).ok === true;
+}
+
 function view(record) {
   const data = record.data;
   // Studio API build version (e.g. "dev" or "v1.0.1"), not the V3 product generation.
   const apiVersion = studioApi.apiVersion() || "dev";
+  const opponent = store.opponentSourceConfig(data, opponentPathReady);
   return {
     ...data,
     bot_paths: store.botPaths(data),
@@ -28,6 +34,11 @@ function view(record) {
     workspace_split_horizontal: store.workspaceSplitHorizontal(data),
     workspace_split_logs: store.workspaceSplitLogs(data),
     debugMode: store.apiDebugEnabled(data),
+    opponent_source: opponent.opponent_source,
+    opponent_projects: opponent.opponent_projects,
+    opponent_project_path: opponent.opponent_project_path,
+    effective_opponent_source: opponent.effective_source,
+    effective_opponent_project_path: opponent.effective_project_path,
     measurementId: process.env.STUDIO_GA_MEASUREMENT_ID || "",
     appVersion: pkg.version,
     apiVersion,
@@ -122,6 +133,65 @@ async function getLevel1() {
   return store.level1Resolved(store.read(filePath()).data, app.getPath("appData"), process.platform);
 }
 
+/**
+ * Active opponent source with labeled list; invalid local paths fall back to Level-1.
+ */
+async function getOpponentSource() {
+  return store.opponentSourceConfig(store.read(filePath()).data, opponentPathReady);
+}
+
+/**
+ * Add/update a labeled local opponent after the same compatibility check as bot open.
+ */
+async function rememberOpponentProject(entry) {
+  const file = filePath();
+  const record = store.read(file);
+  const folder = entry && typeof entry.path === "string" ? entry.path.trim() : "";
+  const compatibility = checkBotCompatibility(folder);
+  const result = store.rememberOpponentProject(record.data, entry, compatibility);
+  if (!result.ok) {
+    return result;
+  }
+  const next = result.data;
+  if (!next.install_unique_id) {
+    next.install_unique_id = crypto.randomUUID();
+  }
+  next.app_version = pkg.version;
+  next.app_path = app.getAppPath();
+  store.write(file, next);
+  return { ok: true, data: view({ exists: true, data: next }) };
+}
+
+async function forgetOpponentProject(folder) {
+  const file = filePath();
+  const record = store.read(file);
+  const next = store.forgetOpponentProject(record.data, folder);
+  if (!next.install_unique_id) {
+    next.install_unique_id = crypto.randomUUID();
+  }
+  next.app_version = pkg.version;
+  next.app_path = app.getAppPath();
+  store.write(file, next);
+  return view({ exists: true, data: next });
+}
+
+async function setOpponentSource(source, folder = "") {
+  const file = filePath();
+  const record = store.read(file);
+  const result = store.setOpponentSource(record.data, source, folder);
+  if (!result.ok) {
+    return result;
+  }
+  const next = result.data;
+  if (!next.install_unique_id) {
+    next.install_unique_id = crypto.randomUUID();
+  }
+  next.app_version = pkg.version;
+  next.app_path = app.getAppPath();
+  store.write(file, next);
+  return { ok: true, data: view({ exists: true, data: next }) };
+}
+
 function projectFileReady(folder) {
   return fs.existsSync(path.join(folder, ".lugo", "info.json"));
 }
@@ -133,6 +203,10 @@ module.exports = {
   setMatch,
   matchSettingsForApi,
   getLevel1,
+  getOpponentSource,
+  rememberOpponentProject,
+  forgetOpponentProject,
+  setOpponentSource,
   rememberBot,
   forgetBot,
   filePath,

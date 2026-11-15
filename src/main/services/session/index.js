@@ -175,12 +175,47 @@ function startWatch(projectPath, forcedRoute = "", flow = "startup") {
   tick();
 }
 
+async function opponentMountForSession() {
+  const opponent = await config.getOpponentSource();
+  if (opponent.effective_source !== "local" || !opponent.effective_project_path) {
+    return null;
+  }
+  const store = require("../config/store");
+  return {
+    hostPath: opponent.effective_project_path,
+    containerPath: store.OPPONENT_PROJECT_CONTAINER_PATH,
+  };
+}
+
 async function ensureApiContainer(projectPath, hostProjectPath = "") {
+  const opponentProject = await opponentMountForSession();
+  if (opponentProject) {
+    // Local opponent project: no Level-1 binary mount required for this session.
+    return docker.ensureContainer(projectPath, hostProjectPath, null, opponentProject);
+  }
   const level1 = await level1Ready.awaitReady();
   if (!level1.ok) {
     return level1;
   }
-  return docker.ensureContainer(projectPath, hostProjectPath, level1);
+  return docker.ensureContainer(projectPath, hostProjectPath, level1, null);
+}
+
+/**
+ * Recreate/reuse the API container so opponent bind-mounts match current config.
+ * Pauses the health watch across stop/start so a brief missing container does not
+ * route the UI to /api-error with docker "No such container" noise.
+ * No-op when no player bot is open (avoid starting empty-project just for mounts).
+ */
+async function refreshOpponentMount() {
+  const saved = await config.get();
+  const paths = launchPaths(saved);
+  if (!paths.host) {
+    return { ok: true, skipped: true };
+  }
+  cancelWatch();
+  const started = await ensureApiContainer(paths.mount, paths.host);
+  startWatch(paths.host);
+  return started;
 }
 
 async function startApi(saved) {
@@ -314,18 +349,14 @@ function createFlowHelpers(getCreating) {
       emitProgress({
         flow,
         phase: "image",
-        detail: "Preparing the Level-1 opponent binary.",
+        detail: "Preparing the opponent mount for this session.",
       });
-      const level1 = await level1Ready.awaitReady();
-      if (!level1.ok) {
-        return level1;
-      }
       emitProgress({
         flow,
         phase: "container",
         detail: isCreate ? "Starting the API that will create the bot." : "Starting the Studio API.",
       });
-      const container = await docker.ensureContainer(dir, dir, level1);
+      const container = await ensureApiContainer(dir, dir);
       if (!container.ok) {
         return container;
       }
@@ -766,4 +797,5 @@ module.exports = {
   projectStatus,
   startEditor,
   stopEditor,
+  refreshOpponentMount,
 };
