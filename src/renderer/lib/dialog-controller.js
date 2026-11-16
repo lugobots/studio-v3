@@ -74,6 +74,7 @@ export function createDialogController(options = {}) {
           confirmLabel: request.confirmLabel || "OK",
           cancelLabel: request.cancelLabel || "Cancel",
           value: typeof request.defaultValue === "string" ? request.defaultValue : "",
+          maxLength: Number.isFinite(request.maxLength) ? request.maxLength : undefined,
           resolve,
         };
         emit();

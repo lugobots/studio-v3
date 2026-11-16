@@ -2,6 +2,7 @@ package gameruntime
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	serverConfig "github.com/lugobots/server/v2/config"
@@ -52,6 +53,10 @@ type MatchSettings struct {
 	SkipToGoldenGoal bool         `json:"skip_to_golden_goal"`
 	GameSpeed        GameSpeed    `json:"game_speed"`
 	OpponentMode     OpponentMode `json:"opponent_mode"`
+	// PlayerTeamName / OpponentTeamName are display labels applied to player vs
+	// opponent branding before team-side swap. Empty keeps GetDefaultConfig names.
+	PlayerTeamName   string `json:"player_team_name,omitempty"`
+	OpponentTeamName string `json:"opponent_team_name,omitempty"`
 }
 
 // ComposeConfiguration builds a server/v2 Configuration from ports and match
@@ -69,7 +74,15 @@ func ComposeConfiguration(ports Ports, settings MatchSettings) (serverConfig.Con
 	}
 
 	listening, getReady := durationsForSpeed(settings.GameSpeed)
-	homeTeam, awayTeam := brandTeams(teams.HomeTeam, teams.AwayTeam, settings.TeamSide)
+	player := teams.HomeTeam
+	opponent := teams.AwayTeam
+	if name := truncateTeamName(settings.PlayerTeamName); name != "" {
+		player.Name = name
+	}
+	if name := truncateTeamName(settings.OpponentTeamName); name != "" {
+		opponent.Name = name
+	}
+	homeTeam, awayTeam := brandTeams(player, opponent, settings.TeamSide)
 
 	cfg := serverConfig.Configuration{
 		GRPCPort:             uint16(ports.GameServer),
@@ -123,4 +136,17 @@ func brandTeams(defaultHome, defaultAway serverConfig.TeamConfiguration, side Te
 		return opponent, player
 	}
 	return player, opponent
+}
+
+// truncateTeamName trims and caps a display name to the game server maximum.
+func truncateTeamName(name string) string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return ""
+	}
+	max := serverConfig.MaxTeamNameSize
+	if max <= 0 || len(trimmed) <= max {
+		return trimmed
+	}
+	return trimmed[:max]
 }

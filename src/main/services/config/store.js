@@ -36,6 +36,9 @@ const MATCH_KEYS = [
   "saved_positions",
 ];
 
+/** Max length for new opponent project labels (after trim). */
+const OPPONENT_LABEL_MAX = 20;
+
 /** Runtime Docker image name/tag keys (V1-compatible + bot_setup_*). */
 const IMAGE_KEYS = [
   "game_server_image",
@@ -296,14 +299,28 @@ function matchPatch(partial) {
 /**
  * Map app-level match prefs to the Studio API request body shape.
  * user.json stores opponent mode under opponent_team; the API uses opponent_mode.
+ * Team display names come from the open project folder name and active opponent label.
  */
 function matchSettingsForApi(data) {
   const match = matchConfig(data);
+  const source = data && typeof data === "object" && !Array.isArray(data) ? data : {};
+  const projectPath = typeof source.project_path === "string" ? source.project_path.trim() : "";
+  const playerName = projectPath ? path.basename(projectPath) : "";
+  const opponent = opponentSourceConfig(source);
+  let opponentName = "Level-1";
+  if (opponent.effective_source === "local" && opponent.effective_project_path) {
+    const entry = opponent.opponent_projects.find(
+      (item) => item.path === opponent.effective_project_path,
+    );
+    opponentName = entry && entry.label ? entry.label : "Level-1";
+  }
   return {
     team_side: match.team_side,
     skip_to_golden_goal: match.skip_to_golden_goal,
     game_speed: match.game_speed,
     opponent_mode: match.opponent_team,
+    player_team_name: playerName,
+    opponent_team_name: opponentName,
   };
 }
 
@@ -414,6 +431,13 @@ function rememberOpponentProject(data, entry, compatibility) {
   if (!label || !folder) {
     return { ok: false, error: "Opponent projects need a label and a folder path.", data };
   }
+  if (label.length > OPPONENT_LABEL_MAX) {
+    return {
+      ok: false,
+      error: `Opponent labels must be ${OPPONENT_LABEL_MAX} characters or fewer.`,
+      data,
+    };
+  }
   if (!compatibility || compatibility.ok !== true) {
     return {
       ok: false,
@@ -502,6 +526,7 @@ module.exports = {
   GAME_SPEEDS,
   OPPONENT_MODES,
   OPPONENT_SOURCES,
+  OPPONENT_LABEL_MAX,
   settingsFile,
   read,
   write,

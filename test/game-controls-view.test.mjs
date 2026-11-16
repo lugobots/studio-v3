@@ -9,7 +9,7 @@ import {
 import { renderGameControls } from "../src/renderer/shell/game-controls-view.js";
 import { installDocument, leafText } from "./dom-stub.mjs";
 
-const PREP_SECTIONS = ["Config", "Game speed", "Opponent source", "Opponent mode"];
+const PREP_SECTIONS = ["Config", "Game speed", "Opponent mode", "Opponent source"];
 const LIVE_SECTIONS = ["Match", "Home", "Away", "Positions"];
 const SECTIONS_SERVER_DOWN = ["Session", ...PREP_SECTIONS];
 const SECTIONS_SERVER_UP = ["Session", ...LIVE_SECTIONS, ...PREP_SECTIONS];
@@ -68,6 +68,7 @@ function mountPanel({
   const matchSets = [];
   const opponentSets = [];
   const opponentRemembers = [];
+  const opponentForgets = [];
   const appliedSnapshots = [];
   const notices = [];
   const confirms = [];
@@ -152,6 +153,7 @@ function mountPanel({
         return Promise.resolve({ ok: true, data: opponentView() });
       },
       opponentForget(folder) {
+        opponentForgets.push(folder);
         opponentProjects = opponentProjects.filter((item) => item.path !== folder);
         if (opponentProjectPath === folder) {
           opponentProjectPath = "";
@@ -267,6 +269,7 @@ function mountPanel({
     matchSets,
     opponentSets,
     opponentRemembers,
+    opponentForgets,
     appliedSnapshots,
     notices,
     confirms,
@@ -447,6 +450,66 @@ test("opponent source Level-1, labeled list, and add compatible folder", async (
     panel.state().opponentProjects.map((entry) => entry.label),
     ["Alpha", "Rival"],
   );
+  panel.restore();
+});
+
+test("opponent source lists labels vertically and remove forgets with confirm", async () => {
+  const panel = mountPanel({
+    initialOpponent: {
+      opponent_source: "local",
+      opponent_projects: [
+        { label: "Alpha Team", path: "/bots/alpha" },
+        { label: "Beta Squad", path: "/bots/beta" },
+      ],
+      opponent_project_path: "/bots/alpha",
+      effective_source: "local",
+      effective_project_path: "/bots/alpha",
+    },
+  });
+
+  const source = panel.parent.querySelector(".game-ctrl-opponent-source");
+  assert.equal(source !== null, true);
+  assert.equal(source.className.includes("start_stop_buttons"), false);
+  const rows = source.querySelectorAll(".game-ctrl-opponent-row");
+  assert.equal(rows.length, 3);
+  assert.equal(panel.button("Alpha Team") !== null, true);
+  assert.equal(panel.button("Beta Squad") !== null, true);
+  assert.equal(panel.button("Remove Alpha Team") !== null, true);
+
+  panel.button("Remove Beta Squad").click();
+  await flush();
+  assert.deepEqual(panel.opponentForgets, ["/bots/beta"]);
+  assert.equal(panel.state().opponentSource, "local");
+  assert.equal(panel.state().opponentProjectPath, "/bots/alpha");
+  assert.equal(panel.button("Beta Squad"), null);
+  assert.equal(panel.button("Normal game").disabled, true);
+
+  panel.button("Remove Alpha Team").click();
+  await flush();
+  assert.deepEqual(panel.opponentForgets, ["/bots/beta", "/bots/alpha"]);
+  assert.equal(panel.state().opponentSource, "level1");
+  assert.equal(panel.button("Level-1").getAttribute("aria-pressed"), "true");
+  assert.equal(panel.button("Normal game").disabled, false);
+  panel.restore();
+});
+
+test("canceling opponent remove leaves the list unchanged", async () => {
+  const panel = mountPanel({
+    confirmAnswer: false,
+    initialOpponent: {
+      opponent_source: "local",
+      opponent_projects: [{ label: "Alpha", path: "/bots/alpha" }],
+      opponent_project_path: "/bots/alpha",
+      effective_source: "local",
+      effective_project_path: "/bots/alpha",
+    },
+  });
+
+  panel.button("Remove Alpha").click();
+  await flush();
+  assert.deepEqual(panel.opponentForgets, []);
+  assert.equal(panel.state().opponentSource, "local");
+  assert.equal(panel.button("Alpha") !== null, true);
   panel.restore();
 });
 

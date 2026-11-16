@@ -217,10 +217,14 @@ test("match keys patch round-trips through user.json", () => {
 test("match settings for api map opponent_team to opponent_mode", () => {
   assert.deepEqual(
     store.matchSettingsForApi({
+      project_path: "/bots/MyBots",
       team_side: "away",
       skip_to_golden_goal: true,
       game_speed: "fast",
       opponent_team: "kids",
+      opponent_source: "local",
+      opponent_projects: [{ label: "Rivals", path: "/bots/rival" }],
+      opponent_project_path: "/bots/rival",
       saved_positions: [{ name: "x" }],
       home_bots_active: Array.from({ length: store.BOT_ROSTER_SIZE }, () => false),
     }),
@@ -229,6 +233,8 @@ test("match settings for api map opponent_team to opponent_mode", () => {
       skip_to_golden_goal: true,
       game_speed: "fast",
       opponent_mode: "kids",
+      player_team_name: "MyBots",
+      opponent_team_name: "Rivals",
     },
   );
   assert.deepEqual(store.matchSettingsForApi({}), {
@@ -236,6 +242,8 @@ test("match settings for api map opponent_team to opponent_mode", () => {
     skip_to_golden_goal: false,
     game_speed: "normal",
     opponent_mode: "default",
+    player_team_name: "",
+    opponent_team_name: "Level-1",
   });
   assert.equal(Object.hasOwn(store.matchSettingsForApi({ home_bots_active: [false] }), "home_bots_active"), false);
 });
@@ -365,6 +373,8 @@ test("api debug preference round-trips in user.json and stays out of match setti
     skip_to_golden_goal: false,
     game_speed: "normal",
     opponent_mode: "default",
+    player_team_name: "demo",
+    opponent_team_name: "Level-1",
   });
   assert.equal(Object.prototype.hasOwnProperty.call(match, "debug_mode"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(match, "server_logs"), false);
@@ -483,6 +493,24 @@ test("rememberOpponentProject rejects incompatible folders and selects compatibl
     { label: "Renamed", path: "/bots/keep" },
   ]);
   assert.equal(updated.data.opponent_project_path, "/bots/keep");
+
+  const maxLabel = "A".repeat(store.OPPONENT_LABEL_MAX);
+  const atMax = store.rememberOpponentProject(
+    base,
+    { label: maxLabel, path: "/bots/max" },
+    { ok: true },
+  );
+  assert.equal(atMax.ok, true);
+  assert.equal(atMax.data.opponent_projects.at(-1).label, maxLabel);
+
+  const oversized = store.rememberOpponentProject(
+    base,
+    { label: `${maxLabel}X`, path: "/bots/too-long" },
+    { ok: true },
+  );
+  assert.equal(oversized.ok, false);
+  assert.match(oversized.error, /20 characters/);
+  assert.deepEqual(oversized.data, base);
 });
 
 test("setOpponentSource and forgetOpponentProject switch Level-1 without wiping the list", () => {

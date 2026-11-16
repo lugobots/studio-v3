@@ -999,6 +999,7 @@ h1 {
 }
 
 .side-menu .game-ctrl-group[data-locked="true"] .start_stop_buttons button:disabled,
+.side-menu .game-ctrl-group[data-locked="true"] .game-ctrl-opponent-source button:disabled,
 .side-menu .game-ctrl-group[data-locked="true"] .position-btn:disabled,
 .side-menu .game-ctrl-group[data-locked="true"] select:disabled,
 .side-menu .game-ctrl-group[data-locked="true"] input:disabled {
@@ -1042,6 +1043,70 @@ h1 {
   gap: 8px;
   align-items: center;
   justify-content: center;
+}
+
+.side-menu .game-ctrl-opponent-source {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.side-menu .game-ctrl-opponent-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.side-menu .game-ctrl-opponent-source button {
+  border: 1px solid var(--control-border);
+  background: var(--control-deep);
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.side-menu .game-ctrl-opponent-source button:hover {
+  border-color: var(--control-hover-border);
+  background: var(--control-hover);
+}
+
+.side-menu .game-ctrl-opponent-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  height: auto;
+  min-height: 28px;
+  padding: 4px 8px;
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.side-menu .game-ctrl-opponent-remove {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.side-menu .game-ctrl-opponent-add {
+  width: auto;
+  height: auto;
+  min-height: 28px;
+  padding: 4px 8px;
+  align-self: stretch;
+  justify-content: center;
+  font-size: 12px;
 }
 
 .side-menu .game-ctrl .start_stop_buttons button {

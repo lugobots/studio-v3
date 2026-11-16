@@ -25,9 +25,18 @@ function createServerControls({ ensureReady, api, sendStatus, matchSettings }) {
       return ready;
     }
     try {
+      const fromStore = typeof matchSettings === "function" ? await matchSettings() : undefined;
       let settings = overrideSettings;
       if (!settings || typeof settings !== "object") {
-        settings = typeof matchSettings === "function" ? await matchSettings() : undefined;
+        settings = fromStore;
+      } else if (fromStore && typeof fromStore === "object") {
+        // UI may send live prefs without team names; keep store-derived display names.
+        settings = {
+          ...fromStore,
+          ...settings,
+          player_team_name: settings.player_team_name || fromStore.player_team_name,
+          opponent_team_name: settings.opponent_team_name || fromStore.opponent_team_name,
+        };
       }
       return actionResult(await api.startServer(settings));
     } catch (error) {

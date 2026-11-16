@@ -152,6 +152,8 @@ async function selectOpponentSource(state, onChange, host, dialogs, source, fold
   onChange(applyOpponentSourceConfig(state, result.data || result));
 }
 
+const OPPONENT_LABEL_MAX = 20;
+
 async function addOpponentFolder(state, onChange, host, dialogs) {
   if (state.serverRunning || !host?.project?.pickFolder || !host?.config?.opponentRemember) {
     return;
@@ -167,13 +169,23 @@ async function addOpponentFolder(state, onChange, host, dialogs) {
   if (typeof dialogs?.prompt === "function") {
     rawLabel = await dialogs.prompt({
       title: "Opponent project label",
-      body: "Pick a label for this opponent project.",
+      body: `Pick a label for this opponent project (max ${OPPONENT_LABEL_MAX} characters).`,
       confirmLabel: "Add",
       cancelLabel: "Cancel",
+      maxLength: OPPONENT_LABEL_MAX,
     });
   }
   const label = typeof rawLabel === "string" ? rawLabel.trim() : "";
   if (!label) {
+    return;
+  }
+  if (label.length > OPPONENT_LABEL_MAX) {
+    if (dialogs) {
+      await reportResult(dialogs, {
+        ok: false,
+        error: `Opponent labels must be ${OPPONENT_LABEL_MAX} characters or fewer.`,
+      });
+    }
     return;
   }
   const result = await host.config.opponentRemember({ label, path: picked.folder });
@@ -187,6 +199,25 @@ async function addOpponentFolder(state, onChange, host, dialogs) {
     return;
   }
   onChange(applyOpponentSourceConfig(state, result.data || result));
+}
+
+async function removeOpponentProject(state, onChange, host, dialogs, project) {
+  if (state.serverRunning || !host?.config?.opponentForget || !project?.path) {
+    return;
+  }
+  if (dialogs?.confirm) {
+    const accepted = await dialogs.confirm({
+      title: "Remove this opponent?",
+      body: `${project.label} will leave your opponent list. The folder stays on disk.`,
+      confirmLabel: "Remove",
+      cancelLabel: "Cancel",
+    });
+    if (!accepted) {
+      return;
+    }
+  }
+  const result = await host.config.opponentForget(project.path);
+  onChange(applyOpponentSourceConfig(state, result?.data || result || {}));
 }
 
 export async function startServerFromApi(state, onChange, host, dialogs) {
@@ -548,7 +579,6 @@ export function renderGameControls(parent, {
     (id) => dispatchSettings(state, onChange, host, { type: "set-speed", speed: id }),
     settingsLocked,
   ));
-  prep.body.append(opponentSourceBlock(state, onChange, host, dialogs, settingsLocked));
   prep.body.append(choiceBlock(
     "Opponent mode",
     OPPONENTS,
@@ -556,6 +586,7 @@ export function renderGameControls(parent, {
     (id) => dispatchSettings(state, onChange, host, { type: "set-opponent", opponent: id }),
     opponentModeLocked,
   ));
+  prep.body.append(opponentSourceBlock(state, onChange, host, dialogs, settingsLocked));
   root.append(prep.group);
 
   parent.append(root);
@@ -731,39 +762,66 @@ function opponentSourceBlock(state, onChange, host, dialogs, disabled = false) {
   const title = document.createElement("div");
   title.className = "game-ctrl-section-title";
   title.append(heading("Opponent source"));
-  const row = document.createElement("div");
-  row.className = "action_block start_stop_buttons game-ctrl-section game-ctrl-opponent-source";
+  const list = document.createElement("div");
+  list.className = "action_block game-ctrl-section game-ctrl-opponent-source";
   const level1Selected = state.opponentSource !== "local";
-  row.append(controlButton({
+  list.append(opponentSourceRow({
     title: "Level-1",
-    text: "Level-1",
+    label: "Level-1",
     pressed: level1Selected,
     disabled,
-    onClick: () => {
+    onSelect: () => {
       void selectOpponentSource(state, onChange, host, dialogs, "level1");
     },
   }));
   for (const project of state.opponentProjects || []) {
     const selected = state.opponentSource === "local"
       && state.opponentProjectPath === project.path;
-    row.append(controlButton({
+    list.append(opponentSourceRow({
       title: project.label,
-      text: project.label,
+      label: project.label,
       pressed: selected,
       disabled,
-      onClick: () => {
+      onSelect: () => {
         void selectOpponentSource(state, onChange, host, dialogs, "local", project.path);
+      },
+      onRemove: () => {
+        void removeOpponentProject(state, onChange, host, dialogs, project);
       },
     }));
   }
-  row.append(controlButton({
+  list.append(controlButton({
     title: "Add opponent project",
     text: "Add…",
+    className: "game-ctrl-opponent-add",
     disabled,
     onClick: () => {
       void addOpponentFolder(state, onChange, host, dialogs);
     },
   }));
-  wrap.append(title, row);
+  wrap.append(title, list);
   return wrap;
+}
+
+function opponentSourceRow({ title, label, pressed, disabled, onSelect, onRemove }) {
+  const row = document.createElement("div");
+  row.className = "game-ctrl-opponent-row";
+  row.append(controlButton({
+    title,
+    text: label,
+    className: "game-ctrl-opponent-select",
+    pressed,
+    disabled,
+    onClick: onSelect,
+  }));
+  if (typeof onRemove === "function") {
+    row.append(controlButton({
+      title: `Remove ${label}`,
+      text: "×",
+      className: "game-ctrl-opponent-remove",
+      disabled,
+      onClick: onRemove,
+    }));
+  }
+  return row;
 }

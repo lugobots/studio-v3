@@ -122,6 +122,8 @@ test("server controls start posts current match settings payload", async () => {
       skip_to_golden_goal: true,
       game_speed: "slow",
       opponent_mode: "zombies",
+      player_team_name: "MyBots",
+      opponent_team_name: "Level-1",
     }),
     api: {
       startServer: async (settings) => {
@@ -143,6 +145,8 @@ test("server controls start posts current match settings payload", async () => {
     skip_to_golden_goal: true,
     game_speed: "slow",
     opponent_mode: "zombies",
+    player_team_name: "MyBots",
+    opponent_team_name: "Level-1",
   });
 
   const overridden = await controls.start({
@@ -158,6 +162,8 @@ test("server controls start posts current match settings payload", async () => {
     skip_to_golden_goal: false,
     game_speed: "fast",
     opponent_mode: "kids",
+    player_team_name: "MyBots",
+    opponent_team_name: "Level-1",
   });
 });
 

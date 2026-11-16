@@ -67,6 +67,9 @@ export function mountDialogs(documentRef, controller = dialogs, onAction) {
           input.className = "dialog-input";
           input.setAttribute("aria-label", blocking.title || "Value");
           input.value = typeof blocking.value === "string" ? blocking.value : "";
+          if (Number.isFinite(blocking.maxLength) && blocking.maxLength > 0) {
+            input.setAttribute("maxlength", String(blocking.maxLength));
+          }
           input.addEventListener("input", () => {
             blocking.value = input.value;
           });
