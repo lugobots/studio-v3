@@ -1,6 +1,6 @@
 import { AREAS, areaById } from "./model.js";
 import { createAreaIcon } from "./area-icons.js";
-import { applyAppearance, normalizeAppearance } from "../lib/appearance.js";
+import { applyAppearance } from "../lib/appearance.js";
 import { applyTelemetry } from "../lib/telemetry.js";
 import { reportResult } from "../lib/dialogs.js";
 import { navigate } from "../lib/router.js";
@@ -17,6 +17,7 @@ import { gameFrontendUrl } from "./game-frontend.js";
 import { editorUrl } from "./editor-url.js";
 import { markStartProjectFromShell } from "../lib/start-project-entry.js";
 import { renderRailBotCombobox, switchBotProject } from "./settings-bot-projects.js";
+import { renderSettingsPage } from "./settings-page.js";
 import {
   DEFAULT_HORIZONTAL,
   DEFAULT_LOGS,
@@ -598,63 +599,11 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     });
   }
 
-  function paintSettingsLateral(config) {
+  function paintSettingsLateral() {
+    // Settings controls live in the main pane; keep the lateral empty and hidden.
     actions.setAttribute("aria-label", "Settings");
     actions.replaceChildren();
     pinned.replaceChildren();
-
-    const themeLabel = document.createElement("label");
-    themeLabel.className = "setting-row";
-    const themeSelect = document.createElement("select");
-    themeSelect.setAttribute("aria-label", "Appearance");
-    for (const value of ["dark", "light"]) {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = value === "dark" ? "Dark" : "Light";
-      themeSelect.append(option);
-    }
-    themeSelect.value = normalizeAppearance(config?.appearance);
-    themeSelect.addEventListener("change", async () => {
-      const appearance = normalizeAppearance(themeSelect.value);
-      state.config = await host.config.set({ appearance });
-      applyAppearance(document, state.config?.appearance ?? appearance);
-      paint();
-    });
-    themeLabel.append(document.createTextNode("Appearance "), themeSelect);
-
-    const label = document.createElement("label");
-    label.className = "setting-row";
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.checked = config ? config.telemetryEnabled !== false : true;
-    input.addEventListener("change", async () => {
-      state.config = await host.config.set({ telemetry_enabled: input.checked });
-      applyTelemetry(document, {
-        telemetryEnabled: state.config.telemetryEnabled,
-        measurementId: state.config.measurementId,
-      });
-    });
-    label.append(input, document.createTextNode(" Send usage data to Google Analytics"));
-
-    const debugLabel = document.createElement("label");
-    debugLabel.className = "setting-row";
-    const debugInput = document.createElement("input");
-    debugInput.type = "checkbox";
-    debugInput.setAttribute("aria-label", "Studio API debug logging");
-    debugInput.checked = apiDebugOn(config);
-    debugInput.addEventListener("change", async () => {
-      state.config = await host.config.set({ debug_mode: debugInput.checked });
-      await syncApiDebug(state.config);
-      if (debugInput.checked) {
-        processLogs.noteArmed("api");
-        processLogs.openDrawer("api");
-      } else {
-        processLogs.noteDisarmed("api");
-      }
-    });
-    debugLabel.append(debugInput, document.createTextNode(" Studio API debug logging"));
-
-    actions.append(themeLabel, label, debugLabel);
   }
 
   function paintPlaceholderLateral(area) {
@@ -677,18 +626,29 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     actions.append(note);
   }
 
+  function syncLateralVisibility() {
+    const hideLateral = state.area === "settings";
+    menu.hidden = hideLateral;
+    if (hideLateral) {
+      frame.setAttribute("data-lateral", "hidden");
+    } else {
+      frame.removeAttribute("data-lateral");
+    }
+  }
+
   function paintChrome() {
     paintRail();
     const area = areaById(state.area);
     if (area.id === "workspace") {
       paintWorkspaceLateral();
     } else if (area.id === "settings") {
-      paintSettingsLateral(state.config);
+      paintSettingsLateral();
     } else if (area.id === "profile") {
       paintProfileLateral();
     } else {
       paintPlaceholderLateral(area);
     }
+    syncLateralVisibility();
   }
 
   function paintWindow() {
@@ -696,7 +656,7 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     if (state.area === "profile") {
       windowPane.append(profileView(state.config));
     } else if (state.area === "settings") {
-      windowPane.append(settingsView());
+      windowPane.append(settingsView(state.config));
     } else if (state.area === "build" || state.area === "help") {
       windowPane.append(placeholderView(areaById(state.area)));
     } else {
@@ -786,16 +746,30 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     return section;
   }
 
-  function settingsView() {
-    const section = document.createElement("section");
-    section.setAttribute("data-window", "settings");
-    section.dataset.window = "settings";
-    const title = document.createElement("h1");
-    title.textContent = "Settings";
-    const body = document.createElement("p");
-    body.textContent = "Use the Settings menu to change appearance, telemetry, and API debug logging.";
-    section.append(title, body);
-    return section;
+  function settingsView(config) {
+    return renderSettingsPage(document, {
+      config,
+      host,
+      dialogs,
+      async onConfig(next) {
+        state.config = next;
+        applyAppearance(document, state.config?.appearance);
+        applyTelemetry(document, {
+          telemetryEnabled: state.config.telemetryEnabled,
+          measurementId: state.config.measurementId,
+        });
+        paintFooter();
+      },
+      async onApiDebugChange(enabled) {
+        await syncApiDebug(state.config);
+        if (enabled) {
+          processLogs.noteArmed("api");
+          processLogs.openDrawer("api");
+        } else {
+          processLogs.noteDisarmed("api");
+        }
+      },
+    });
   }
 
   function placeholderView(area) {

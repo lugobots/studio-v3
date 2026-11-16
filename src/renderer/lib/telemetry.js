@@ -4,6 +4,9 @@ export function shouldLoadTelemetry({ enabled, measurementId }) {
 
 export function applyTelemetry(documentRef, config) {
   const id = config.measurementId || "";
+  if (!documentRef || typeof documentRef.getElementById !== "function") {
+    return false;
+  }
   const script = documentRef.getElementById("studio-ga4");
   if (!shouldLoadTelemetry({ enabled: config.telemetryEnabled, measurementId: id })) {
     if (id) {

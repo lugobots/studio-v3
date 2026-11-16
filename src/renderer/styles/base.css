@@ -179,12 +179,20 @@ pre,
   height: 100%;
   max-width: none;
   display: block;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .shell-outlet {
   width: 100%;
   display: grid;
   place-items: center;
+}
+
+.shell-app .shell-outlet:has(.app-shell) {
+  display: block;
+  place-items: unset;
+  overflow: hidden;
 }
 
 .button {

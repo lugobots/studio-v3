@@ -5,6 +5,8 @@ const CHANNELS = {
     status: "docker:status",
     pull: "docker:pull",
     progress: "docker:progress",
+    ensureRef: "docker:ensure-ref",
+    ensureLevel1: "docker:ensure-level1",
     ensureEditor: "docker:ensure-editor",
     stopEditor: "docker:stop-editor",
     openInstallPage: "docker:open-install-page",

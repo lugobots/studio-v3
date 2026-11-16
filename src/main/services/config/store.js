@@ -76,14 +76,14 @@ const OPPONENT_SOURCE_DEFAULTS = {
   opponent_project_path: "",
 };
 
-/** Studio V1 defaults for runtime image settings (level-1 is consumed now; others reserved). */
+/** Built-in defaults for runtime image settings (level-1 is consumed now; others reserved). */
 const IMAGE_DEFAULTS = {
   game_server_image: "lugobots/server",
-  game_server_version: "v2",
+  game_server_version: "latest",
   bot_level_0_image: "lugobots/level-0",
   bot_level_0_version: "v2",
   bot_level_1_image: "lugobots/level-1",
-  bot_level_1_version: "v4",
+  bot_level_1_version: "latest",
   bot_setup_image: "lugobots/bot-setup",
   bot_setup_version: "latest",
 };

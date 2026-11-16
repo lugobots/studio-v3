@@ -283,9 +283,9 @@ test("unset user.json resolves runtime image settings to documented defaults", (
   assert.deepEqual(store.imageConfig({}), store.IMAGE_DEFAULTS);
   assert.deepEqual(store.imageConfig(undefined), store.IMAGE_DEFAULTS);
   assert.equal(store.IMAGE_DEFAULTS.bot_level_1_image, "lugobots/level-1");
-  assert.equal(store.IMAGE_DEFAULTS.bot_level_1_version, "v4");
+  assert.equal(store.IMAGE_DEFAULTS.bot_level_1_version, "latest");
   assert.equal(store.IMAGE_DEFAULTS.game_server_image, "lugobots/server");
-  assert.equal(store.IMAGE_DEFAULTS.game_server_version, "v2");
+  assert.equal(store.IMAGE_DEFAULTS.game_server_version, "latest");
   assert.equal(store.IMAGE_DEFAULTS.bot_level_0_image, "lugobots/level-0");
   assert.equal(store.IMAGE_DEFAULTS.bot_level_0_version, "v2");
   assert.equal(store.IMAGE_DEFAULTS.bot_setup_image, "lugobots/bot-setup");
@@ -345,6 +345,35 @@ test("existing Level-1 image keys are preserved on read and write", () => {
   assert.equal(saved.bot_level_1_version, "v99");
   assert.equal(saved.game_server_image, "lugobots/server");
   assert.equal(saved.bot_setup_image, "lugobots/bot-setup");
+});
+
+test("applyPatch round-trips game server and Level-1 image tags", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "studio-image-tags-"));
+  const file = store.settingsFile(dir, "linux");
+  store.write(file, { project_path: "/bots/demo" });
+  const base = store.read(file).data;
+  assert.equal(base.game_server_version, "latest");
+  assert.equal(base.bot_level_1_version, "latest");
+
+  const patched = store.applyPatch(base, {
+    game_server_version: "v9",
+    bot_level_1_version: "edge",
+  });
+  store.write(file, patched);
+  const saved = store.read(file).data;
+  assert.equal(saved.game_server_version, "v9");
+  assert.equal(saved.bot_level_1_version, "edge");
+  assert.equal(saved.game_server_image, "lugobots/server");
+  assert.equal(saved.bot_level_1_image, "lugobots/level-1");
+
+  const reset = store.applyPatch(saved, {
+    game_server_version: "latest",
+    bot_level_1_version: "latest",
+  });
+  store.write(file, reset);
+  const again = store.read(file).data;
+  assert.equal(again.game_server_version, "latest");
+  assert.equal(again.bot_level_1_version, "latest");
 });
 
 test("api debug preference round-trips in user.json and stays out of match settings", () => {

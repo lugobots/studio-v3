@@ -328,12 +328,21 @@ test("the shell shows the game panel, area rail, workspace image, and publish", 
   assert.equal(outlet.querySelector('button[title="Open editor"]'), null);
   assert.equal(labels().includes("Studio image"), false);
   assert.ok(outlet.querySelector(".app-status-version"));
+  assert.equal(outlet.querySelector(".side-menu").hidden, true);
+  assert.equal(outlet.querySelector(".app-frame").getAttribute("data-lateral"), "hidden");
+  assert.ok(outlet.querySelector(".settings-page"));
+  assert.ok(outlet.querySelector('[data-settings-section="appearance"]'));
+  assert.ok(outlet.querySelector('[data-settings-section="privacy"]'));
+  assert.ok(outlet.querySelector('[data-settings-section="diagnostics"]'));
+  assert.ok(outlet.querySelector('[data-settings-section="runtime-images"]'));
 
   outlet.querySelector('[data-area="workspace"]').click();
   assert.ok(outlet.querySelector(".game-ctrl"));
   assert.equal(labels().includes("Studio image"), false);
   assert.equal(outlet.querySelector('button[title="Open editor"]') !== null, true);
   assert.ok(outlet.querySelector(".app-status-version"));
+  assert.equal(outlet.querySelector(".side-menu").hidden, false);
+  assert.equal(outlet.querySelector(".app-frame").getAttribute("data-lateral"), null);
   assert.equal(started, 0);
   assert.equal(serverStarts, 1);
 
@@ -617,11 +626,9 @@ test("workspace loads match config from app settings into game controls", async 
       .getAttribute("aria-pressed"),
     "true",
   );
-  const positionSelect = outlet.querySelector(".game-ctrl select")
-    || outlet.querySelectorAll("select").find((node) => !String(node.className || "").includes("area-rail-bot-select"));
-  assert.ok(positionSelect);
-  const options = positionSelect.querySelectorAll("option").map((node) => node.textContent);
-  assert.deepEqual(options, ["corner", "kickoff"]);
+  // Positions live in the Live group, which is hidden while the game server is stopped.
+  assert.equal(outlet.querySelector(".game-ctrl-positions"), null);
+  assert.equal(matchGets, 1);
   installed.restore();
 });
 
@@ -792,7 +799,8 @@ test("icon rail shows bot combobox under Settings with current bot selected", as
   assert.ok(navigated.includes("/start-project"));
 
   outlet.querySelector('[data-area="settings"]').click();
-  assert.ok(outlet.querySelector('select[aria-label="Appearance"]'));
+  assert.ok(outlet.querySelector('.settings-page select[aria-label="Appearance"]'));
+  assert.equal(outlet.querySelector(".side-menu").hidden, true);
   assert.equal(outlet.querySelector(".tab-actions .area-rail-bot-project"), null);
   assert.equal(outlet.querySelector(".tab-actions .settings-bot-projects"), null);
 
@@ -864,9 +872,17 @@ test("settings API debug preference persists and arms only the api source", asyn
   assert.deepEqual(disarms, []);
 
   outlet.querySelector('[data-area="settings"]').click();
-  const box = outlet.querySelector('input[aria-label="Studio API debug logging"]');
+  const box = outlet.querySelector('.settings-page input[aria-label="Studio API debug logging"]');
   assert.ok(box);
   assert.equal(box.checked, false);
+  assert.equal(
+    outlet.querySelectorAll("label").some((node) => /Google Analytics/i.test(node.textContent)),
+    false,
+  );
+  assert.ok(outlet.querySelector(".settings-plea"));
+  assert.ok(outlet.querySelector('input[aria-label="Game server tag"]'));
+  assert.ok(outlet.querySelector('input[aria-label="Level-1 image tag"]'));
+  assert.ok(outlet.querySelector(".settings-page-version"));
 
   box.checked = true;
   await box.listeners.change[0]();
@@ -917,5 +933,132 @@ test("a saved API debug preference arms only the api source on load", async () =
   });
   await flushSettings();
   assert.deepEqual(arms, ["api"]);
+  installed.restore();
+});
+
+test("settings page groups controls, persists tags, and hides the lateral menu", async () => {
+  const installed = installDocument();
+  const outlet = installed.document.createElement("div");
+  const sets = [];
+  const notices = [];
+  const ensureRefs = [];
+  let saved = {
+    project_path: "/tmp/bot",
+    telemetryEnabled: true,
+    appearance: "dark",
+    apiVersion: "dev",
+    game_server_image: "lugobots/server",
+    game_server_version: "latest",
+    bot_level_1_image: "lugobots/level-1",
+    bot_level_1_version: "latest",
+    game_frontend_url: "http://localhost:8080",
+    editor_url: "http://localhost:8082",
+    workspace_editor_open: false,
+    workspaceEditorOpen: false,
+  };
+  const host = {
+    config: {
+      async get() {
+        return { ...saved };
+      },
+      async set(patch) {
+        sets.push(patch);
+        saved = {
+          ...saved,
+          ...patch,
+          telemetryEnabled:
+            patch.telemetry_enabled === undefined
+              ? saved.telemetryEnabled
+              : patch.telemetry_enabled !== false,
+        };
+        return { ...saved };
+      },
+      async matchGet() {
+        return { team_side: "home", game_speed: "normal", opponent_team: "default" };
+      },
+    },
+    docker: {
+      async ensureRef(ref) {
+        ensureRefs.push(ref);
+        return { ok: true, ref, present: true, pulled: false };
+      },
+      async ensureLevel1() {
+        return { ok: true, ref: "lugobots/level-1:latest", pulled: true };
+      },
+    },
+    server: {
+      async status() {
+        return { ok: true, running: false };
+      },
+    },
+  };
+  renderAppFrame(outlet, {
+    host,
+    dialogs: {
+      notify(payload) {
+        notices.push(payload);
+      },
+      confirm() {
+        return Promise.resolve(false);
+      },
+    },
+  });
+  await flushSettings();
+
+  outlet.querySelector('[data-area="settings"]').click();
+  assert.equal(outlet.querySelector(".side-menu").hidden, true);
+  assert.equal(outlet.querySelector(".settings-page-version").textContent, "dev");
+  assert.equal(outlet.querySelector('[data-window="settings"] .game-ctrl'), null);
+  assert.ok(outlet.querySelector(".settings-section"));
+  assert.ok(outlet.querySelector(".settings-image-ref"));
+  assert.equal(
+    outlet.querySelector(".settings-image-ref .settings-image-name")?.textContent,
+    "lugobots/server",
+  );
+
+  const theme = outlet.querySelector('select[aria-label="Appearance"]');
+  theme.value = "light";
+  await theme.listeners.change[0]();
+  await flushSettings();
+  assert.deepEqual(sets[0], { appearance: "light" });
+
+  const telemetry = outlet.querySelector('input[aria-label="Send anonymous usage data"]');
+  telemetry.checked = false;
+  await telemetry.listeners.change[0]();
+  await flushSettings();
+  assert.deepEqual(sets[1], { telemetry_enabled: false });
+
+  const serverTag = outlet.querySelector('input[aria-label="Game server tag"]');
+  serverTag.value = "v9";
+  await serverTag.listeners.change[0]();
+  await flushSettings();
+  assert.deepEqual(sets[2], { game_server_version: "v9" });
+
+  const level1Tag = outlet.querySelector('input[aria-label="Level-1 image tag"]');
+  const resetLevel1 = outlet.querySelector('button[aria-label="Reset Level-1 image tag to default"]');
+  level1Tag.value = "custom";
+  await level1Tag.listeners.change[0]();
+  await flushSettings();
+  assert.deepEqual(sets[3], { bot_level_1_version: "custom" });
+  await resetLevel1.listeners.click[0]();
+  await flushSettings();
+  assert.deepEqual(sets[4], { bot_level_1_version: "latest" });
+  assert.equal(level1Tag.value, "latest");
+
+  const pullServer = outlet.querySelector('button[aria-label="Check or pull Game server tag"]');
+  assert.ok(pullServer);
+  await pullServer.listeners.click[0]();
+  await flushSettings();
+  assert.ok(ensureRefs.includes("lugobots/server:v9"));
+  assert.ok(notices.some((item) => /already available|Pulled/i.test(item.body || "")));
+
+  const pullLevel1 = outlet.querySelector('button[aria-label="Check or pull Level-1 image tag"]');
+  await pullLevel1.listeners.click[0]();
+  await flushSettings();
+  assert.ok(notices.some((item) => /Pulled lugobots\/level-1:latest/i.test(item.body || "")));
+
+  outlet.querySelector('[data-area="workspace"]').click();
+  assert.equal(outlet.querySelector(".side-menu").hidden, false);
+  assert.ok(outlet.querySelector(".game-ctrl"));
   installed.restore();
 });

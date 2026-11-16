@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld("studio", {
   docker: {
     status: () => ipcRenderer.invoke(CHANNELS.docker.status),
     pull: () => ipcRenderer.invoke(CHANNELS.docker.pull),
+    ensureRef: (ref) => ipcRenderer.invoke(CHANNELS.docker.ensureRef, ref),
+    ensureLevel1: () => ipcRenderer.invoke(CHANNELS.docker.ensureLevel1),
     ensureEditor: () => ipcRenderer.invoke(CHANNELS.docker.ensureEditor),
     stopEditor: () => ipcRenderer.invoke(CHANNELS.docker.stopEditor),
     openInstallPage: () => ipcRenderer.invoke(CHANNELS.docker.openInstallPage),

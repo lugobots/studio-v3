@@ -46,6 +46,20 @@ export interface StudioApi {
   docker: {
     status: () => Promise<DockerStatus>;
     pull: () => Promise<DockerStatus>;
+    ensureRef: (ref: string) => Promise<{
+      ok: boolean;
+      ref?: string;
+      present?: boolean;
+      pulled?: boolean;
+      error?: string;
+    }>;
+    ensureLevel1: () => Promise<{
+      ok: boolean;
+      ref?: string;
+      pulled?: boolean;
+      cached?: boolean;
+      error?: string;
+    }>;
     ensureEditor: () => Promise<{ ok: boolean; url?: string; error?: string }>;
     stopEditor: () => Promise<{ ok: boolean; error?: string }>;
     openInstallPage: () => Promise<{ ok: boolean; error?: string }>;

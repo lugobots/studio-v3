@@ -106,6 +106,36 @@ async function ensureImage() {
 }
 
 /**
+ * Inspect a Docker image:tag and pull it when missing locally.
+ * @param {string} ref
+ * @returns {Promise<{ok:boolean,ref?:string,present?:boolean,pulled?:boolean,error?:string}>}
+ */
+async function ensureRef(ref) {
+  const imageRef = typeof ref === "string" ? ref.trim() : "";
+  if (!imageRef || !imageRef.includes(":") || imageRef.endsWith(":")) {
+    return { ok: false, error: "Image reference must look like name:tag." };
+  }
+  const info = await exec("docker", ["info"], 5000);
+  if (!info.ok) {
+    return { ok: false, ref: imageRef, error: "Docker is not running." };
+  }
+  const inspected = await exec("docker", ["image", "inspect", imageRef], 15000);
+  if (inspected.ok) {
+    return { ok: true, ref: imageRef, present: true, pulled: false };
+  }
+  const pulled = await exec("docker", ["pull", imageRef], 600000);
+  if (!pulled.ok) {
+    const detail = (pulled.stderr || pulled.stdout || "pull failed").trim();
+    return {
+      ok: false,
+      ref: imageRef,
+      error: `Could not pull ${imageRef}: ${detail}`,
+    };
+  }
+  return { ok: true, ref: imageRef, present: true, pulled: true };
+}
+
+/**
  * Pull (if needed) and extract the Level-1 opponent binary into the host cache.
  * Session kicks this after the Docker gate (background) and awaits it before
  * match start / API container start.
@@ -383,6 +413,7 @@ module.exports = {
   getStatus,
   startPull,
   ensureImage,
+  ensureRef,
   ensureLevel1,
   containerIsRunning,
   containerMatchesExpected,
