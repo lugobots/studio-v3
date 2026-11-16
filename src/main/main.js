@@ -9,18 +9,18 @@ const updater = require("./services/updater");
 
 registerContainerCleanupOnQuit(app, () => docker.stopContainer());
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   registerIpc();
-  const win = createAppWindow();
+  const win = await createAppWindow();
   notifications.attach(win.webContents);
   docker.attach(win.webContents);
   session.attach(win.webContents);
   updater.watch(win);
 
-  app.on("activate", () => {
+  app.on("activate", async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      const next = createAppWindow();
+      const next = await createAppWindow();
       notifications.attach(next.webContents);
       docker.attach(next.webContents);
       session.attach(next.webContents);

@@ -158,7 +158,9 @@ test("loading screen shows startup progress on the waiting robot", () => {
   const image = page.children.find((child) => child.tag === "img");
   const track = page.children.find((child) => child.attributes?.role === "progressbar");
   const copy = allTexts(page);
-  assert.equal(page.style.backgroundColor, "rgb(144, 204, 199)");
+  assert.equal(page.className, "api-gate");
+  assert.equal(page.style.backgroundColor || "", "");
+  assert.doesNotMatch(String(page.style.backgroundColor || ""), /144,\s*204,\s*199/);
   assert.ok(copy.includes("Checking Docker"));
   assert.ok(copy.includes("12%"));
   assert.ok(copy.includes("Waiting for the Studio API"));
@@ -175,7 +177,9 @@ test("error screen shows the failure and the broken robot", () => {
   renderApiError(outlet, documentStub());
   const page = outlet.children[0];
   const image = page.children.find((child) => child.tag === "img");
-  assert.equal(page.style.backgroundColor, "rgb(144, 204, 199)");
+  assert.equal(page.className, "api-gate");
+  assert.equal(page.style.backgroundColor || "", "");
+  assert.doesNotMatch(String(page.style.backgroundColor || ""), /144,\s*204,\s*199/);
   assert.deepEqual(texts(page), ["The Studio API container is not running."]);
   assert.match(image.src, /error-robot\.png$/);
   assert.ok(fs.existsSync(new URL("../src/renderer/assets/error-robot.png", import.meta.url)));

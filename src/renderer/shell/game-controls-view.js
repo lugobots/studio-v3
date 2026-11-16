@@ -1,4 +1,6 @@
 import { reportResult } from "../lib/dialogs.js";
+
+/* FOLLOW-UP: migrate hard-coded control icon colors to style-guide semantic tokens. */
 import { createGameControlIcon } from "./game-control-icons.js";
 import {
   activeBotSlots,

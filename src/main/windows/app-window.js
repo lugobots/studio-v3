@@ -1,10 +1,23 @@
 const { BrowserWindow, screen } = require("electron");
 const path = require("node:path");
+const config = require("../services/config");
 
 const iconPath = path.join(__dirname, "../../../resources/favicon.png");
 
-function createAppWindow() {
+/** Match style-guide --bg-base for the active appearance (dark default). */
+function backgroundForAppearance(appearance) {
+  return appearance === "light" ? "#F4F7F5" : "#0F1412";
+}
+
+async function createAppWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  let appearance = "dark";
+  try {
+    const saved = await config.get();
+    appearance = saved?.appearance === "light" ? "light" : "dark";
+  } catch {
+    appearance = "dark";
+  }
   const win = new BrowserWindow({
     width,
     height,
@@ -13,6 +26,7 @@ function createAppWindow() {
     icon: iconPath,
     show: false,
     autoHideMenuBar: true,
+    backgroundColor: backgroundForAppearance(appearance),
     webPreferences: {
       preload: path.join(__dirname, "../../preload/preload.js"),
       contextIsolation: true,

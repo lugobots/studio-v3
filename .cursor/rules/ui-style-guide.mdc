@@ -1,0 +1,20 @@
+---
+description: Studio V3 UI must follow the canonical style guide
+globs:
+  - src/renderer/**/*
+  - docs/lugo-studio-v3-style-guide.md
+  - docs/lugo-studio-v3-style-sample.html
+alwaysApply: false
+---
+
+# Studio V3 UI style guide
+
+Before creating or changing Studio UI (renderer HTML/CSS/JS, shared chrome, gates, forms, dialogs, notices):
+
+1. Read and follow [`docs/lugo-studio-v3-style-guide.md`](docs/lugo-studio-v3-style-guide.md).
+2. Use semantic CSS custom properties only (`--bg-base`, `--primary`, …). Never hard-code palette hex/rgb in components (including legacy teal `rgb(144, 204, 199)`).
+3. Keep `data-palette="default"` / `data-theme` architecture; do not invent a second visual system for loading or error screens.
+4. Match form, dialog, button, notice, and gate recipes in the guide (sentence case; Cancel left / Confirm right; one primary per view).
+5. Bundle fonts with the app; do not load Inter or JetBrains Mono from a CDN in production.
+
+Embedded match viewer and VS Code chrome are exempt from Studio tokens inside the embed.

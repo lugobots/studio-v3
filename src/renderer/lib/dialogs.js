@@ -81,7 +81,7 @@ export function mountDialogs(documentRef, controller = dialogs, onAction) {
         }
         const actions = documentRef.createElement("div");
         actions.className = "dialog-actions";
-        const cancel = button(blocking.cancelLabel, "button");
+        const cancel = button(blocking.cancelLabel, "button button-secondary");
         cancel.addEventListener("click", () => controller.answer(false));
         const confirm = button(blocking.confirmLabel, "button button-primary");
         confirm.addEventListener("click", () => {

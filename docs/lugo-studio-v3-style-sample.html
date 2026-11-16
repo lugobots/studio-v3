@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en" data-palette="default" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lugo Studio V3 — style sample</title>
+    <style>
+      :root[data-palette="default"][data-theme="dark"] {
+        color-scheme: dark;
+        --bg-base: #0f1412;
+        --bg-surface: #161c1a;
+        --bg-elevated: #1e2623;
+        --bg-hover: #26302c;
+        --bg-selected: #1f3a2c;
+        --border: #2a3430;
+        --border-strong: #3b4843;
+        --text: #e6edea;
+        --text-2: #9aa8a2;
+        --text-disabled: #5f6b66;
+        --primary: #34d27b;
+        --primary-hover: #5be39a;
+        --primary-active: #26b666;
+        --on-primary: #06140d;
+        --info: #60a5fa;
+        --success: #4ade80;
+        --warning: #fbbf24;
+        --error: #f87171;
+        --focus: #60a5fa;
+      }
+      :root[data-palette="default"][data-theme="light"] {
+        color-scheme: light;
+        --bg-base: #f4f7f5;
+        --bg-surface: #ffffff;
+        --bg-elevated: #ffffff;
+        --bg-hover: #e8eeeb;
+        --bg-selected: #dcefe3;
+        --border: #d5ddd9;
+        --border-strong: #b6c2bc;
+        --text: #14201b;
+        --text-2: #4f5f58;
+        --text-disabled: #94a39c;
+        --primary: #15803d;
+        --primary-hover: #166534;
+        --primary-active: #14532d;
+        --on-primary: #ffffff;
+        --info: #1d4ed8;
+        --success: #15803d;
+        --warning: #b45309;
+        --error: #b91c1c;
+        --focus: #1d4ed8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font: 400 13px/1.45 Inter, system-ui, "Segoe UI", sans-serif;
+        background: var(--bg-base);
+        color: var(--text);
+      }
+      main {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+        display: grid;
+        gap: 32px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 20px;
+        font-weight: 600;
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      p,
+      .muted {
+        margin: 0;
+        color: var(--text-2);
+        font-size: 12px;
+      }
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .panel {
+        padding: 16px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg-surface);
+      }
+      .button {
+        appearance: none;
+        font: 500 13px/1 Inter, system-ui, "Segoe UI", sans-serif;
+        border-radius: 4px;
+        padding: 8px 14px;
+        cursor: default;
+        border: 1px solid transparent;
+        transition: color 160ms ease-out, background 160ms ease-out, border-color 160ms ease-out;
+      }
+      .button:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 1px;
+      }
+      .button-primary {
+        background: var(--primary);
+        color: var(--on-primary);
+      }
+      .button-primary:hover {
+        background: var(--primary-hover);
+      }
+      .button-primary:active {
+        background: var(--primary-active);
+      }
+      .button-secondary {
+        background: transparent;
+        border-color: var(--border-strong);
+        color: var(--text);
+      }
+      .button-destructive {
+        background: transparent;
+        border-color: var(--error);
+        color: var(--error);
+      }
+      .button:disabled {
+        background: transparent;
+        border-color: var(--border);
+        color: var(--text-disabled);
+      }
+      label.field {
+        display: grid;
+        gap: 4px;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-2);
+      }
+      input,
+      select {
+        font: 400 14px/1.3 Inter, system-ui, "Segoe UI", sans-serif;
+        padding: 8px 10px;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        background: var(--bg-surface);
+        color: var(--text);
+      }
+      input::placeholder {
+        color: var(--text-disabled);
+      }
+      input:focus-visible,
+      select:focus-visible {
+        outline: 2px solid var(--focus);
+        outline-offset: 1px;
+      }
+      .field-error {
+        color: var(--error);
+        font-size: 12px;
+      }
+      .dialog {
+        padding: 16px;
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        background: var(--bg-elevated);
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+        max-width: 360px;
+      }
+      .dialog h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 16px;
+      }
+      .notice {
+        position: relative;
+        overflow: hidden;
+        max-width: 360px;
+        padding: 16px 16px 20px;
+        border: 1px solid var(--warning);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--warning) 15%, transparent);
+        color: var(--warning);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+      }
+      .notice-bar {
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        height: 4px;
+        width: 100%;
+        background: var(--warning);
+        transform-origin: left center;
+        animation: countdown 5s linear infinite;
+      }
+      @keyframes countdown {
+        from {
+          transform: scaleX(1);
+        }
+        to {
+          transform: scaleX(0);
+        }
+      }
+      .gate {
+        min-height: 220px;
+        display: grid;
+        place-content: center;
+        gap: 8px;
+        text-align: center;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg-base);
+        padding: 24px;
+      }
+      .gate strong {
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .track {
+        width: min(320px, 80vw);
+        height: 10px;
+        margin: 8px auto 0;
+        border-radius: 999px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        overflow: hidden;
+      }
+      .fill {
+        width: 42%;
+        height: 100%;
+        background: var(--primary);
+      }
+      .swatches {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 8px;
+      }
+      .swatch {
+        padding: 12px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        font-size: 11px;
+      }
+      code {
+        font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+        font-size: 12px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .notice-bar,
+        .button {
+          animation: none;
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Lugo Studio V3 style sample</h1>
+        <p class="muted">
+          Default palette (<code>data-palette="default"</code>). Toggle appearance only — no palette picker.
+        </p>
+        <div class="toolbar" style="margin-top: 12px">
+          <button type="button" class="button button-secondary" id="theme-toggle">Toggle dark / light</button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <h2>Buttons</h2>
+        <div class="toolbar">
+          <button type="button" class="button button-primary">Save changes</button>
+          <button type="button" class="button button-secondary">Cancel</button>
+          <button type="button" class="button button-destructive">Delete bot</button>
+          <button type="button" class="button" disabled>Unavailable</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Form</h2>
+        <div style="display: grid; gap: 16px; max-width: 360px">
+          <label class="field">
+            Bot name
+            <input type="text" placeholder="My first bot" />
+            <span class="muted">Shown in the bot list.</span>
+          </label>
+          <label class="field">
+            Template
+            <select>
+              <option>Go</option>
+              <option>Python</option>
+            </select>
+            <span class="field-error">Pick a supported template.</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Dialog</h2>
+        <div class="dialog">
+          <h3>Stop the game server?</h3>
+          <p class="muted">Running bots will disconnect until you start the server again.</p>
+          <div class="dialog-actions">
+            <button type="button" class="button button-secondary">Cancel</button>
+            <button type="button" class="button button-primary">Stop server</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Notice</h2>
+        <div class="notice">
+          <strong>Match started</strong>
+          <p style="margin-top: 4px; color: inherit">The match is running.</p>
+          <span class="notice-bar" aria-hidden="true"></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Full-screen gate (sample)</h2>
+        <div class="gate">
+          <strong>Starting Studio</strong>
+          <p class="muted">Waiting for the Studio API</p>
+          <div class="track"><div class="fill"></div></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Surfaces</h2>
+        <div class="swatches">
+          <div class="swatch" style="background: var(--bg-base)">--bg-base</div>
+          <div class="swatch" style="background: var(--bg-surface)">--bg-surface</div>
+          <div class="swatch" style="background: var(--bg-elevated)">--bg-elevated</div>
+          <div class="swatch" style="background: var(--bg-selected)">--bg-selected</div>
+          <div class="swatch" style="background: var(--primary); color: var(--on-primary)">--primary</div>
+          <div class="swatch" style="background: color-mix(in srgb, var(--error) 15%, transparent); color: var(--error)">
+            --error chip
+          </div>
+        </div>
+      </section>
+    </main>
+    <script>
+      document.getElementById("theme-toggle").addEventListener("click", () => {
+        const root = document.documentElement;
+        const next = root.getAttribute("data-theme") === "light" ? "dark" : "light";
+        root.setAttribute("data-theme", next);
+      });
+    </script>
+  </body>
+</html>

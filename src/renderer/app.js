@@ -1,6 +1,7 @@
 import { mountDialogs, dialogs } from "./lib/dialogs.js";
 import { getHost } from "./lib/api.js";
 import { registerRoute, startRouter, navigate } from "./lib/router.js";
+import { applyAppearance, readCachedAppearance } from "./lib/appearance.js";
 import { applyTelemetry } from "./lib/telemetry.js";
 import { offerUpgrade } from "./lib/upgrade-flow.js";
 import { renderLoading } from "./pages/loading/index.js";
@@ -12,6 +13,8 @@ import { renderApiLoading } from "./pages/api-loading/index.js";
 import { noteStartupProgress } from "./components/startup-screen.js";
 import { renderApiError } from "./pages/api-error/index.js";
 import { setGateMessage } from "./lib/gate-message.js";
+
+applyAppearance(document, readCachedAppearance());
 
 registerRoute("/loading", renderLoading);
 registerRoute("/docker-check", renderDockerCheck);
@@ -89,5 +92,6 @@ host.startup.next().then(async (next) => {
   setGateMessage(next.message);
   navigate(next.route || "/loading");
   const config = await host.config.get();
+  applyAppearance(document, config?.appearance);
   applyTelemetry(document, config);
 });

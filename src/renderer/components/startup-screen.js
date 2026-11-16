@@ -1,6 +1,5 @@
 import { getHost } from "../lib/api.js";
 
-const BACKGROUND = "rgb(144, 204, 199)";
 const WAITING_IMAGE = "./assets/waiting-robot.png";
 
 const INITIAL = {
@@ -42,7 +41,6 @@ function renderStep(doc, step) {
 export function renderStartupScreen(outlet, doc = globalThis.document) {
   const page = doc.createElement("section");
   page.className = "api-gate";
-  page.style.backgroundColor = BACKGROUND;
 
   const image = doc.createElement("img");
   image.className = "api-gate-hero";

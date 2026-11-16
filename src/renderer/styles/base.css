@@ -1,49 +1,141 @@
-:root,
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #101114;
-  --panel: #181a1f;
-  --text: #f4f5f7;
-  --muted: #9aa1ad;
-  --accent: #7c8cff;
-  --border: #2a2e37;
-  --surface: #12141a;
-  --menu: #14161c;
-  --hero-glow: #23263a;
-  --canvas: #0b0d12;
-  --control: #1b2530;
-  --control-deep: #111923;
-  --control-border: #324150;
-  --control-hover: #162232;
-  --control-hover-border: #5f7388;
-  --log-chip: #1a2030;
-  --log-chip-active: #243044;
-  --log-chip-border: #3a4150;
-  --log-source: #93c5fd;
-  font-family: "Segoe UI", system-ui, sans-serif;
+/* Bundled fonts — do not load from a CDN in production. */
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/inter-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../assets/fonts/inter-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: Inter;
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../assets/fonts/inter-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../assets/fonts/jetbrains-mono-latin-500-normal.woff2") format("woff2");
 }
 
-:root[data-theme="light"] {
+/*
+  Palette: default (pitch green). Semantic token names stay stable so a future
+  palette can add another data-palette="<id>" block with the same names.
+*/
+:root[data-palette="default"][data-theme="dark"],
+:root[data-palette="default"]:not([data-theme]),
+:root:not([data-palette]):not([data-theme]),
+:root:not([data-palette])[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-base: #0f1412;
+  --bg-surface: #161c1a;
+  --bg-elevated: #1e2623;
+  --bg-hover: #26302c;
+  --bg-selected: #1f3a2c;
+  --border: #2a3430;
+  --border-strong: #3b4843;
+  --text: #e6edea;
+  --text-2: #9aa8a2;
+  --text-disabled: #5f6b66;
+  --primary: #34d27b;
+  --primary-hover: #5be39a;
+  --primary-active: #26b666;
+  --on-primary: #06140d;
+  --info: #60a5fa;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --focus: #60a5fa;
+  --team-home: #3b82f6;
+  --team-away: #fb923c;
+  --ball: #fafafa;
+  --pitch: #14532d;
+  --pitch-lines: rgba(230, 237, 234, 0.7);
+  --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.45);
+
+  /* Temporary aliases while pages migrate off the old vocabulary. */
+  --bg: var(--bg-base);
+  --panel: var(--bg-elevated);
+  --muted: var(--text-2);
+  --accent: var(--primary);
+  --surface: var(--bg-surface);
+  --menu: var(--bg-surface);
+  --hero-glow: color-mix(in srgb, var(--primary) 18%, transparent);
+  --canvas: var(--bg-base);
+  --control: var(--bg-surface);
+  --control-deep: var(--bg-base);
+  --control-border: var(--border-strong);
+  --control-hover: var(--bg-hover);
+  --control-hover-border: var(--border-strong);
+  --log-chip: var(--bg-hover);
+  --log-chip-active: var(--bg-selected);
+  --log-chip-border: var(--border-strong);
+  --log-source: var(--info);
+}
+
+:root[data-palette="default"][data-theme="light"],
+:root:not([data-palette])[data-theme="light"] {
   color-scheme: light;
-  --bg: #f3f4f7;
-  --panel: #ffffff;
-  --text: #1a1d24;
-  --muted: #5c6472;
-  --accent: #3d52d5;
-  --border: #d5dae3;
-  --surface: #eef0f4;
-  --menu: #eceff4;
-  --hero-glow: #c9d2ef;
-  --canvas: #e4e8ef;
-  --control: #ffffff;
-  --control-deep: #e8ecf3;
-  --control-border: #c5ccd8;
-  --control-hover: #dce2ec;
-  --control-hover-border: #9aa6b8;
-  --log-chip: #e8ecf3;
-  --log-chip-active: #d4dcf0;
-  --log-chip-border: #c5ccd8;
-  --log-source: #2f5fbf;
+  --bg-base: #f4f7f5;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-hover: #e8eeeb;
+  --bg-selected: #dcefe3;
+  --border: #d5ddd9;
+  --border-strong: #b6c2bc;
+  --text: #14201b;
+  --text-2: #4f5f58;
+  --text-disabled: #94a39c;
+  --primary: #15803d;
+  --primary-hover: #166534;
+  --primary-active: #14532d;
+  --on-primary: #ffffff;
+  --info: #1d4ed8;
+  --success: #15803d;
+  --warning: #b45309;
+  --error: #b91c1c;
+  --focus: #1d4ed8;
+  --team-home: #2563eb;
+  --team-away: #ea580c;
+  --ball: #fafafa;
+  --pitch: #2f9e5b;
+  --pitch-lines: rgba(255, 255, 255, 0.9);
+  --shadow-float: 0 12px 28px rgba(20, 32, 27, 0.16);
+
+  --bg: var(--bg-base);
+  --panel: var(--bg-elevated);
+  --muted: var(--text-2);
+  --accent: var(--primary);
+  --surface: var(--bg-surface);
+  --menu: var(--bg-surface);
+  --hero-glow: color-mix(in srgb, var(--primary) 14%, transparent);
+  --canvas: var(--bg-base);
+  --control: var(--bg-surface);
+  --control-deep: var(--bg-hover);
+  --control-border: var(--border-strong);
+  --control-hover: var(--bg-hover);
+  --control-hover-border: var(--border-strong);
+  --log-chip: var(--bg-hover);
+  --log-chip-active: var(--bg-selected);
+  --log-chip-border: var(--border-strong);
+  --log-source: var(--info);
 }
 
 * {
@@ -58,10 +150,20 @@ body {
 }
 
 body {
-  background:
-    radial-gradient(circle at top, var(--hero-glow) 0%, transparent 42%),
-    var(--bg);
+  font-family: Inter, system-ui, "Segoe UI", sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  background: var(--bg-base);
   color: var(--text);
+  user-select: none;
+}
+
+code,
+pre,
+.mono,
+.api-gate-logs,
+.log-line {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 
 .shell-gate {
@@ -87,15 +189,94 @@ body {
 
 .button {
   appearance: none;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 10px 16px;
-  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 8px 14px;
+  background: transparent;
   color: var(--text);
-  font: inherit;
-  cursor: pointer;
+  font: 500 13px/1.2 Inter, system-ui, "Segoe UI", sans-serif;
+  cursor: default;
+  transition:
+    color 160ms ease-out,
+    background 160ms ease-out,
+    border-color 160ms ease-out;
 }
 
 .button:hover {
-  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.button-primary {
+  background: var(--primary);
+  border-color: transparent;
+  color: var(--on-primary);
+}
+
+.button-primary:hover {
+  background: var(--primary-hover);
+}
+
+.button-primary:active {
+  background: var(--primary-active);
+}
+
+.button-secondary {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.button-destructive {
+  background: transparent;
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.button:disabled,
+.button[disabled] {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-disabled);
+}
+
+input,
+select,
+textarea,
+.dialog-input {
+  font: 400 14px/1.3 Inter, system-ui, "Segoe UI", sans-serif;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-disabled);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.dialog-input:focus-visible,
+button:focus-visible,
+.button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
