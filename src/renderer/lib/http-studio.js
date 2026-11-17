@@ -420,5 +420,19 @@ export function createHttpStudio({
         }
       },
     },
+    account: {
+      async status() {
+        return { signedIn: false, profile: null };
+      },
+      async signIn() {
+        return { ok: false, error: "Doorway sign-in requires the desktop app" };
+      },
+      async signOut() {
+        return { ok: true, signedIn: false, profile: null };
+      },
+      async profile() {
+        return { signedIn: false, profile: null };
+      },
+    },
   };
 }

@@ -18,6 +18,7 @@ import { editorUrl } from "./editor-url.js";
 import { markStartProjectFromShell } from "../lib/start-project-entry.js";
 import { renderRailBotCombobox, switchBotProject } from "./settings-bot-projects.js";
 import { renderSettingsPage } from "./settings-page.js";
+import { renderProfilePage } from "./profile-page.js";
 import {
   DEFAULT_HORIZONTAL,
   DEFAULT_LOGS,
@@ -96,6 +97,8 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     game: initialGameControls(),
     editor: { open: false, starting: false, ready: false, error: "" },
     update: null,
+    account: { signedIn: false, profile: null },
+    accountBusy: false,
     // auto: expand labels on hover; open/closed: pin permanently.
     rail: { mode: "auto", hovered: true },
   };
@@ -526,7 +529,21 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
       glyph.className = "area-rail-icon";
       glyph.setAttribute("aria-hidden", "true");
       glyph.setAttribute("data-area-icon", area.icon);
-      glyph.append(createAreaIcon(area.icon));
+      const avatarUrl =
+        area.id === "profile" && state.account?.signedIn
+          ? state.account?.profile?.avatarUrl
+          : null;
+      if (avatarUrl) {
+        glyph.className = "area-rail-icon area-rail-icon--avatar";
+        glyph.setAttribute("data-area-icon", "avatar");
+        const img = document.createElement("img");
+        img.className = "area-rail-avatar";
+        img.src = avatarUrl;
+        img.alt = "";
+        glyph.append(img);
+      } else {
+        glyph.append(createAreaIcon(area.icon));
+      }
       const label = document.createElement("span");
       label.className = "area-rail-label";
       label.textContent = area.label;
@@ -620,14 +637,10 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     actions.setAttribute("aria-label", "Profile");
     actions.replaceChildren();
     pinned.replaceChildren();
-    const note = document.createElement("p");
-    note.className = "area-placeholder-note";
-    note.textContent = "Account";
-    actions.append(note);
   }
 
   function syncLateralVisibility() {
-    const hideLateral = state.area === "settings";
+    const hideLateral = state.area === "settings" || state.area === "profile";
     menu.hidden = hideLateral;
     if (hideLateral) {
       frame.setAttribute("data-lateral", "hidden");
@@ -654,7 +667,7 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
   function paintWindow() {
     windowPane.replaceChildren();
     if (state.area === "profile") {
-      windowPane.append(profileView(state.config));
+      windowPane.append(profileView());
     } else if (state.area === "settings") {
       windowPane.append(settingsView(state.config));
     } else if (state.area === "build" || state.area === "help") {
@@ -732,18 +745,73 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     }
   }
 
-  function profileView(config) {
-    const section = document.createElement("section");
-    section.setAttribute("data-window", "profile");
-    section.dataset.window = "profile";
-    const title = document.createElement("h1");
-    title.textContent = "Profile";
-    const version = document.createElement("p");
-    version.textContent = `Version ${config?.appVersion || config?.app_version || "unknown"}`;
-    const install = document.createElement("p");
-    install.textContent = `Install ${config?.install_unique_id || "assigned on first save"}`;
-    section.append(title, version, install);
-    return section;
+  async function refreshAccountStatus() {
+    if (typeof host?.account?.status !== "function") {
+      state.account = { signedIn: false, profile: null };
+      return;
+    }
+    try {
+      const next = await host.account.status();
+      state.account = {
+        signedIn: Boolean(next?.signedIn),
+        profile: next?.profile || null,
+      };
+    } catch {
+      state.account = { signedIn: false, profile: null };
+    }
+  }
+
+  async function handleSignIn() {
+    if (typeof host?.account?.signIn !== "function" || state.accountBusy) {
+      return;
+    }
+    state.accountBusy = true;
+    paint();
+    try {
+      const result = await host.account.signIn();
+      if (result?.ok) {
+        state.account = {
+          signedIn: Boolean(result.signedIn),
+          profile: result.profile || null,
+        };
+      } else if (result?.error) {
+        await reportResult(dialogs, { ok: false, error: result.error });
+      }
+    } catch (error) {
+      await reportResult(dialogs, {
+        ok: false,
+        error: error?.message || "Sign in failed",
+      });
+    } finally {
+      state.accountBusy = false;
+      paint();
+    }
+  }
+
+  async function handleSignOut() {
+    if (typeof host?.account?.signOut !== "function" || state.accountBusy) {
+      return;
+    }
+    state.accountBusy = true;
+    paint();
+    try {
+      await host.account.signOut();
+    } catch {
+      // Local clear still happens in the main process; refresh status below.
+    } finally {
+      await refreshAccountStatus();
+      state.accountBusy = false;
+      paint();
+    }
+  }
+
+  function profileView() {
+    return renderProfilePage(document, {
+      account: state.account,
+      busy: state.accountBusy,
+      onSignIn: handleSignIn,
+      onSignOut: handleSignOut,
+    });
   }
 
   function settingsView(config) {
@@ -1026,7 +1094,14 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
       refreshMatchConfig(),
       refreshUpdateStatus(),
       restoreEditorPreference(),
+      refreshAccountStatus(),
     ]);
+    try {
+      // Refresh rail avatar / Profile after account status resolves.
+      paint();
+    } catch {
+      // Document may already be torn down (unit tests calling restore()).
+    }
   })();
   bindServerStatus();
   return shell;

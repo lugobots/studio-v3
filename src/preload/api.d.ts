@@ -103,6 +103,38 @@ export interface StudioApi {
   publish: {
     bot: (payload: { botUri: string; tag: string }) => Promise<{ ok: boolean; error?: string }>;
   };
+  account: {
+    status: () => Promise<{
+      signedIn: boolean;
+      profile?: {
+        id?: string;
+        name?: string;
+        username?: string;
+        avatarUrl?: string | null;
+      } | null;
+    }>;
+    signIn: () => Promise<{
+      ok: boolean;
+      signedIn?: boolean;
+      error?: string;
+      profile?: {
+        id?: string;
+        name?: string;
+        username?: string;
+        avatarUrl?: string | null;
+      } | null;
+    }>;
+    signOut: () => Promise<{ ok: boolean; signedIn: boolean; profile: null }>;
+    profile: () => Promise<{
+      signedIn: boolean;
+      profile?: {
+        id?: string;
+        name?: string;
+        username?: string;
+        avatarUrl?: string | null;
+      } | null;
+    }>;
+  };
 }
 
 declare global {
