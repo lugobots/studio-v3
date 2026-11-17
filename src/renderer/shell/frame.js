@@ -99,6 +99,7 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     update: null,
     account: { signedIn: false, profile: null },
     accountBusy: false,
+    bots: { status: "idle", items: [], error: null },
     // auto: expand labels on hover; open/closed: pin permanently.
     rail: { mode: "auto", hovered: true },
   };
@@ -488,6 +489,9 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
       state.rail.hovered = true;
     }
     paint();
+    if (state.area === "profile" && state.account?.signedIn) {
+      void refreshBots();
+    }
   }
 
   function paintRail() {
@@ -748,6 +752,7 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
   async function refreshAccountStatus() {
     if (typeof host?.account?.status !== "function") {
       state.account = { signedIn: false, profile: null };
+      state.bots = { status: "idle", items: [], error: null };
       return;
     }
     try {
@@ -756,8 +761,57 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
         signedIn: Boolean(next?.signedIn),
         profile: next?.profile || null,
       };
+      if (!state.account.signedIn) {
+        state.bots = { status: "idle", items: [], error: null };
+      }
     } catch {
       state.account = { signedIn: false, profile: null };
+      state.bots = { status: "idle", items: [], error: null };
+    }
+  }
+
+  async function refreshBots() {
+    if (!state.account?.signedIn) {
+      state.bots = { status: "idle", items: [], error: null };
+      return;
+    }
+    if (typeof host?.account?.bots !== "function") {
+      state.bots = { status: "error", items: [], error: "unavailable" };
+      paint();
+      return;
+    }
+    state.bots = { status: "loading", items: state.bots.items || [], error: null };
+    paint();
+    try {
+      const result = await host.account.bots();
+      if (result?.ok) {
+        const items = Array.isArray(result.bots) ? result.bots : [];
+        state.bots = {
+          status: items.length > 0 ? "ready" : "empty",
+          items,
+          error: null,
+        };
+      } else {
+        state.bots = {
+          status: "error",
+          items: [],
+          error: result?.error || "bots_failed",
+        };
+      }
+    } catch (error) {
+      state.bots = {
+        status: "error",
+        items: [],
+        error: error?.message || "bots_failed",
+      };
+    }
+    paint();
+  }
+
+  async function handleOpenExternal(url) {
+    if (typeof host?.account?.openExternal === "function") {
+      await host.account.openExternal(url);
+      return;
     }
   }
 
@@ -774,6 +828,12 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
           signedIn: Boolean(result.signedIn),
           profile: result.profile || null,
         };
+        state.accountBusy = false;
+        paint();
+        if (state.account.signedIn) {
+          await refreshBots();
+          return;
+        }
       } else if (result?.error) {
         await reportResult(dialogs, { ok: false, error: result.error });
       }
@@ -800,6 +860,7 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
       // Local clear still happens in the main process; refresh status below.
     } finally {
       await refreshAccountStatus();
+      state.bots = { status: "idle", items: [], error: null };
       state.accountBusy = false;
       paint();
     }
@@ -808,9 +869,11 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
   function profileView() {
     return renderProfilePage(document, {
       account: state.account,
+      bots: state.bots,
       busy: state.accountBusy,
       onSignIn: handleSignIn,
       onSignOut: handleSignOut,
+      onOpenExternal: handleOpenExternal,
     });
   }
 

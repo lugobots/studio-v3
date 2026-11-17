@@ -1090,6 +1090,24 @@ test("profile hides lateral and shows Doorway sign-in when signed out", async ()
       async signOut() {
         return { ok: true, signedIn: false, profile: null };
       },
+      async bots() {
+        return {
+          ok: true,
+          bots: [
+            {
+              name: "Ada Bot",
+              uri: "ada/bot",
+              avatarUrl: "https://example.test/bot.png",
+              category: "Sandbox",
+              pageUrl: "https://example.test/bots/ada/bot",
+              manageUrl: "https://example.test/bots/ada/bot",
+            },
+          ],
+        };
+      },
+      async openExternal() {
+        return { ok: true };
+      },
     },
     server: {
       async status() { return { ok: true, body: { running: false } }; },
@@ -1136,6 +1154,9 @@ test("profile hides lateral and shows Doorway sign-in when signed out", async ()
     "avatar",
   );
   assert.ok(outlet.querySelector('[data-area="profile"] .area-rail-avatar'));
+  assert.equal(outlet.querySelector(".profile-bot-name")?.textContent, "Ada Bot");
+  assert.equal(outlet.querySelector(".profile-bot-uri")?.textContent, "ada/bot");
+  assert.ok(outlet.querySelector(".profile-bot-link"));
 
   const logoutButton = outlet.querySelector('[data-profile-section="session"] .profile-action');
   await logoutButton.listeners.click[0]();

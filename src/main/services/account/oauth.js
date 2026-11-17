@@ -208,6 +208,57 @@ async function fetchMe({
   };
 }
 
+/**
+ * @returns {Promise<Array<{
+ *   name: string,
+ *   uri: string,
+ *   avatarUrl: string | null,
+ *   category: string,
+ *   pageUrl: string,
+ *   manageUrl: string,
+ *   badge?: string,
+ *   star?: true,
+ *   starTooltip?: string,
+ * }>>}
+ */
+async function fetchBots({
+  base,
+  accessToken,
+  fetchImpl = global.fetch,
+}) {
+  const response = await fetchImpl(`${base}/api/studio/bots`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.error || `bots_failed_${response.status}`);
+  }
+  const raw = Array.isArray(body.bots) ? body.bots : [];
+  return raw.map((bot) => {
+    const item = {
+      name: String(bot?.name || ""),
+      uri: String(bot?.uri || ""),
+      avatarUrl: normalizeAvatarUrl(bot?.avatar_url, base),
+      category: String(bot?.category || ""),
+      pageUrl: String(bot?.page_url || ""),
+      manageUrl: String(bot?.manage_url || ""),
+    };
+    if (typeof bot?.badge === "string" && bot.badge) {
+      item.badge = bot.badge;
+    }
+    if (bot?.star === true) {
+      item.star = true;
+      if (typeof bot?.star_tooltip === "string" && bot.star_tooltip) {
+        item.starTooltip = bot.star_tooltip;
+      }
+    }
+    return item;
+  });
+}
+
 function sessionFromTokenResponse(tokens, profile = null, now = Date.now()) {
   const expiresIn = Number(tokens.expires_in) || 3600;
   return {
@@ -230,6 +281,7 @@ module.exports = {
   refreshTokens,
   revokeToken,
   fetchMe,
+  fetchBots,
   sessionFromTokenResponse,
   createPkcePair,
   randomState,
