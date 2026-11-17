@@ -98,5 +98,7 @@ contextBridge.exposeInMainWorld("studio", {
     signIn: () => ipcRenderer.invoke(CHANNELS.account.signIn),
     signOut: () => ipcRenderer.invoke(CHANNELS.account.signOut),
     profile: () => ipcRenderer.invoke(CHANNELS.account.profile),
+    bots: () => ipcRenderer.invoke(CHANNELS.account.bots),
+    openExternal: (url) => ipcRenderer.invoke(CHANNELS.account.openExternal, url),
   },
 });

@@ -17,6 +17,7 @@ const {
   startCallbackServer,
   createTokenStore,
   doorwayBase,
+  fetchBots,
 } = require("../src/main/services/account");
 
 test("pkce pair produces S256 challenge", () => {
@@ -157,4 +158,55 @@ test("updater-style check-update URLs never include Authorization from account h
     verifier: "v".repeat(43),
     fetchImpl,
   });
+});
+
+test("fetchBots calls Studio bots API with Bearer and normalizes rows", async () => {
+  let seenAuth = null;
+  const fetchImpl = async (url, init) => {
+    assert.equal(url, "https://doorway.test/api/studio/bots");
+    seenAuth = init.headers.Authorization;
+    return {
+      ok: true,
+      async json() {
+        return {
+          bots: [
+            {
+              name: "Alpha",
+              uri: "me/alpha",
+              avatar_url: "/avatars/a.png",
+              category: "Sandbox",
+              page_url: "https://doorway.test/bots/me/alpha",
+              manage_url: "https://doorway.test/bots/me/alpha",
+              badge: "official",
+              star: true,
+              star_tooltip: "Tournament winner",
+            },
+            {
+              name: "Beta",
+              uri: "me/beta",
+              avatar_url: "https://cdn.example/b.png",
+              category: "Production",
+              page_url: "https://doorway.test/bots/me/beta",
+              manage_url: "https://doorway.test/bots/me/beta",
+            },
+          ],
+        };
+      },
+    };
+  };
+
+  const bots = await fetchBots({
+    base: "https://doorway.test",
+    accessToken: "tok",
+    fetchImpl,
+  });
+  assert.equal(seenAuth, "Bearer tok");
+  assert.equal(bots.length, 2);
+  assert.equal(bots[0].avatarUrl, "https://doorway.test/avatars/a.png");
+  assert.equal(bots[0].badge, "official");
+  assert.equal(bots[0].star, true);
+  assert.equal(bots[0].starTooltip, "Tournament winner");
+  assert.equal(bots[1].badge, undefined);
+  assert.equal(bots[1].star, undefined);
+  assert.equal(bots[1].avatarUrl, "https://cdn.example/b.png");
 });

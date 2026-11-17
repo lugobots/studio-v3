@@ -77,6 +77,8 @@ const CHANNELS = {
     signIn: "account:sign-in",
     signOut: "account:sign-out",
     profile: "account:profile",
+    bots: "account:bots",
+    openExternal: "account:open-external",
   },
 };
 

@@ -11,6 +11,7 @@ const {
   refreshTokens,
   revokeToken,
   fetchMe,
+  fetchBots,
   sessionFromTokenResponse,
   createPkcePair,
   randomState,
@@ -208,15 +209,48 @@ async function profile(fetchImpl = global.fetch) {
   return current;
 }
 
+async function bots(fetchImpl = global.fetch) {
+  const access = await ensureAccessToken(fetchImpl);
+  if (!access) {
+    return { ok: false, error: "not_signed_in", bots: [] };
+  }
+  try {
+    const items = await fetchBots({
+      base: doorwayBase(),
+      accessToken: access,
+      fetchImpl,
+    });
+    return { ok: true, bots: items };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error?.message || "bots_failed",
+      bots: [],
+    };
+  }
+}
+
+async function openExternalUrl(url) {
+  if (typeof url !== "string" || !/^https?:\/\//i.test(url)) {
+    return { ok: false, error: "invalid_url" };
+  }
+  const { shell } = require("electron");
+  await shell.openExternal(url);
+  return { ok: true };
+}
+
 module.exports = {
   status,
   signIn,
   signOut,
   profile,
+  bots,
+  openExternalUrl,
   ensureAccessToken,
   doorwayBase,
   normalizeAvatarUrl,
   isAccessExpired,
+  fetchBots,
   _setStoreForTests,
   // re-export pure helpers for tests
   createPkcePair,
