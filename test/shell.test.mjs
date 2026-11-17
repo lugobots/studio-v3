@@ -1062,3 +1062,88 @@ test("settings page groups controls, persists tags, and hides the lateral menu",
   assert.ok(outlet.querySelector(".game-ctrl"));
   installed.restore();
 });
+
+test("profile hides lateral and shows Doorway sign-in when signed out", async () => {
+  const installed = installDocument();
+  const outlet = installed.document.createElement("div");
+  let signIns = 0;
+  const host = {
+    config: {
+      async get() {
+        return {
+          project_path: "/tmp/bot",
+          telemetryEnabled: false,
+          game_frontend_url: "http://localhost:8080",
+          editor_url: "http://localhost:8082",
+          workspace_editor_open: false,
+        };
+      },
+    },
+    account: {
+      async status() {
+        return { signedIn: false, profile: null };
+      },
+      async signIn() {
+        signIns += 1;
+        return { ok: true, signedIn: true, profile: { name: "Ada", username: "ada", avatarUrl: "https://example.test/a.png" } };
+      },
+      async signOut() {
+        return { ok: true, signedIn: false, profile: null };
+      },
+    },
+    server: {
+      async status() { return { ok: true, body: { running: false } }; },
+      onStatus() { return () => {}; },
+    },
+    match: { async start() { return { ok: true }; } },
+    docker: { async status() { return { imagePresent: true }; } },
+  };
+  renderAppFrame(outlet, {
+    host,
+    dialogs: { notify() {}, confirm() { return Promise.resolve(false); }, alert() { return Promise.resolve(); } },
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  async function flush() {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  outlet.querySelector('[data-area="profile"]').click();
+  assert.equal(outlet.querySelector(".side-menu").hidden, true);
+  assert.equal(outlet.querySelector(".app-frame").getAttribute("data-lateral"), "hidden");
+  assert.ok(outlet.querySelector(".profile-page"));
+  assert.ok(outlet.querySelector('[data-profile-section="sign-in"]'));
+  assert.equal(
+    outlet.querySelector('[data-area="profile"] .area-rail-icon').getAttribute("data-area-icon"),
+    "user",
+  );
+
+  const signInButton = outlet.querySelector(".profile-action--primary");
+  await signInButton.listeners.click[0]();
+  await flush();
+  assert.equal(signIns, 1);
+  assert.ok(outlet.querySelector('[data-profile-section="identity"]'));
+  assert.equal(outlet.querySelector(".profile-name").textContent, "Ada");
+  assert.equal(outlet.querySelector(".profile-username").textContent, "@ada");
+  assert.ok(outlet.querySelector('[data-profile-section="bots"]'));
+  assert.ok(outlet.querySelector('[data-profile-section="session"]'));
+  assert.equal(
+    outlet.querySelector('[data-area="profile"] .area-rail-icon').getAttribute("data-area-icon"),
+    "avatar",
+  );
+  assert.ok(outlet.querySelector('[data-area="profile"] .area-rail-avatar'));
+
+  const logoutButton = outlet.querySelector('[data-profile-section="session"] .profile-action');
+  await logoutButton.listeners.click[0]();
+  await flush();
+  assert.ok(outlet.querySelector('[data-profile-section="sign-in"]'));
+  assert.equal(
+    outlet.querySelector('[data-area="profile"] .area-rail-icon').getAttribute("data-area-icon"),
+    "user",
+  );
+  installed.restore();
+});

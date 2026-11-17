@@ -93,4 +93,10 @@ contextBridge.exposeInMainWorld("studio", {
   publish: {
     bot: (payload) => ipcRenderer.invoke(CHANNELS.publish.bot, payload),
   },
+  account: {
+    status: () => ipcRenderer.invoke(CHANNELS.account.status),
+    signIn: () => ipcRenderer.invoke(CHANNELS.account.signIn),
+    signOut: () => ipcRenderer.invoke(CHANNELS.account.signOut),
+    profile: () => ipcRenderer.invoke(CHANNELS.account.profile),
+  },
 });

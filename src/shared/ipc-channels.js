@@ -72,6 +72,12 @@ const CHANNELS = {
   publish: {
     bot: "publish:bot",
   },
+  account: {
+    status: "account:status",
+    signIn: "account:sign-in",
+    signOut: "account:sign-out",
+    profile: "account:profile",
+  },
 };
 
 module.exports = { CHANNELS };
