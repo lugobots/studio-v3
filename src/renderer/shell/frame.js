@@ -20,6 +20,12 @@ import { renderRailBotCombobox, switchBotProject } from "./settings-bot-projects
 import { renderSettingsPage } from "./settings-page.js";
 import { renderProfilePage } from "./profile-page.js";
 import {
+  renderBuildPage,
+  emptyBuildState,
+  imageRef,
+  buildBlockedReason,
+} from "./build-page.js";
+import {
   DEFAULT_HORIZONTAL,
   DEFAULT_LOGS,
   clampHorizontal,
@@ -100,6 +106,7 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     account: { signedIn: false, profile: null },
     accountBusy: false,
     bots: { status: "idle", items: [], error: null },
+    build: emptyBuildState(),
     // auto: expand labels on hover; open/closed: pin permanently.
     rail: { mode: "auto", hovered: true },
   };
@@ -492,6 +499,9 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     if (state.area === "profile" && state.account?.signedIn) {
       void refreshBots();
     }
+    if (state.area === "build") {
+      void enterBuildArea();
+    }
   }
 
   function paintRail() {
@@ -627,6 +637,21 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     pinned.replaceChildren();
   }
 
+  function paintBuildLateral(area) {
+    actions.setAttribute("aria-label", area.label);
+    actions.replaceChildren();
+    pinned.replaceChildren();
+    for (const action of area.actions) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "menu-item";
+      item.setAttribute("data-build-menu", action.id);
+      item.setAttribute("aria-current", "page");
+      item.textContent = action.label;
+      actions.append(item);
+    }
+  }
+
   function paintPlaceholderLateral(area) {
     actions.setAttribute("aria-label", area.label);
     actions.replaceChildren();
@@ -662,6 +687,8 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
       paintSettingsLateral();
     } else if (area.id === "profile") {
       paintProfileLateral();
+    } else if (area.id === "build") {
+      paintBuildLateral(area);
     } else {
       paintPlaceholderLateral(area);
     }
@@ -669,12 +696,18 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
   }
 
   function paintWindow() {
+    const refocusTag = state.area === "build" && buildTagFocused();
     windowPane.replaceChildren();
     if (state.area === "profile") {
       windowPane.append(profileView());
     } else if (state.area === "settings") {
       windowPane.append(settingsView(state.config));
-    } else if (state.area === "build" || state.area === "help") {
+    } else if (state.area === "build") {
+      windowPane.append(buildView());
+      if (refocusTag) {
+        restoreBuildTagFocus();
+      }
+    } else if (state.area === "help") {
       windowPane.append(placeholderView(areaById(state.area)));
     } else {
       windowPane.append(workspaceView(state.config));
@@ -753,6 +786,7 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     if (typeof host?.account?.status !== "function") {
       state.account = { signedIn: false, profile: null };
       state.bots = { status: "idle", items: [], error: null };
+      resetBuild();
       return;
     }
     try {
@@ -763,10 +797,12 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
       };
       if (!state.account.signedIn) {
         state.bots = { status: "idle", items: [], error: null };
+        resetBuild();
       }
     } catch {
       state.account = { signedIn: false, profile: null };
       state.bots = { status: "idle", items: [], error: null };
+      resetBuild();
     }
   }
 
@@ -805,7 +841,9 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
         error: error?.message || "bots_failed",
       };
     }
+    reconcileBuildSelection();
     paint();
+    ensureBuildTags();
   }
 
   async function handleOpenExternal(url) {
@@ -832,6 +870,9 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
         paint();
         if (state.account.signedIn) {
           await refreshBots();
+          if (state.area === "build") {
+            void refreshRegistry();
+          }
           return;
         }
       } else if (result?.error) {
@@ -861,6 +902,7 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     } finally {
       await refreshAccountStatus();
       state.bots = { status: "idle", items: [], error: null };
+      resetBuild();
       state.accountBusy = false;
       paint();
     }
@@ -874,6 +916,262 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
       onSignIn: handleSignIn,
       onSignOut: handleSignOut,
       onOpenExternal: handleOpenExternal,
+    });
+  }
+
+  // ---- Build area -------------------------------------------------------------
+  let tagsSeq = 0;
+  let registrySeq = 0;
+
+  function resetBuild() {
+    tagsSeq += 1;
+    registrySeq += 1;
+    state.build = emptyBuildState();
+  }
+
+  /** Keep the selected bot inside the owned list (default: first owned bot). */
+  function reconcileBuildSelection() {
+    const items = state.bots?.items || [];
+    if (items.length === 0) {
+      if (state.build.botUri) {
+        state.build.botUri = "";
+        state.build.tags = emptyBuildState().tags;
+      }
+      return;
+    }
+    if (!items.some((bot) => bot.uri === state.build.botUri)) {
+      state.build.botUri = items[0].uri;
+      state.build.tags = emptyBuildState().tags;
+    }
+  }
+
+  function ensureBuildTags() {
+    const uri = state.build.botUri;
+    if (state.area === "build" && state.account?.signedIn && uri && state.build.tags.uri !== uri) {
+      void loadBuildTags(uri);
+    }
+  }
+
+  async function loadBuildTags(uri) {
+    const seq = ++tagsSeq;
+    state.build.tags = { status: "loading", uri, items: [], error: null };
+    paint();
+    let next;
+    if (typeof host?.account?.botTags !== "function") {
+      next = { status: "error", uri, items: [], error: "unavailable" };
+    } else {
+      try {
+        const result = await host.account.botTags({ uri });
+        if (result?.ok) {
+          const items = Array.isArray(result.tags) ? result.tags.slice(0, 3) : [];
+          next = { status: items.length > 0 ? "ready" : "empty", uri, items, error: null };
+        } else {
+          next = { status: "error", uri, items: [], error: result?.error || "bot_tags_failed" };
+        }
+      } catch (error) {
+        next = { status: "error", uri, items: [], error: error?.message || "bot_tags_failed" };
+      }
+    }
+    if (seq !== tagsSeq) {
+      return;
+    }
+    state.build.tags = next;
+    paint();
+  }
+
+  function registryFromResult(result, previous = {}) {
+    if (result?.ok) {
+      return {
+        status: result.loggedIn ? "in" : "out",
+        username: result.username || "",
+        error: null,
+        busy: false,
+      };
+    }
+    return {
+      status: previous.status === "out" ? "out" : "error",
+      username: "",
+      error: result?.error || "registry_failed",
+      busy: false,
+    };
+  }
+
+  async function refreshRegistry() {
+    if (!state.account?.signedIn) {
+      return;
+    }
+    const seq = ++registrySeq;
+    if (typeof host?.publish?.authStatus !== "function") {
+      state.build.registry = { status: "error", username: "", error: "unavailable", busy: false };
+      paint();
+      return;
+    }
+    state.build.registry = { status: "loading", username: "", error: null, busy: false };
+    paint();
+    let next;
+    try {
+      next = registryFromResult(await host.publish.authStatus());
+    } catch (error) {
+      next = { status: "error", username: "", error: error?.message || "registry_failed", busy: false };
+    }
+    if (seq !== registrySeq) {
+      return;
+    }
+    state.build.registry = next;
+    paint();
+  }
+
+  async function enterBuildArea() {
+    if (!state.account?.signedIn) {
+      return;
+    }
+    if (state.bots.status === "idle" || state.bots.status === "error") {
+      await refreshBots();
+    } else {
+      reconcileBuildSelection();
+      ensureBuildTags();
+    }
+    if (state.build.registry.status === "idle" || state.build.registry.status === "error") {
+      await refreshRegistry();
+    }
+  }
+
+  function handleSelectBot(uri) {
+    state.build.botUri = uri;
+    if (state.build.run.status !== "building") {
+      state.build.run = emptyBuildState().run;
+    }
+    state.build.tags = emptyBuildState().tags;
+    paint();
+    ensureBuildTags();
+  }
+
+  async function handleRegistryLogin({ username, password }) {
+    if (typeof host?.publish?.authLogin !== "function" || state.build.registry.busy) {
+      return;
+    }
+    const seq = ++registrySeq;
+    state.build.registry = { ...state.build.registry, status: "out", error: null, busy: true };
+    paint();
+    let next;
+    try {
+      next = registryFromResult(
+        await host.publish.authLogin({ username, password }),
+        { status: "out" },
+      );
+    } catch (error) {
+      next = { status: "out", username: "", error: error?.message || "registry_failed", busy: false };
+    }
+    if (seq !== registrySeq) {
+      return;
+    }
+    state.build.registry = next;
+    paint();
+  }
+
+  async function handleRegistryLogout() {
+    if (typeof host?.publish?.authLogout !== "function" || state.build.registry.busy) {
+      return;
+    }
+    const seq = ++registrySeq;
+    state.build.registry = { ...state.build.registry, busy: true };
+    paint();
+    let next;
+    try {
+      next = registryFromResult(await host.publish.authLogout(), { status: "in" });
+    } catch (error) {
+      next = { status: "in", username: "", error: error?.message || "registry_failed", busy: false };
+    }
+    if (seq !== registrySeq) {
+      return;
+    }
+    state.build.registry = next;
+    paint();
+  }
+
+  async function handleBuild() {
+    if (buildBlockedReason({ bots: state.bots, build: state.build })) {
+      return;
+    }
+    const botUri = state.build.botUri;
+    const tag = state.build.tag.trim();
+    const image = imageRef(botUri, tag);
+    const accepted = await dialogs.confirm({
+      title: "Build and push image?",
+      body: `Studio will build .lugo/Dockerfile and push ${image}. This can take several minutes; keep Studio open until it finishes.`,
+      confirmLabel: "Build and push",
+      cancelLabel: "Cancel",
+    });
+    if (!accepted) {
+      return;
+    }
+    state.build.run = { status: "building", image, error: "" };
+    paint();
+    let result;
+    if (typeof host?.publish?.bot !== "function") {
+      result = { ok: false, error: "Building images is only available in the desktop app." };
+    } else {
+      try {
+        result = await host.publish.bot({ botUri, tag });
+      } catch (error) {
+        result = { ok: false, error: error?.message || "The build failed." };
+      }
+    }
+    if (result?.ok) {
+      state.build.run = { status: "success", image, error: "" };
+      dialogs.notify?.({ title: "Image published", body: image });
+    } else {
+      const error = result?.error || "The build failed.";
+      state.build.run = { status: "error", image, error };
+      dialogs.notify?.({ title: "Build failed", body: image });
+    }
+    paint();
+    if (result?.ok && state.build.botUri === botUri) {
+      await loadBuildTags(botUri);
+    }
+  }
+
+  function buildTagFocused() {
+    const active = typeof document !== "undefined" ? document.activeElement : null;
+    return Boolean(active && active.dataset && active.dataset.buildField === "tag");
+  }
+
+  function restoreBuildTagFocus() {
+    const input = windowPane.querySelector('[data-build-field="tag"]');
+    if (input && typeof input.focus === "function") {
+      input.focus();
+      if (typeof input.setSelectionRange === "function") {
+        const end = input.value.length;
+        input.setSelectionRange(end, end);
+      }
+    }
+  }
+
+  function buildView() {
+    return renderBuildPage(document, {
+      account: state.account,
+      bots: state.bots,
+      build: state.build,
+      busy: state.accountBusy,
+      onSignIn: handleSignIn,
+      onSelectBot: handleSelectBot,
+      onTagChange(tag) {
+        state.build.tag = tag;
+      },
+      onBuild: handleBuild,
+      onRetryBots: () => {
+        void refreshBots();
+      },
+      onRetryTags: () => {
+        if (state.build.botUri) {
+          void loadBuildTags(state.build.botUri);
+        }
+      },
+      onRetryRegistry: () => {
+        void refreshRegistry();
+      },
+      onRegistryLogin: handleRegistryLogin,
+      onRegistryLogout: handleRegistryLogout,
     });
   }
 
@@ -1162,6 +1460,9 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     try {
       // Refresh rail avatar / Profile after account status resolves.
       paint();
+      if (state.area === "build") {
+        void enterBuildArea();
+      }
     } catch {
       // Document may already be torn down (unit tests calling restore()).
     }

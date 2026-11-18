@@ -71,6 +71,9 @@ const CHANNELS = {
   },
   publish: {
     bot: "publish:bot",
+    authStatus: "publish:auth-status",
+    authLogin: "publish:auth-login",
+    authLogout: "publish:auth-logout",
   },
   account: {
     status: "account:status",
@@ -78,6 +81,7 @@ const CHANNELS = {
     signOut: "account:sign-out",
     profile: "account:profile",
     bots: "account:bots",
+    botTags: "account:bot-tags",
     openExternal: "account:open-external",
   },
 };

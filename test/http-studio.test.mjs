@@ -114,19 +114,72 @@ test("web adapter config.get forwards API health build version", async () => {
   assert.equal(missingConfig.apiVersion, "dev");
 });
 
-test("web adapter treats stub server, match and publish calls as failures", async () => {
+test("web adapter treats stub server and match calls as failures", async () => {
   const studio = createHttpStudio({
     fetchImpl: async () => respond(200, { implemented: false, message: "not implemented" }),
     storage: null,
   });
   const server = await studio.server.start();
   const match = await studio.match.start();
-  const published = await studio.publish.bot({ botUri: "demo", tag: "v1" });
   assert.equal(server.ok, false);
   assert.equal(match.ok, false);
-  assert.equal(published.ok, false);
   assert.match(server.error, /not available/);
   assert.match(match.error, /not available/);
+});
+
+test("web adapter publish succeeds on a real publish response and surfaces API errors", async () => {
+  const calls = [];
+  const studio = createHttpStudio({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, method: options.method, body: options.body && String(options.body) });
+      if (calls.length === 1) {
+        return respond(200, { status: "OK", image: "repo.lugobots.ai/me/bot:v1" });
+      }
+      return respond(400, { error: "missing .lugo/Dockerfile in the bot project" });
+    },
+    storage: null,
+  });
+  const published = await studio.publish.bot({ botUri: "me/bot", tag: "v1" });
+  assert.equal(published.ok, true);
+  assert.equal(published.body.image, "repo.lugobots.ai/me/bot:v1");
+  assert.equal(published.error, undefined);
+  assert.match(calls[0].url, /\/bot\/publish$/);
+  assert.equal(calls[0].method, "POST");
+  assert.equal(calls[0].body, "bot_uri=me%2Fbot&tag=v1");
+
+  const failed = await studio.publish.bot({ botUri: "me/bot", tag: "v2" });
+  assert.equal(failed.ok, false);
+  assert.match(failed.error, /missing \.lugo\/Dockerfile/);
+});
+
+test("web adapter registry auth calls hit /bot/auth and normalize status", async () => {
+  const calls = [];
+  const studio = createHttpStudio({
+    fetchImpl: async (url, options = {}) => {
+      calls.push({ url, method: options.method, body: options.body && String(options.body) });
+      if (options.method === "DELETE") {
+        return respond(200, { logged_in: false, registry: "repo.lugobots.ai" });
+      }
+      return respond(200, { logged_in: true, username: "ada", registry: "repo.lugobots.ai" });
+    },
+    storage: null,
+  });
+  const status = await studio.publish.authStatus();
+  assert.deepEqual(status, {
+    ok: true,
+    loggedIn: true,
+    username: "ada",
+    registry: "repo.lugobots.ai",
+  });
+  const login = await studio.publish.authLogin({ username: "ada", password: "pw" });
+  assert.equal(login.ok, true);
+  const logout = await studio.publish.authLogout();
+  assert.equal(logout.loggedIn, false);
+  assert.deepEqual(
+    calls.map((call) => `${call.method} ${call.url.replace(/^.*\/api/, "")}`),
+    ["GET /bot/auth", "POST /bot/auth", "DELETE /bot/auth"],
+  );
+  assert.equal(calls[1].body, "username=ada&password=pw");
 });
 
 test("web adapter stop hits the server stop API", async () => {

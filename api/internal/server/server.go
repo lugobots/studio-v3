@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"studio-v3/api/internal/gameruntime"
 	"studio-v3/api/internal/procreg"
 	"studio-v3/api/internal/projectfs"
+	"studio-v3/api/internal/publish"
 )
 
 const gameResetTimeout = 3 * time.Second
@@ -38,6 +40,7 @@ type Deps struct {
 	Match    bots.Starter
 	Prepper  bots.ProjectPrepper // optional; defaults from Match or a new Manager
 	Logs     *processLogHub      // optional; tests inject a shared hub
+	Publish  *publish.Service    // optional; defaults to the real Docker CLI
 }
 
 // NewMux returns the Studio V3 API HTTP handler with default deps.
@@ -66,6 +69,9 @@ func NewMuxWith(deps Deps) http.Handler {
 	if deps.Logs == nil {
 		deps.Logs = newProcessLogHub()
 	}
+	if deps.Publish == nil {
+		deps.Publish = publish.New()
+	}
 	// Share the session-only hub with concrete producers when they have no sink yet.
 	if local, ok := deps.Starter.(*gameruntime.Local); ok && local.Logs == nil {
 		local.Logs = deps.Logs
@@ -81,6 +87,7 @@ func NewMuxWith(deps Deps) http.Handler {
 		registry: deps.Registry,
 		status:   newStatusHub(),
 		logs:     deps.Logs,
+		publish:  deps.Publish,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", handleHealth)
@@ -88,7 +95,10 @@ func NewMuxWith(deps Deps) http.Handler {
 	mux.HandleFunc("POST /api/init/setup-new-bot", handleSetupNewBot)
 	mux.HandleFunc("POST /api/init/prepare-dependencies", api.handlePrepareDependencies)
 	mux.HandleFunc("GET /api/init/prepare-logs", api.handlePrepareLogs)
-	mux.HandleFunc("POST /api/bot/publish", handlePublish)
+	mux.HandleFunc("POST /api/bot/publish", api.handlePublish)
+	mux.HandleFunc("GET /api/bot/auth", api.handleRegistryAuthCheck)
+	mux.HandleFunc("POST /api/bot/auth", api.handleRegistryLogin)
+	mux.HandleFunc("DELETE /api/bot/auth", api.handleRegistryLogout)
 	mux.HandleFunc("POST /api/server/start", api.handleServerStart)
 	mux.HandleFunc("GET /api/server/status", api.handleServerStatus)
 	mux.HandleFunc("GET /api/server/status/ws", api.handleServerStatusWS)
@@ -114,6 +124,7 @@ type api struct {
 	registry     *procreg.Registry
 	status       *statusHub
 	logs         *processLogHub
+	publish      *publish.Service
 	startMu      sync.Mutex
 	lastSettings gameruntime.MatchSettings // last applied while server was down / on start
 }
@@ -152,8 +163,66 @@ func handleSetupNewBot(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "OK"})
 }
 
-func handlePublish(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"implemented": false})
+// handlePublish builds .lugo/Dockerfile (project-root context) and pushes
+// repo.lugobots.ai/{bot_uri}:{tag}. Form fields: bot_uri (or botUri) and tag.
+func (a *api) handlePublish(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid form"})
+		return
+	}
+	botURI := r.PostFormValue("bot_uri")
+	if botURI == "" {
+		botURI = r.PostFormValue("botUri")
+	}
+	result, err := a.publish.Publish(r.Context(), projectRoot(), botURI, r.PostFormValue("tag"))
+	if err != nil {
+		writeJSON(w, publishErrorStatus(err), map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "OK", "image": result.Image})
+}
+
+func publishErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, publish.ErrInvalidInput), errors.Is(err, publish.ErrMissingDockerfile):
+		return http.StatusBadRequest
+	case errors.Is(err, publish.ErrBusy):
+		return http.StatusConflict
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+// handleRegistryAuthCheck reports whether Docker has credentials for repo.lugobots.ai.
+func (a *api) handleRegistryAuthCheck(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.publish.Status())
+}
+
+// handleRegistryLogin runs docker login for repo.lugobots.ai (form: username, password).
+func (a *api) handleRegistryLogin(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid form"})
+		return
+	}
+	err := a.publish.Login(r.Context(), r.PostFormValue("username"), r.PostFormValue("password"))
+	if err != nil {
+		code := http.StatusUnauthorized
+		if errors.Is(err, publish.ErrInvalidInput) {
+			code = http.StatusBadRequest
+		}
+		writeJSON(w, code, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, a.publish.Status())
+}
+
+// handleRegistryLogout runs docker logout for repo.lugobots.ai.
+func (a *api) handleRegistryLogout(w http.ResponseWriter, r *http.Request) {
+	if err := a.publish.Logout(r.Context()); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, a.publish.Status())
 }
 
 func (a *api) handleServerStart(w http.ResponseWriter, r *http.Request) {

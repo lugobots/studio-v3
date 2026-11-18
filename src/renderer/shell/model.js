@@ -12,8 +12,8 @@ export const AREAS = [
     label: "Build",
     icon: "rocket",
     group: "main",
-    actions: [],
-    placeholder: true,
+    // Build-scoped lateral (no Workspace game controls).
+    actions: [{ id: "bot-image", label: "Bot image" }],
   },
   {
     id: "help",

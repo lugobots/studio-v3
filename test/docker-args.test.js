@@ -25,6 +25,13 @@ test("studio container runs the api command and does not publish the editor port
   assert.equal(args.at(-1), "api");
 });
 
+test("studio container mounts the host docker socket for bot publish", () => {
+  const args = runArgs("/bots/demo", {});
+  assert.ok(args.includes("/var/run/docker.sock:/var/run/docker.sock"));
+  const editor = editorRunArgs("/bots/demo", {});
+  assert.equal(editor.includes("/var/run/docker.sock:/var/run/docker.sock"), false);
+});
+
 test("studio image can be overridden with LUGO_STUDIO_IMAGE", () => {
   const args = runArgs("/bots/demo", { LUGO_STUDIO_IMAGE: "example/studio-api:dev" });
   assert.equal(args.at(-2), "example/studio-api:dev");

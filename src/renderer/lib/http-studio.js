@@ -83,6 +83,15 @@ export function createHttpStudio({
     return { ok: true, body };
   }
 
+  function registryResult(body) {
+    return {
+      ok: true,
+      loggedIn: Boolean(body && body.logged_in),
+      username: (body && body.username) || "",
+      registry: (body && body.registry) || "repo.lugobots.ai",
+    };
+  }
+
   function telemetryEnabled() {
     if (!storage) {
       return true;
@@ -419,6 +428,31 @@ export function createHttpStudio({
           return { ok: false, error: error.message };
         }
       },
+      async authStatus() {
+        try {
+          return registryResult(await request("/bot/auth", { method: "GET" }));
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
+      },
+      async authLogin({ username, password }) {
+        try {
+          return registryResult(await request("/bot/auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ username, password }),
+          }));
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
+      },
+      async authLogout() {
+        try {
+          return registryResult(await request("/bot/auth", { method: "DELETE" }));
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
+      },
     },
     account: {
       async status() {
@@ -432,6 +466,9 @@ export function createHttpStudio({
       },
       async profile() {
         return { signedIn: false, profile: null };
+      },
+      async botTags() {
+        return { ok: false, error: "Doorway sign-in requires the desktop app", tags: [] };
       },
     },
   };

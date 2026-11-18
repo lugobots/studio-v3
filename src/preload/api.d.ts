@@ -36,6 +36,10 @@ export interface AppConfig {
   install_unique_id?: string;
 }
 
+export type RegistryAuthResult =
+  | { ok: true; loggedIn: boolean; username: string; registry: string }
+  | { ok: false; error: string };
+
 export interface StudioApi {
   host: "desktop" | "web";
   versions: {
@@ -102,6 +106,9 @@ export interface StudioApi {
   };
   publish: {
     bot: (payload: { botUri: string; tag: string }) => Promise<{ ok: boolean; error?: string }>;
+    authStatus: () => Promise<RegistryAuthResult>;
+    authLogin: (payload: { username: string; password: string }) => Promise<RegistryAuthResult>;
+    authLogout: () => Promise<RegistryAuthResult>;
   };
   account: {
     status: () => Promise<{
@@ -134,6 +141,11 @@ export interface StudioApi {
         avatarUrl?: string | null;
       } | null;
     }>;
+    /** Latest Doorway release tags for an owned bot (newest first, max 3). Tokens stay in main. */
+    botTags: (payload: { uri: string }) => Promise<
+      | { ok: true; uri: string; tags: string[] }
+      | { ok: false; error: string; status?: number; tags: string[] }
+    >;
   };
 }
 

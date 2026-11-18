@@ -18,6 +18,9 @@ const {
   createTokenStore,
   doorwayBase,
   fetchBots,
+  fetchBotTags,
+  botTags,
+  _setStoreForTests,
 } = require("../src/main/services/account");
 
 test("pkce pair produces S256 challenge", () => {
@@ -209,4 +212,148 @@ test("fetchBots calls Studio bots API with Bearer and normalizes rows", async ()
   assert.equal(bots[1].badge, undefined);
   assert.equal(bots[1].star, undefined);
   assert.equal(bots[1].avatarUrl, "https://cdn.example/b.png");
+});
+
+function tagsFetch(handler) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    const { status = 200, body = {} } = handler(url, init, calls.length);
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      async json() {
+        return body;
+      },
+    };
+  };
+  return { fetchImpl, calls };
+}
+
+test("fetchBotTags calls Doorway with Bearer, encodes the uri and caps tags at three", async () => {
+  const { fetchImpl, calls } = tagsFetch(() => ({
+    body: { uri: "me/alpha bot", tags: ["v4", "v3", "", 7, "v2", "v1"] },
+  }));
+  const result = await fetchBotTags({
+    base: "https://doorway.test",
+    accessToken: "tok",
+    uri: "me/alpha bot",
+    fetchImpl,
+  });
+  assert.equal(
+    calls[0].url,
+    "https://doorway.test/api/studio/bots/tags?uri=me%2Falpha%20bot",
+  );
+  assert.equal(calls[0].init.headers.Authorization, "Bearer tok");
+  assert.deepEqual(result, { uri: "me/alpha bot", tags: ["v4", "v3", "v2"] });
+});
+
+test("fetchBotTags returns an empty list when Doorway sends no tags", async () => {
+  const { fetchImpl } = tagsFetch(() => ({ body: { uri: "me/alpha", tags: [] } }));
+  const result = await fetchBotTags({
+    base: "https://doorway.test",
+    accessToken: "tok",
+    uri: "me/alpha",
+    fetchImpl,
+  });
+  assert.deepEqual(result, { uri: "me/alpha", tags: [] });
+  const missing = tagsFetch(() => ({ body: { uri: "me/alpha" } }));
+  const fallback = await fetchBotTags({
+    base: "https://doorway.test",
+    accessToken: "tok",
+    uri: "me/alpha",
+    fetchImpl: missing.fetchImpl,
+  });
+  assert.deepEqual(fallback.tags, []);
+});
+
+test("fetchBotTags rejects with the Doorway error and HTTP status for 400/401/403", async () => {
+  for (const [status, body, message] of [
+    [401, { error: "unauthenticated" }, "unauthenticated"],
+    [403, { error: "not_owner" }, "not_owner"],
+    [400, {}, "bot_tags_failed_400"],
+  ]) {
+    const { fetchImpl } = tagsFetch(() => ({ status, body }));
+    await assert.rejects(
+      fetchBotTags({
+        base: "https://doorway.test",
+        accessToken: "tok",
+        uri: "me/alpha",
+        fetchImpl,
+      }),
+      (error) => {
+        assert.equal(error.message, message);
+        assert.equal(error.status, status);
+        return true;
+      },
+    );
+  }
+});
+
+function signedInStore(overrides = {}) {
+  let session = {
+    access_token: "access-1",
+    refresh_token: "refresh-1",
+    access_expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+    profile: { id: "1", name: "Ada", username: "ada" },
+    ...overrides,
+  };
+  return {
+    read: () => session,
+    write: (next) => {
+      session = next;
+    },
+    clear: () => {
+      session = null;
+    },
+  };
+}
+
+test("account.botTags uses the stored access token and never returns it", async () => {
+  _setStoreForTests(signedInStore());
+  const { fetchImpl, calls } = tagsFetch(() => ({
+    body: { uri: "ada/bot", tags: ["v2", "v1"] },
+  }));
+  const result = await botTags({ uri: " ada/bot " }, fetchImpl);
+  assert.deepEqual(result, { ok: true, uri: "ada/bot", tags: ["v2", "v1"] });
+  assert.match(calls[0].url, /\/api\/studio\/bots\/tags\?uri=ada%2Fbot$/);
+  assert.equal(calls[0].init.headers.Authorization, "Bearer access-1");
+  assert.equal(JSON.stringify(result).includes("access-1"), false);
+  _setStoreForTests(null);
+});
+
+test("account.botTags reports not signed in, invalid uri and Doorway rejections", async () => {
+  _setStoreForTests(signedInStore());
+  const never = tagsFetch(() => ({ body: {} }));
+  assert.deepEqual(await botTags({}, never.fetchImpl), {
+    ok: false,
+    error: "invalid_uri",
+    tags: [],
+  });
+  assert.deepEqual(await botTags({ uri: 42 }, never.fetchImpl), {
+    ok: false,
+    error: "invalid_uri",
+    tags: [],
+  });
+  assert.equal(never.calls.length, 0);
+
+  const denied = tagsFetch(() => ({ status: 403, body: { error: "not_owner" } }));
+  assert.deepEqual(await botTags({ uri: "other/bot" }, denied.fetchImpl), {
+    ok: false,
+    error: "not_owner",
+    status: 403,
+    tags: [],
+  });
+
+  const unauthorized = tagsFetch(() => ({ status: 401, body: {} }));
+  const rejected = await botTags({ uri: "ada/bot" }, unauthorized.fetchImpl);
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.status, 401);
+  assert.equal(rejected.error, "bot_tags_failed_401");
+
+  _setStoreForTests({ read: () => null, write() {}, clear() {} });
+  const signedOut = await botTags({ uri: "ada/bot" }, never.fetchImpl);
+  assert.deepEqual(signedOut, { ok: false, error: "not_signed_in", tags: [] });
+  assert.equal(never.calls.length, 0);
+  _setStoreForTests(null);
 });
