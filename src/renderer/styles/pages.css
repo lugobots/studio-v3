@@ -605,6 +605,161 @@ h1 {
   cursor: default;
 }
 
+.build-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 640px;
+  padding-bottom: 8px;
+}
+
+.build-page-header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.build-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-surface);
+}
+
+.build-section-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.build-helper {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.build-helper--error {
+  color: var(--error);
+}
+
+.build-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.build-field-label {
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.build-select,
+.build-input {
+  appearance: none;
+  width: 100%;
+  max-width: 360px;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  background: var(--bg-surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.build-input::placeholder {
+  color: var(--text-disabled);
+}
+
+.build-select:focus-visible,
+.build-input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.build-action {
+  align-self: flex-start;
+}
+
+.build-tag-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.build-tag-item {
+  color: var(--text);
+  font-size: 13px;
+  font-family: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+
+.build-run {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+}
+
+.build-run-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.build-run--success {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+  background: color-mix(in srgb, var(--success) 15%, transparent);
+}
+
+.build-run--error {
+  border-color: color-mix(in srgb, var(--error) 45%, var(--border));
+  background: color-mix(in srgb, var(--error) 15%, transparent);
+}
+
+.build-progress {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.build-progress-fill {
+  width: 40%;
+  height: 100%;
+  background: var(--primary);
+  animation: build-progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes build-progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .build-progress-fill {
+    width: 100%;
+    animation: none;
+  }
+}
+
 .settings-page-header {
   display: flex;
   flex-wrap: wrap;

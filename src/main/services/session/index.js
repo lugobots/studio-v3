@@ -737,9 +737,58 @@ async function botStatus(slot) {
   }
 }
 
-async function publish({ botUri, tag }) {
+async function publish({ botUri, tag } = {}) {
+  const ready = await ensureStudioApiReady("Open a bot before building its image.");
+  if (!ready.ok) {
+    return ready;
+  }
   try {
     return actionResult(await studioApi.publishBot({ botUri, tag }));
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+function registryStatusResult(body) {
+  return {
+    ok: true,
+    loggedIn: Boolean(body && body.logged_in),
+    username: (body && body.username) || "",
+    registry: (body && body.registry) || "repo.lugobots.ai",
+  };
+}
+
+async function registryAuthStatus() {
+  const ready = await ensureStudioApiReady("Open a bot before checking registry sign-in.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    return registryStatusResult(await studioApi.registryAuthStatus());
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function registryAuthLogin({ username, password } = {}) {
+  const ready = await ensureStudioApiReady("Open a bot before signing in to the registry.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    return registryStatusResult(await studioApi.registryLogin({ username, password }));
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function registryAuthLogout() {
+  const ready = await ensureStudioApiReady("Open a bot before signing out of the registry.");
+  if (!ready.ok) {
+    return ready;
+  }
+  try {
+    return registryStatusResult(await studioApi.registryLogout());
   } catch (error) {
     return { ok: false, error: error.message };
   }
@@ -794,6 +843,9 @@ module.exports = {
   stopBot,
   botStatus,
   publish,
+  registryAuthStatus,
+  registryAuthLogin,
+  registryAuthLogout,
   projectStatus,
   startEditor,
   stopEditor,

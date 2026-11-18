@@ -269,3 +269,55 @@ test("studio api client arms logs and subscribe delivers snapshot lines", async 
   ws.emit({ lines: [{ source: "home/1", text: "late", ts: 2 }] });
   assert.equal(batches.length, 1);
 });
+
+test("publishBot posts bot_uri and tag and returns the real publish response", async () => {
+  runtimePorts.clearAll();
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, method: options.method, body: String(options.body) });
+    return respond(200, { status: "OK", image: "repo.lugobots.ai/me/bot:v1" });
+  };
+  const body = await studioApi.publishBot({ botUri: "me/bot", tag: "v1" }, fetchImpl);
+  assert.deepEqual(body, { status: "OK", image: "repo.lugobots.ai/me/bot:v1" });
+  assert.equal(body.implemented, undefined);
+  assert.match(calls[0].url, /\/api\/bot\/publish$/);
+  assert.equal(calls[0].method, "POST");
+  assert.equal(calls[0].body, "bot_uri=me%2Fbot&tag=v1");
+
+  const missing = async () => respond(400, { error: "missing .lugo/Dockerfile in the bot project" });
+  await assert.rejects(
+    studioApi.publishBot({ botUri: "me/bot", tag: "v1" }, missing),
+    (error) => {
+      assert.match(error.message, /missing \.lugo\/Dockerfile/);
+      assert.equal(error.status, 400);
+      return true;
+    },
+  );
+});
+
+test("registry auth client checks, logs in and logs out through /api/bot/auth", async () => {
+  runtimePorts.clearAll();
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, method: options.method, body: options.body && String(options.body) });
+    if (options.method === "POST" && /bad/.test(String(options.body))) {
+      return respond(401, { error: "registry login failed" });
+    }
+    return respond(200, { logged_in: options.method !== "DELETE", registry: "repo.lugobots.ai" });
+  };
+
+  const status = await studioApi.registryAuthStatus(fetchImpl);
+  assert.equal(status.logged_in, true);
+  await studioApi.registryLogin({ username: "ada", password: "pw" }, fetchImpl);
+  await studioApi.registryLogout(fetchImpl);
+  assert.deepEqual(
+    calls.map((call) => `${call.method} ${call.url.replace(/^.*\/api/, "")}`),
+    ["GET /bot/auth", "POST /bot/auth", "DELETE /bot/auth"],
+  );
+  assert.equal(calls[1].body, "username=ada&password=pw");
+
+  await assert.rejects(
+    studioApi.registryLogin({ username: "ada", password: "bad" }, fetchImpl),
+    (error) => error.status === 401 && /registry login failed/.test(error.message),
+  );
+});

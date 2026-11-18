@@ -206,24 +206,6 @@ func TestSetupNewBotRejectsUnknownLanguage(t *testing.T) {
 	}
 }
 
-func TestPublishRemainsUnimplementedStub(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/api/bot/publish", strings.NewReader("botUri=demo&tag=latest"))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec := httptest.NewRecorder()
-	NewMux().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
-	}
-	var body map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatal(err)
-	}
-	if body["implemented"] != false {
-		t.Fatalf("implemented = %#v", body["implemented"])
-	}
-}
-
 func TestMuxHasNoUpdateRoutes(t *testing.T) {
 	mux := NewMux()
 	for _, path := range []string{

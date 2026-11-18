@@ -34,7 +34,8 @@ test("areas expose workspace menu without image action or pinned profile or sett
   assert.deepEqual(workspace.pinned, []);
   assert.equal(workspace.areaId, "workspace");
   assert.deepEqual(settings.actions, []);
-  assert.deepEqual(build.actions, []);
+  assert.deepEqual(build.actions, ["bot-image"]);
+  assert.deepEqual(build.pinned, []);
   assert.equal(menuFor("runtime").areaId, "workspace");
   assert.equal(menuFor("editor").tabId, "workspace");
 });
@@ -349,9 +350,10 @@ test("the shell shows the game panel, area rail, workspace image, and publish", 
   outlet.querySelector('[data-area="build"]').click();
   assert.equal(outlet.querySelector(".game-ctrl"), null);
   assert.ok(outlet.querySelector('[data-window="build"]'));
+  assert.ok(outlet.querySelector(".build-page"));
   assert.equal(
     outlet.querySelectorAll("p").some((node) => node.textContent === "Coming soon"),
-    true,
+    false,
   );
 
   outlet.querySelector('[data-area="help"]').click();

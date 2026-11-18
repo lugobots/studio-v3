@@ -5,7 +5,8 @@
 #   docker build --build-arg VERSION=v0.2.0 -t lugobots/studio-v3-api:v0.2.0 .
 # Electron starts this container with command `api`
 # (see src/main/services/docker/args.js), mounts the bot at /home/coder/project,
-# and sets LUGO_STUDIO_API_PORT / LUGO_HOST_PROJECT_PATH.
+# and sets LUGO_STUDIO_API_PORT / LUGO_HOST_PROJECT_PATH. It also mounts the host
+# /var/run/docker.sock so POST /api/bot/publish can run `docker build` / `docker push`.
 
 FROM golang:1.24-alpine AS build
 
@@ -20,6 +21,10 @@ COPY api/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor \
   -ldflags="-w -s -X studio-v3/api/internal/buildinfo.Version=${VERSION}" \
   -o /out/studio-v3-api ./cmd/api
+
+# Docker CLI + buildx for bot publish (talks to the host engine via docker.sock).
+FROM docker:27-cli AS docker-cli
+FROM docker/buildx-bin:0.19.3 AS buildx
 
 # Debian (glibc) runtime so `pip install` can use manylinux wheels for pinned
 # bot deps (grpcio/lugo4py). Alpine/musl forces a source build that fails.
@@ -40,6 +45,8 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /home/coder/project
 
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=buildx /buildx /usr/libexec/docker/cli-plugins/docker-buildx
 COPY --from=build /out/studio-v3-api /usr/local/bin/studio-v3-api
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 # Normalize CRLF from Windows checkouts so the shebang stays executable on Linux.

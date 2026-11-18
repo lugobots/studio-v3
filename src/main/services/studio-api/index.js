@@ -3,7 +3,8 @@
 // Client talks to the V3-owned API in lugobots/studio-v3-api:latest (command `api`).
 // Routes under /api include health, studio/status, init/setup-new-bot,
 // init/prepare-dependencies, init/prepare-logs, server/start, server/status,
-// server/stop, server/status/ws, game/start, and bot/publish.
+// server/stop, server/status/ws, game/start, bot/publish (docker build + push),
+// and bot/auth (registry login/logout/check for repo.lugobots.ai).
 
 const runtimePorts = require("../runtime-ports");
 
@@ -234,6 +235,30 @@ async function publishBot({ botUri, tag }, fetchImpl) {
   );
 }
 
+function registryAuthPath() {
+  return "/bot/auth";
+}
+
+/** GET /api/bot/auth → { logged_in, username?, registry }. */
+async function registryAuthStatus(fetchImpl = global.fetch) {
+  return request(registryAuthPath(), { method: "GET" }, fetchImpl);
+}
+
+/** POST /api/bot/auth (docker login repo.lugobots.ai). */
+async function registryLogin({ username, password }, fetchImpl) {
+  const body = new URLSearchParams({ username, password });
+  return request(
+    registryAuthPath(),
+    { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body },
+    fetchImpl,
+  );
+}
+
+/** DELETE /api/bot/auth (docker logout repo.lugobots.ai). */
+async function registryLogout(fetchImpl = global.fetch) {
+  return request(registryAuthPath(), { method: "DELETE" }, fetchImpl);
+}
+
 async function armLogSource(source, fetchImpl = global.fetch) {
   return request("/logs/arm", jsonPostBody({ source }), fetchImpl);
 }
@@ -317,6 +342,9 @@ module.exports = {
   prepareDependencies,
   prepareLogs,
   publishBot,
+  registryAuthStatus,
+  registryLogin,
+  registryLogout,
   armLogSource,
   disarmLogSource,
   subscribeProcessLogs,

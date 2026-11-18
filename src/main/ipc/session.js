@@ -27,6 +27,11 @@ function register() {
   ipcMain.handle(CHANNELS.bot.stop, (_event, payload) => session.stopBot(payload || {}));
   ipcMain.handle(CHANNELS.bot.status, (_event, payload) => session.botStatus(payload || {}));
   ipcMain.handle(CHANNELS.publish.bot, (_event, payload) => session.publish(payload));
+  ipcMain.handle(CHANNELS.publish.authStatus, () => session.registryAuthStatus());
+  ipcMain.handle(CHANNELS.publish.authLogin, (_event, payload) =>
+    session.registryAuthLogin(payload),
+  );
+  ipcMain.handle(CHANNELS.publish.authLogout, () => session.registryAuthLogout());
 }
 
 module.exports = { register };

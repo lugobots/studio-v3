@@ -259,6 +259,42 @@ async function fetchBots({
   });
 }
 
+const MAX_BOT_TAGS = 3;
+
+/**
+ * Latest release tags for an owned bot (Doorway, newest first, max 3).
+ * @returns {Promise<{ uri: string, tags: string[] }>}
+ */
+async function fetchBotTags({
+  base,
+  accessToken,
+  uri,
+  fetchImpl = global.fetch,
+}) {
+  const response = await fetchImpl(
+    `${base}/api/studio/bots/tags?uri=${encodeURIComponent(uri)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+    },
+  );
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(
+      body.error || body.message || `bot_tags_failed_${response.status}`,
+    );
+    error.status = response.status;
+    throw error;
+  }
+  const raw = Array.isArray(body.tags) ? body.tags : [];
+  const tags = raw
+    .filter((tag) => typeof tag === "string" && tag.trim() !== "")
+    .slice(0, MAX_BOT_TAGS);
+  return { uri: typeof body.uri === "string" && body.uri ? body.uri : uri, tags };
+}
+
 function sessionFromTokenResponse(tokens, profile = null, now = Date.now()) {
   const expiresIn = Number(tokens.expires_in) || 3600;
   return {
@@ -282,6 +318,7 @@ module.exports = {
   revokeToken,
   fetchMe,
   fetchBots,
+  fetchBotTags,
   sessionFromTokenResponse,
   createPkcePair,
   randomState,

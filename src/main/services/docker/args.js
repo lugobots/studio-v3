@@ -6,8 +6,13 @@ const {
 } = require("../config/store");
 const { DEFAULTS, editorImageFrom, imageFrom, portsFrom } = require("../../../shared/ports");
 
+/** Host Docker Engine socket mounted into the API container for bot publish. */
+const DOCKER_SOCKET = "/var/run/docker.sock";
+
 /**
  * Build `docker run` args for the Studio API container.
+ * Always bind-mounts the host Docker socket so the API can build and push
+ * `.lugo/Dockerfile` images (Docker CLI is in the API image).
  * When `level1` includes a host binary path, bind-mount it at the path the API
  * bot manager expects (default `/usr/local/lib/lugo/bot-level-1`).
  * When `opponentProject` includes a host path, bind-mount that bot project for
@@ -43,6 +48,8 @@ function runArgs(
     DEFAULTS.containerName,
     "-v",
     `${projectPath}:${DEFAULTS.mountTarget}`,
+    "-v",
+    `${DOCKER_SOCKET}:${DOCKER_SOCKET}`,
     "-p",
     `${host.api}:${ports.api}`,
     "-p",
@@ -119,4 +126,4 @@ function editorRunArgs(projectPath, env = process.env, hostPorts = null) {
   ];
 }
 
-module.exports = { runArgs, editorRunArgs };
+module.exports = { runArgs, editorRunArgs, DOCKER_SOCKET };

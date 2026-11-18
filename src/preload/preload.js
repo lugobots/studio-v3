@@ -92,6 +92,9 @@ contextBridge.exposeInMainWorld("studio", {
   },
   publish: {
     bot: (payload) => ipcRenderer.invoke(CHANNELS.publish.bot, payload),
+    authStatus: () => ipcRenderer.invoke(CHANNELS.publish.authStatus),
+    authLogin: (payload) => ipcRenderer.invoke(CHANNELS.publish.authLogin, payload),
+    authLogout: () => ipcRenderer.invoke(CHANNELS.publish.authLogout),
   },
   account: {
     status: () => ipcRenderer.invoke(CHANNELS.account.status),
@@ -99,6 +102,7 @@ contextBridge.exposeInMainWorld("studio", {
     signOut: () => ipcRenderer.invoke(CHANNELS.account.signOut),
     profile: () => ipcRenderer.invoke(CHANNELS.account.profile),
     bots: () => ipcRenderer.invoke(CHANNELS.account.bots),
+    botTags: (payload) => ipcRenderer.invoke(CHANNELS.account.botTags, payload),
     openExternal: (url) => ipcRenderer.invoke(CHANNELS.account.openExternal, url),
   },
 });

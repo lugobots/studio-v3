@@ -53,6 +53,20 @@ docker build --build-arg VERSION=v0.2.0 -t lugobots/studio-v3-api:v0.2.0 .
 
 On every `v*` GitHub tag, the **Build release** workflow also publishes `lugobots/studio-v3-api:<github-tag>` (and `:latest`) to Docker Hub. A GitHub version without that Hub tag is not a complete, ready-to-use Studio distribution. See [docs/release-hardening.md](docs/release-hardening.md).
 
+## Publishing a bot image (Docker socket)
+
+`POST /api/bot/publish` (form fields `bot_uri` or `botUri`, and `tag`) runs, from the mounted project root:
+
+```bash
+docker build -f .lugo/Dockerfile -t repo.lugobots.ai/{bot_uri}:{tag} .
+docker push repo.lugobots.ai/{bot_uri}:{tag}
+```
+
+- **Same path for Go, Python, and JS/Node:** the project must ship `.lugo/Dockerfile`; if it is missing the API returns an error JSON and does not claim success.
+- **Docker socket:** the Studio API image includes the Docker CLI, and Electron starts the API container with `-v /var/run/docker.sock:/var/run/docker.sock` (`src/main/services/docker/args.js`) so builds run on the host engine. Containers started before this change must be recreated to publish.
+- **Registry host:** `repo.lugobots.ai`. Registry credentials are separate from the Doorway sign-in: `POST /api/bot/auth` (form `username`, `password`; runs `docker login`), `GET /api/bot/auth` (check) and `DELETE /api/bot/auth` (`docker logout`). Credentials live in the API container's Docker config and are lost when the container is removed.
+- **Tests:** `cd api && go test ./internal/publish ./internal/server`. `TestDockerBuildSmokeAllLanguages` runs real `docker build -f .lugo/Dockerfile` against Go/Python/JS-shaped fixtures and skips when no Docker engine is reachable.
+
 ## Official downloads and signing
 
 Official installers are published only as [GitHub Releases](https://github.com/lugobots/studio-v3/releases) for this repository. See [docs/verify-download.md](docs/verify-download.md).

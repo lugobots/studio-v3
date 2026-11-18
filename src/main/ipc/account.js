@@ -10,6 +10,9 @@ function register() {
   ipcMain.handle(CHANNELS.account.signOut, () => account.signOut());
   ipcMain.handle(CHANNELS.account.profile, () => account.profile());
   ipcMain.handle(CHANNELS.account.bots, () => account.bots());
+  ipcMain.handle(CHANNELS.account.botTags, (_event, payload) =>
+    account.botTags(payload && typeof payload === "object" ? payload : {}),
+  );
   ipcMain.handle(CHANNELS.account.openExternal, (_event, url) =>
     account.openExternalUrl(url),
   );

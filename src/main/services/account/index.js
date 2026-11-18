@@ -12,6 +12,7 @@ const {
   revokeToken,
   fetchMe,
   fetchBots,
+  fetchBotTags,
   sessionFromTokenResponse,
   createPkcePair,
   randomState,
@@ -230,6 +231,40 @@ async function bots(fetchImpl = global.fetch) {
   }
 }
 
+/**
+ * Latest Doorway release tags for an owned bot URI. Tokens stay in the main process.
+ * @returns {Promise<{ ok: true, uri: string, tags: string[] } | { ok: false, error: string, status?: number, tags: string[] }>}
+ */
+async function botTags({ uri } = {}, fetchImpl = global.fetch) {
+  const trimmed = typeof uri === "string" ? uri.trim() : "";
+  if (!trimmed) {
+    return { ok: false, error: "invalid_uri", tags: [] };
+  }
+  const access = await ensureAccessToken(fetchImpl);
+  if (!access) {
+    return { ok: false, error: "not_signed_in", tags: [] };
+  }
+  try {
+    const result = await fetchBotTags({
+      base: doorwayBase(),
+      accessToken: access,
+      uri: trimmed,
+      fetchImpl,
+    });
+    return { ok: true, uri: result.uri, tags: result.tags };
+  } catch (error) {
+    const failure = {
+      ok: false,
+      error: error?.message || "bot_tags_failed",
+      tags: [],
+    };
+    if (Number.isInteger(error?.status)) {
+      failure.status = error.status;
+    }
+    return failure;
+  }
+}
+
 async function openExternalUrl(url) {
   if (typeof url !== "string" || !/^https?:\/\//i.test(url)) {
     return { ok: false, error: "invalid_url" };
@@ -245,12 +280,14 @@ module.exports = {
   signOut,
   profile,
   bots,
+  botTags,
   openExternalUrl,
   ensureAccessToken,
   doorwayBase,
   normalizeAvatarUrl,
   isAccessExpired,
   fetchBots,
+  fetchBotTags,
   _setStoreForTests,
   // re-export pure helpers for tests
   createPkcePair,
