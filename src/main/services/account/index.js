@@ -11,6 +11,7 @@ const {
   refreshTokens,
   revokeToken,
   fetchMe,
+  mintRegistryOtp,
   fetchBots,
   fetchBotTags,
   sessionFromTokenResponse,
@@ -265,6 +266,113 @@ async function botTags({ uri } = {}, fetchImpl = global.fetch) {
   }
 }
 
+/**
+ * Mint a Doorway registry OTP using the signed-in Studio access token.
+ * @returns {Promise<
+ *   | { ok: true, otp: string, expires_in: number, expires_at: string }
+ *   | { ok: false, error: string, status?: number }
+ * >}
+ */
+async function mintRegistryOtpForSession(fetchImpl = global.fetch) {
+  const access = await ensureAccessToken(fetchImpl);
+  if (!access) {
+    return { ok: false, error: "not_signed_in" };
+  }
+  try {
+    const minted = await mintRegistryOtp({
+      base: doorwayBase(),
+      accessToken: access,
+      fetchImpl,
+    });
+    return {
+      ok: true,
+      otp: minted.otp,
+      expires_in: minted.expires_in,
+      expires_at: minted.expires_at,
+    };
+  } catch (error) {
+    const failure = {
+      ok: false,
+      error: error?.message || "registry_otp_failed",
+    };
+    if (Number.isInteger(error?.status)) {
+      failure.status = error.status;
+    }
+    return failure;
+  }
+}
+
+/**
+ * Resolve the account email for registry docker login (Porteiro username).
+ * Prefers the cached Doorway profile; refreshes /api/studio/me when missing.
+ */
+async function resolveRegistryEmail(fetchImpl = global.fetch) {
+  const session = loadSession();
+  const cached =
+    session &&
+    session.profile &&
+    typeof session.profile.email === "string" &&
+    session.profile.email.trim()
+      ? session.profile.email.trim()
+      : "";
+  if (cached) {
+    return { ok: true, email: cached };
+  }
+  const access = await ensureAccessToken(fetchImpl);
+  if (!access) {
+    return { ok: false, error: "not_signed_in" };
+  }
+  try {
+    const profile = await fetchMe({
+      base: doorwayBase(),
+      accessToken: access,
+      fetchImpl,
+    });
+    const next = { ...loadSession(), profile };
+    saveSession(next);
+    const email =
+      typeof profile.email === "string" && profile.email.trim()
+        ? profile.email.trim()
+        : "";
+    if (!email) {
+      return { ok: false, error: "missing_email" };
+    }
+    return { ok: true, email };
+  } catch (error) {
+    return { ok: false, error: error?.message || "me_failed" };
+  }
+}
+
+/**
+ * Mint a registry OTP bound to the signed-in user and return email + OTP for docker login.
+ * Caller must discard the OTP after use; it is not stored in the Doorway session.
+ * @returns {Promise<
+ *   | { ok: true, email: string, otp: string, expires_in: number, expires_at: string }
+ *   | { ok: false, error: string, status?: number }
+ * >}
+ */
+async function mintRegistryLoginCredentials(fetchImpl = global.fetch) {
+  const emailResult = await resolveRegistryEmail(fetchImpl);
+  if (!emailResult.ok) {
+    const failure = { ok: false, error: emailResult.error || "missing_email" };
+    if (emailResult.error === "not_signed_in") {
+      failure.status = 401;
+    }
+    return failure;
+  }
+  const minted = await mintRegistryOtpForSession(fetchImpl);
+  if (!minted.ok) {
+    return minted;
+  }
+  return {
+    ok: true,
+    email: emailResult.email,
+    otp: minted.otp,
+    expires_in: minted.expires_in,
+    expires_at: minted.expires_at,
+  };
+}
+
 async function openExternalUrl(url) {
   if (typeof url !== "string" || !/^https?:\/\//i.test(url)) {
     return { ok: false, error: "invalid_url" };
@@ -281,11 +389,16 @@ module.exports = {
   profile,
   bots,
   botTags,
+  mintRegistryOtpForSession,
+  resolveRegistryEmail,
+  mintRegistryLoginCredentials,
   openExternalUrl,
   ensureAccessToken,
   doorwayBase,
   normalizeAvatarUrl,
   isAccessExpired,
+  fetchMe,
+  mintRegistryOtp,
   fetchBots,
   fetchBotTags,
   _setStoreForTests,
