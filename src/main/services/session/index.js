@@ -742,11 +742,16 @@ async function publish({ botUri, tag } = {}) {
   if (!ready.ok) {
     return ready;
   }
-  try {
-    return actionResult(await studioApi.publishBot({ botUri, tag }));
-  } catch (error) {
-    return { ok: false, error: error.message };
-  }
+  const { publishWithOtpLogin } = require("./publish-registry");
+  // Always mint+login with Doorway OTP immediately before push (no website password).
+  // One silent remint+re-login retry when the registry rejects stored Docker credentials.
+  return publishWithOtpLogin({
+    botUri,
+    tag,
+    loginWithOtp: () => registryAuthLoginWithOtp(),
+    publishBot: (payload) => studioApi.publishBot(payload),
+    actionResult,
+  });
 }
 
 function registryStatusResult(body) {
@@ -810,7 +815,7 @@ async function registryAuthLogin({ username, password } = {}) {
   const user = typeof username === "string" ? username.trim() : "";
   const pass = typeof password === "string" ? password : "";
   // Prefer Doorway OTP when the renderer does not supply website credentials
-  // (Build password form removal lands in task 3.3; 3.2 wires publish retry).
+  // (Build password form removal lands in task 3.3).
   if (!user || !pass) {
     return registryAuthLoginWithOtp();
   }
