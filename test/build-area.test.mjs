@@ -352,34 +352,35 @@ test("missing .lugo/Dockerfile is reported clearly and never as success", async 
   installed.restore();
 });
 
-test("registry login affordance blocks build until signed in to the registry", async () => {
+test("registry out shows no password fields; publish proceeds with a valid Doorway session", async () => {
   const { host, calls, state } = createHost();
   state.registry = { loggedIn: false, username: "" };
-  const { outlet, installed } = mount(host);
+  const { outlet, installed, confirms } = mount(host);
   await flush();
   outlet.querySelector('[data-area="build"]').click();
   await flush();
 
   const registry = outlet.querySelector('[data-build-section="registry"]');
   assert.equal(registry.getAttribute("data-registry-state"), "out");
+  assert.equal(registry.querySelector('input[type="password"]'), null);
+  assert.equal(registry.querySelector('input[aria-label="Registry username"]'), null);
+  assert.equal(registry.querySelector('input[aria-label="Registry password"]'), null);
+  assert.equal(registry.querySelector('[data-registry-action="login"]'), null);
+  assert.equal(registry.querySelectorAll("input").length, 0);
+  assert.match(registry.querySelector(".build-helper").textContent, /Doorway session/);
+
   const tag = outlet.querySelector('[data-build-field="tag"]');
   tag.value = "v4";
   fire(tag, "input");
-  assert.equal(outlet.querySelector('[data-build-action="build"]').disabled, true);
+  assert.equal(outlet.querySelector('[data-build-action="build"]').disabled, false);
 
-  const inputs = registry.querySelectorAll("input");
-  inputs[0].value = "ada";
-  inputs[1].value = "pw";
-  registry.querySelector('[data-registry-action="login"]').click();
+  outlet.querySelector('[data-build-action="build"]').click();
   await flush();
 
-  assert.deepEqual(calls.authLogin, [{ username: "ada", password: "pw" }]);
-  assert.equal(
-    outlet.querySelector('[data-build-section="registry"]').getAttribute("data-registry-state"),
-    "in",
-  );
+  assert.equal(confirms.length, 1);
+  assert.deepEqual(calls.publish, [{ botUri: "ada/alpha", tag: "v4" }]);
+  assert.deepEqual(calls.authLogin, []);
   assert.equal(outlet.querySelector('[data-build-field="tag"]').value, "v4");
-  assert.equal(outlet.querySelector('[data-build-action="build"]').disabled, false);
   installed.restore();
 });
 

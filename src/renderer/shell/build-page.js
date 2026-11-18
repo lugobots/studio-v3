@@ -41,9 +41,6 @@ export function buildBlockedReason({ bots, build }) {
   if (!String(build.tag || "").trim()) {
     return "Enter an image tag.";
   }
-  if (build.registry?.status === "out") {
-    return `Sign in to ${REGISTRY_HOST} before pushing an image.`;
-  }
   if (build.run?.status === "building") {
     return "A build is already running.";
   }
@@ -96,7 +93,6 @@ function field(document, labelText, control) {
  *   onRetryBots?: () => void,
  *   onRetryTags?: () => void,
  *   onRetryRegistry?: () => void,
- *   onRegistryLogin?: (credentials: { username: string, password: string }) => void | Promise<void>,
  *   onRegistryLogout?: () => void | Promise<void>,
  * }} options
  */
@@ -114,7 +110,6 @@ export function renderBuildPage(
     onRetryBots = () => {},
     onRetryTags = () => {},
     onRetryRegistry = () => {},
-    onRegistryLogin = () => {},
     onRegistryLogout = () => {},
   },
 ) {
@@ -251,7 +246,6 @@ export function renderBuildPage(
 
     root.append(renderRegistrySection(document, build.registry, {
       onRetryRegistry,
-      onRegistryLogin,
       onRegistryLogout,
     }));
   }
@@ -312,7 +306,7 @@ export function renderBuildPage(
   return root;
 }
 
-function renderRegistrySection(document, registry, { onRetryRegistry, onRegistryLogin, onRegistryLogout }) {
+function renderRegistrySection(document, registry, { onRetryRegistry, onRegistryLogout }) {
   const node = section(document, "registry", "Registry");
   const state = registry?.status || "idle";
   node.setAttribute("data-registry-state", state === "idle" ? "loading" : state);
@@ -363,39 +357,16 @@ function renderRegistrySection(document, registry, { onRetryRegistry, onRegistry
     return node;
   }
 
-  // state === "out"
+  // state === "out" — Doorway OTP login runs at publish; never collect a registry password.
   node.append(
     helper(
       document,
-      `Sign in to ${REGISTRY_HOST} with your Lugo Bots website username and password to push images.`,
+      `Studio signs in to ${REGISTRY_HOST} with your Doorway session when you build. No registry password is required.`,
     ),
   );
   if (registry.error) {
     node.append(helper(document, registry.error, "error"));
   }
-  const username = el(document, "input", "build-input");
-  username.type = "text";
-  username.setAttribute("aria-label", "Registry username");
-  username.setAttribute("autocomplete", "username");
-  const password = el(document, "input", "build-input");
-  password.type = "password";
-  password.setAttribute("aria-label", "Registry password");
-  password.setAttribute("autocomplete", "current-password");
-  node.append(field(document, "Username", username), field(document, "Password", password));
-  const login = el(
-    document,
-    "button",
-    "button button-secondary build-action",
-    registry.busy ? "Signing in…" : "Sign in to registry",
-  );
-  login.type = "button";
-  login.setAttribute("data-registry-action", "login");
-  login.disabled = Boolean(registry.busy);
-  login.addEventListener("click", () => {
-    // Credentials are read only here and are never kept in renderer state.
-    void onRegistryLogin({ username: username.value, password: password.value });
-  });
-  node.append(login);
   return node;
 }
 

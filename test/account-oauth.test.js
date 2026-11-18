@@ -17,6 +17,11 @@ const {
   startCallbackServer,
   createTokenStore,
   doorwayBase,
+  fetchMe,
+  mintRegistryOtp,
+  mintRegistryOtpForSession,
+  mintRegistryLoginCredentials,
+  resolveRegistryEmail,
   fetchBots,
   fetchBotTags,
   botTags,
@@ -355,5 +360,181 @@ test("account.botTags reports not signed in, invalid uri and Doorway rejections"
   const signedOut = await botTags({ uri: "ada/bot" }, never.fetchImpl);
   assert.deepEqual(signedOut, { ok: false, error: "not_signed_in", tags: [] });
   assert.equal(never.calls.length, 0);
+  _setStoreForTests(null);
+});
+
+function otpFetch(handler) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    const { status = 200, body = {} } = handler(url, init, calls.length);
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      async json() {
+        return body;
+      },
+    };
+  };
+  return { fetchImpl, calls };
+}
+
+test("fetchMe maps email from Doorway account snapshot", async () => {
+  const { fetchImpl, calls } = otpFetch(() => ({
+    body: {
+      id: "9",
+      name: "Ada",
+      username: "ada",
+      email: " ada@example.com ",
+      avatar_url: "/avatars/a.png",
+    },
+  }));
+  const profile = await fetchMe({
+    base: "https://doorway.test",
+    accessToken: "tok",
+    fetchImpl,
+  });
+  assert.equal(calls[0].url, "https://doorway.test/api/studio/me");
+  assert.equal(calls[0].init.headers.Authorization, "Bearer tok");
+  assert.equal(profile.email, "ada@example.com");
+  assert.equal(profile.avatar_url, "https://doorway.test/avatars/a.png");
+});
+
+test("mintRegistryOtp POSTs with Bearer and parses otp expiry fields", async () => {
+  const { fetchImpl, calls } = otpFetch(() => ({
+    body: {
+      otp: "plain-otp-value",
+      expires_in: 60,
+      expires_at: "2026-11-18T12:01:00+00:00",
+    },
+  }));
+  const minted = await mintRegistryOtp({
+    base: "https://doorway.test",
+    accessToken: "tok",
+    fetchImpl,
+  });
+  assert.equal(calls[0].url, "https://doorway.test/api/studio/registry/otp");
+  assert.equal(calls[0].init.method, "POST");
+  assert.equal(calls[0].init.headers.Authorization, "Bearer tok");
+  assert.deepEqual(minted, {
+    otp: "plain-otp-value",
+    expires_in: 60,
+    expires_at: "2026-11-18T12:01:00+00:00",
+  });
+});
+
+test("mintRegistryOtp rejects with Doorway error and HTTP status shapes", async () => {
+  for (const [status, body, message] of [
+    [401, { error: "Unauthorized" }, "Unauthorized"],
+    [401, { error: "unauthenticated" }, "unauthenticated"],
+    [403, { message: "forbidden" }, "forbidden"],
+    [500, {}, "registry_otp_failed_500"],
+  ]) {
+    const { fetchImpl } = otpFetch(() => ({ status, body }));
+    await assert.rejects(
+      mintRegistryOtp({
+        base: "https://doorway.test",
+        accessToken: "tok",
+        fetchImpl,
+      }),
+      (error) => {
+        assert.equal(error.message, message);
+        assert.equal(error.status, status);
+        return true;
+      },
+    );
+  }
+
+  const missing = otpFetch(() => ({ body: { expires_in: 60, expires_at: "x" } }));
+  await assert.rejects(
+    mintRegistryOtp({
+      base: "https://doorway.test",
+      accessToken: "tok",
+      fetchImpl: missing.fetchImpl,
+    }),
+    (error) => {
+      assert.equal(error.message, "registry_otp_missing");
+      return true;
+    },
+  );
+});
+
+test("account.mintRegistryOtpForSession uses ensureAccessToken Bearer and never returns tokens", async () => {
+  _setStoreForTests(signedInStore());
+  const { fetchImpl, calls } = otpFetch(() => ({
+    body: { otp: "otp-1", expires_in: 60, expires_at: "2026-11-18T12:01:00Z" },
+  }));
+  const result = await mintRegistryOtpForSession(fetchImpl);
+  assert.deepEqual(result, {
+    ok: true,
+    otp: "otp-1",
+    expires_in: 60,
+    expires_at: "2026-11-18T12:01:00Z",
+  });
+  assert.equal(calls[0].init.headers.Authorization, "Bearer access-1");
+  assert.equal(JSON.stringify(result).includes("access-1"), false);
+
+  const denied = otpFetch(() => ({ status: 401, body: { error: "Unauthorized" } }));
+  assert.deepEqual(await mintRegistryOtpForSession(denied.fetchImpl), {
+    ok: false,
+    error: "Unauthorized",
+    status: 401,
+  });
+
+  _setStoreForTests({ read: () => null, write() {}, clear() {} });
+  assert.deepEqual(await mintRegistryOtpForSession(fetchImpl), {
+    ok: false,
+    error: "not_signed_in",
+  });
+  _setStoreForTests(null);
+});
+
+test("mintRegistryLoginCredentials pairs account email with minted OTP", async () => {
+  _setStoreForTests(
+    signedInStore({
+      profile: { id: "1", name: "Ada", username: "ada", email: "ada@example.com" },
+    }),
+  );
+  const { fetchImpl, calls } = otpFetch(() => ({
+    body: { otp: "otp-login", expires_in: 60, expires_at: "2026-11-18T12:01:00Z" },
+  }));
+  const result = await mintRegistryLoginCredentials(fetchImpl);
+  assert.deepEqual(result, {
+    ok: true,
+    email: "ada@example.com",
+    otp: "otp-login",
+    expires_in: 60,
+    expires_at: "2026-11-18T12:01:00Z",
+  });
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /\/api\/studio\/registry\/otp$/);
+
+  _setStoreForTests(
+    signedInStore({
+      profile: { id: "1", name: "Ada", username: "ada" },
+    }),
+  );
+  const refresh = otpFetch((url) => {
+    if (String(url).endsWith("/api/studio/me")) {
+      return {
+        body: {
+          id: "1",
+          name: "Ada",
+          username: "ada",
+          email: "ada@example.com",
+          avatar_url: null,
+        },
+      };
+    }
+    return { body: { otp: "otp-2", expires_in: 60, expires_at: "t" } };
+  });
+  const refreshed = await mintRegistryLoginCredentials(refresh.fetchImpl);
+  assert.equal(refreshed.ok, true);
+  assert.equal(refreshed.email, "ada@example.com");
+  assert.equal(refreshed.otp, "otp-2");
+  assert.equal(await resolveRegistryEmail(async () => {
+    throw new Error("should use cached email");
+  }).then((r) => r.email), "ada@example.com");
+
   _setStoreForTests(null);
 });

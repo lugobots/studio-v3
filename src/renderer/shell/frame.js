@@ -1046,29 +1046,6 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     ensureBuildTags();
   }
 
-  async function handleRegistryLogin({ username, password }) {
-    if (typeof host?.publish?.authLogin !== "function" || state.build.registry.busy) {
-      return;
-    }
-    const seq = ++registrySeq;
-    state.build.registry = { ...state.build.registry, status: "out", error: null, busy: true };
-    paint();
-    let next;
-    try {
-      next = registryFromResult(
-        await host.publish.authLogin({ username, password }),
-        { status: "out" },
-      );
-    } catch (error) {
-      next = { status: "out", username: "", error: error?.message || "registry_failed", busy: false };
-    }
-    if (seq !== registrySeq) {
-      return;
-    }
-    state.build.registry = next;
-    paint();
-  }
-
   async function handleRegistryLogout() {
     if (typeof host?.publish?.authLogout !== "function" || state.build.registry.busy) {
       return;
@@ -1170,7 +1147,6 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
       onRetryRegistry: () => {
         void refreshRegistry();
       },
-      onRegistryLogin: handleRegistryLogin,
       onRegistryLogout: handleRegistryLogout,
     });
   }

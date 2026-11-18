@@ -200,11 +200,54 @@ async function fetchMe({
   if (!response.ok) {
     throw new Error(body.error || `me_failed_${response.status}`);
   }
-  return {
+  const profile = {
     id: body.id,
     name: body.name,
     username: body.username,
     avatar_url: normalizeAvatarUrl(body.avatar_url, base),
+  };
+  if (typeof body.email === "string" && body.email.trim()) {
+    profile.email = body.email.trim();
+  }
+  return profile;
+}
+
+/**
+ * Mint a short-lived registry OTP for docker login (password = OTP).
+ * Username for docker login is the account email from /api/studio/me (not returned here).
+ * @returns {Promise<{ otp: string, expires_in: number, expires_at: string }>}
+ */
+async function mintRegistryOtp({
+  base,
+  accessToken,
+  fetchImpl = global.fetch,
+}) {
+  const response = await fetchImpl(`${base}/api/studio/registry/otp`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+    },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(
+      body.error || body.message || `registry_otp_failed_${response.status}`,
+    );
+    error.status = response.status;
+    throw error;
+  }
+  const otp = typeof body.otp === "string" ? body.otp : "";
+  if (!otp) {
+    const error = new Error("registry_otp_missing");
+    error.status = response.status;
+    throw error;
+  }
+  const expiresIn = Number(body.expires_in);
+  return {
+    otp,
+    expires_in: Number.isFinite(expiresIn) ? expiresIn : 60,
+    expires_at: typeof body.expires_at === "string" ? body.expires_at : "",
   };
 }
 
@@ -317,6 +360,7 @@ module.exports = {
   refreshTokens,
   revokeToken,
   fetchMe,
+  mintRegistryOtp,
   fetchBots,
   fetchBotTags,
   sessionFromTokenResponse,

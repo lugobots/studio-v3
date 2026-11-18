@@ -742,11 +742,16 @@ async function publish({ botUri, tag } = {}) {
   if (!ready.ok) {
     return ready;
   }
-  try {
-    return actionResult(await studioApi.publishBot({ botUri, tag }));
-  } catch (error) {
-    return { ok: false, error: error.message };
-  }
+  const { publishWithOtpLogin } = require("./publish-registry");
+  // Always mint+login with Doorway OTP immediately before push (no website password).
+  // One silent remint+re-login retry when the registry rejects stored Docker credentials.
+  return publishWithOtpLogin({
+    botUri,
+    tag,
+    loginWithOtp: () => registryAuthLoginWithOtp(),
+    publishBot: (payload) => studioApi.publishBot(payload),
+    actionResult,
+  });
 }
 
 function registryStatusResult(body) {
@@ -770,13 +775,51 @@ async function registryAuthStatus() {
   }
 }
 
+/**
+ * Mint Doorway OTP and docker-login with account email (no password UI).
+ * OTP plaintext is discarded after the Studio API login call.
+ */
+async function registryAuthLoginWithOtp(fetchImpl = global.fetch) {
+  const ready = await ensureStudioApiReady("Open a bot before signing in to the registry.");
+  if (!ready.ok) {
+    return ready;
+  }
+  const account = require("../account");
+  const creds = await account.mintRegistryLoginCredentials(fetchImpl);
+  if (!creds.ok) {
+    return {
+      ok: false,
+      error: creds.error || "registry_otp_failed",
+      ...(Number.isInteger(creds.status) ? { status: creds.status } : {}),
+    };
+  }
+  try {
+    return registryStatusResult(
+      await studioApi.registryLogin(
+        { username: creds.email, password: creds.otp },
+        fetchImpl,
+      ),
+    );
+  } catch (error) {
+    return { ok: false, error: error.message };
+  } finally {
+    creds.otp = "";
+  }
+}
+
 async function registryAuthLogin({ username, password } = {}) {
   const ready = await ensureStudioApiReady("Open a bot before signing in to the registry.");
   if (!ready.ok) {
     return ready;
   }
+  const user = typeof username === "string" ? username.trim() : "";
+  const pass = typeof password === "string" ? password : "";
+  // Prefer Doorway OTP when the renderer does not supply website credentials.
+  if (!user || !pass) {
+    return registryAuthLoginWithOtp();
+  }
   try {
-    return registryStatusResult(await studioApi.registryLogin({ username, password }));
+    return registryStatusResult(await studioApi.registryLogin({ username: user, password: pass }));
   } catch (error) {
     return { ok: false, error: error.message };
   }
@@ -845,6 +888,7 @@ module.exports = {
   publish,
   registryAuthStatus,
   registryAuthLogin,
+  registryAuthLoginWithOtp,
   registryAuthLogout,
   projectStatus,
   startEditor,
