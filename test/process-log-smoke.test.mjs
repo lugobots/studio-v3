@@ -112,11 +112,17 @@ test("process log smoke: defaults stay quiet, arming shows tagged lines, and rel
   const serverLogs = () => outlet.querySelector('button[title="Server logs"]');
   const verLogs = () => outlet.querySelector('button[title="Ver logs"]');
   assert.equal(serverLogs().getAttribute("aria-pressed"), "false");
-  assert.equal(verLogs().querySelector("svg")?.getAttribute("data-icon"), "logs");
+  // Live (and Ver logs) stay hidden until the game server is up.
+  assert.equal(verLogs(), null);
   assert.deepEqual(session.arms, []);
   assert.equal(session.subscriptions(), 0);
   assert.equal(session.streaming(), false);
   assert.equal(buttonByText(outlet, "Show logs").textContent, "Show logs");
+
+  buttonByText(outlet, "Starts the Game Server").click();
+  await flush();
+  assert.equal(verLogs()?.querySelector("svg")?.getAttribute("data-icon"), "logs");
+  assert.equal(verLogs().getAttribute("aria-pressed"), "false");
 
   serverLogs().click();
   await flush();
@@ -184,10 +190,7 @@ test("process log smoke: defaults stay quiet, arming shows tagged lines, and rel
   await flush();
   assert.deepEqual(reloaded.arms, ["api"]);
   assert.equal(reloadedOutlet.querySelector('button[title="Server logs"]').getAttribute("aria-pressed"), "false");
-  assert.equal(
-    reloadedOutlet.querySelector('button[title="Ver logs"]').querySelector("svg")?.getAttribute("data-icon"),
-    "logs",
-  );
+  assert.equal(reloadedOutlet.querySelector('button[title="Ver logs"]'), null);
   assert.equal(reloaded.subscriptions(), 0);
   reloadedDoc.restore();
 });
@@ -199,6 +202,9 @@ test("closing a log tab disarms the source and syncs Ver logs off while keeping 
   const dialogs = { notify() {}, confirm() { return Promise.resolve(false); } };
 
   renderAppFrame(outlet, { host: session.host, dialogs });
+  await flush();
+
+  buttonByText(outlet, "Starts the Game Server").click();
   await flush();
 
   outlet.querySelector('button[title="Server logs"]').click();

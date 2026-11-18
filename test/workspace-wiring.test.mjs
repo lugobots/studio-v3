@@ -122,7 +122,8 @@ test("workspace wiring hits API for server, match, and reset; locked settings an
     assert.equal(gameFrame.src, undefined);
     assert.equal(gameFrame.hidden, true);
     assert.equal(outlet.querySelector(".game-ctrl") !== null, true);
-    assert.equal(buttonByTitle(outlet, "Starts the match").disabled, true);
+    // Live match controls stay hidden until the game server is running.
+    assert.equal(buttonByTitle(outlet, "Starts the match"), undefined);
     assert.equal(buttonByTitle(outlet, "Zombies mode").disabled, false);
 
     outlet.querySelector(".game-start-control").click();
@@ -183,7 +184,7 @@ test("workspace wiring hits API for server, match, and reset; locked settings an
     ]);
     assert.ok(outlet.querySelector(".game-start-overlay"));
     assert.equal(outlet.querySelector("#game_frame").hidden, true);
-    assert.equal(buttonByTitle(outlet, "Starts the match").disabled, true);
+    assert.equal(buttonByTitle(outlet, "Starts the match"), undefined);
     assert.equal(buttonByTitle(outlet, "Zombies mode").disabled, false);
 
     assert.equal(outlet.querySelectorAll("button").some((button) => button.textContent === "Editor"), false);
