@@ -814,8 +814,7 @@ async function registryAuthLogin({ username, password } = {}) {
   }
   const user = typeof username === "string" ? username.trim() : "";
   const pass = typeof password === "string" ? password : "";
-  // Prefer Doorway OTP when the renderer does not supply website credentials
-  // (Build password form removal lands in task 3.3).
+  // Prefer Doorway OTP when the renderer does not supply website credentials.
   if (!user || !pass) {
     return registryAuthLoginWithOtp();
   }

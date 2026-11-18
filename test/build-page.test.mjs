@@ -222,30 +222,35 @@ test("bots loading and error states block build; error offers retry", () => {
   installed.restore();
 });
 
-test("registry section offers login when logged out, blocks build, and keeps the password out of state", () => {
+test("registry section has no username/password fields when logged out; build still proceeds", () => {
   const installed = installDocument();
-  const logins = [];
+  const builds = [];
   const build = readyBuild({
     tag: "v1",
     registry: { status: "out", username: "", error: null, busy: false },
   });
   const page = render(installed.document, {
     build,
-    onRegistryLogin: (credentials) => logins.push(credentials),
+    onBuild() {
+      builds.push(1);
+    },
   });
   const registry = page.querySelector('[data-build-section="registry"]');
   assert.equal(registry.getAttribute("data-registry-state"), "out");
-  assert.equal(page.querySelector('[data-build-action="build"]').disabled, true);
-  assert.match(page.querySelector('[data-build-blocked="true"]').textContent, /repo\.lugobots\.ai/);
-
-  const inputs = registry.querySelectorAll("input");
-  assert.equal(inputs[0].type, "text");
-  assert.equal(inputs[1].type, "password");
-  inputs[0].value = "ada";
-  inputs[1].value = "secret";
-  registry.querySelector('[data-registry-action="login"]').click();
-  assert.deepEqual(logins, [{ username: "ada", password: "secret" }]);
-  assert.equal(JSON.stringify(build).includes("secret"), false);
+  assert.match(
+    registry.querySelector(".build-helper").textContent,
+    /Doorway session/,
+  );
+  assert.equal(registry.querySelector('input[type="password"]'), null);
+  assert.equal(registry.querySelector('input[aria-label="Registry username"]'), null);
+  assert.equal(registry.querySelector('input[aria-label="Registry password"]'), null);
+  assert.equal(registry.querySelector('[data-registry-action="login"]'), null);
+  assert.equal(registry.querySelectorAll("input").length, 0);
+  // Registry docker login is OTP-at-publish; Doorway signed-in is enough to enable Build.
+  assert.equal(page.querySelector('[data-build-action="build"]').disabled, false);
+  assert.equal(page.querySelector('[data-build-blocked="true"]').textContent, "");
+  page.querySelector('[data-build-action="build"]').click();
+  assert.equal(builds.length, 1);
   installed.restore();
 });
 
@@ -327,5 +332,15 @@ test("describeBuildError and buildBlockedReason helpers", () => {
   assert.equal(imageRef("a/b", "v1"), "repo.lugobots.ai/a/b:v1");
 
   assert.equal(buildBlockedReason({ bots: BOTS, build: readyBuild({ tag: "v1" }) }), null);
+  assert.equal(
+    buildBlockedReason({
+      bots: BOTS,
+      build: readyBuild({
+        tag: "v1",
+        registry: { status: "out", username: "", error: null, busy: false },
+      }),
+    }),
+    null,
+  );
   assert.match(buildBlockedReason({ bots: BOTS, build: readyBuild({ botUri: "" }) }), /Select a bot/);
 });
