@@ -2,7 +2,7 @@ import { mountDialogs, dialogs } from "./lib/dialogs.js";
 import { getHost } from "./lib/api.js";
 import { registerRoute, startRouter, navigate } from "./lib/router.js";
 import { applyAppearance, readCachedAppearance } from "./lib/appearance.js";
-import { applyTelemetry } from "./lib/telemetry.js";
+import { applyTelemetry, trackTelemetry } from "./lib/telemetry.js";
 import { offerUpgrade } from "./lib/upgrade-flow.js";
 import { renderLoading } from "./pages/loading/index.js";
 import { renderDockerCheck } from "./pages/docker-check/index.js";
@@ -88,10 +88,34 @@ if (host.startup.onRoute) {
   });
 }
 
+function wireRendererErrorTelemetry() {
+  window.addEventListener("error", (event) => {
+    trackTelemetry(host, "app_error", {
+      source: "renderer",
+      type: "error",
+      message: String(event?.message || event?.error?.message || "error").slice(0, 200),
+    });
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = event?.reason;
+    const message =
+      reason && typeof reason === "object" && "message" in reason
+        ? reason.message
+        : String(reason || "rejection");
+    trackTelemetry(host, "app_error", {
+      source: "renderer",
+      type: "unhandledrejection",
+      message: String(message).slice(0, 200),
+    });
+  });
+}
+
+wireRendererErrorTelemetry();
+
 host.startup.next().then(async (next) => {
   setGateMessage(next.message);
   navigate(next.route || "/loading");
   const config = await host.config.get();
   applyAppearance(document, config?.appearance);
-  applyTelemetry(document, config);
+  applyTelemetry(document, config, host);
 });

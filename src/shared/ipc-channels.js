@@ -84,6 +84,11 @@ const CHANNELS = {
     botTags: "account:bot-tags",
     openExternal: "account:open-external",
   },
+  telemetry: {
+    track: "telemetry:track",
+    setEnabled: "telemetry:set-enabled",
+    snapshot: "telemetry:snapshot",
+  },
 };
 
 module.exports = { CHANNELS };

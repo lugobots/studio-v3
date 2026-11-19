@@ -40,5 +40,8 @@ export async function offerUpgrade(host, dialogs) {
   if (!accepted) {
     return { ok: false, declined: true };
   }
+  if (typeof host?.telemetry?.track === "function") {
+    void host.telemetry.track("update_accepted");
+  }
   return runAcceptedUpgrade(host, dialogs);
 }

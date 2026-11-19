@@ -30,7 +30,10 @@ export interface AppConfig {
   projectCreated: boolean;
   telemetryEnabled: boolean;
   telemetry_enabled?: boolean;
-  measurementId: string;
+  /** Aptabase App Key; empty means no events are sent. */
+  aptabaseAppKey: string;
+  /** @deprecated Replaced by aptabaseAppKey */
+  measurementId?: string;
   appVersion: string;
   project_path?: string;
   install_unique_id?: string;
@@ -146,6 +149,20 @@ export interface StudioApi {
       | { ok: true; uri: string; tags: string[] }
       | { ok: false; error: string; status?: number; tags: string[] }
     >;
+  };
+  telemetry: {
+    track: (name: string, props?: Record<string, string | number>) => Promise<boolean>;
+    setEnabled: (enabled: boolean) => Promise<{
+      enabled: boolean;
+      initialized: boolean;
+      collecting: boolean;
+    }>;
+    snapshot: () => Promise<{
+      enabled: boolean;
+      initialized: boolean;
+      collecting: boolean;
+      appVersion: string;
+    }>;
   };
 }
 

@@ -6,3 +6,5 @@ out/
 Thumbs.db
 *.code-workspace
 api/studio-v3-api-linux
+.env
+.env.local

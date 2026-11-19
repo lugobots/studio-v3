@@ -31,6 +31,21 @@ npm run dev
 
 This launches the Electron window. `npm start` does the same thing.
 
+### Telemetry (Aptabase)
+
+Studio sends anonymous product usage and crash/error signals to [Aptabase](https://aptabase.com) when:
+
+1. Settings → Privacy → **Send anonymous usage data** is on (default), and
+2. `STUDIO_APTABASE_APP_KEY` is set to a non-empty Aptabase App Key.
+
+With no App Key, Studio initializes no collector and sends nothing. For local smoke tests, put the key in a gitignored `.env` at the repo root:
+
+```env
+STUDIO_APTABASE_APP_KEY=A-US-…
+```
+
+`src/main/main.js` loads that file on startup (without overriding vars already in the process environment). Release packaging should inject `STUDIO_APTABASE_APP_KEY` for shipped builds. Authors can still turn telemetry off in Settings; that choice persists in `{appData}/.LugoStudio/user.json` as `telemetry_enabled`.
+
 After changing Go code under `api/`, rebuild the Studio API image and recreate the container before starting:
 
 ```powershell

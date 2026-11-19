@@ -1,7 +1,7 @@
 import { AREAS, areaById } from "./model.js";
 import { createAreaIcon } from "./area-icons.js";
 import { applyAppearance } from "../lib/appearance.js";
-import { applyTelemetry } from "../lib/telemetry.js";
+import { applyTelemetry, trackTelemetry } from "../lib/telemetry.js";
 import { reportResult } from "../lib/dialogs.js";
 import { navigate } from "../lib/router.js";
 import { offerUpgrade } from "../lib/upgrade-flow.js";
@@ -224,6 +224,13 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     host,
     onSourceDisarmed: syncArmUiAfterDrawerClose,
   });
+  let processLogsWereOpen = Boolean(processLogs.snapshot()?.open);
+  processLogs.onChange((snap) => {
+    if (snap.open && !processLogsWereOpen) {
+      trackTelemetry(host, "surface_opened", { surface: "logging" });
+    }
+    processLogsWereOpen = Boolean(snap.open);
+  });
   const processLogHost = document.createElement("div");
   processLogHost.className = "process-log-drawer-host";
   processLogs.mount(processLogHost);
@@ -444,10 +451,14 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     paint();
     await syncApiDebug(state.config);
     if (state.area === "settings") {
-      applyTelemetry(document, {
-        telemetryEnabled: state.config.telemetryEnabled,
-        measurementId: state.config.measurementId,
-      });
+      applyTelemetry(
+        document,
+        {
+          telemetryEnabled: state.config.telemetryEnabled,
+          aptabaseAppKey: state.config.aptabaseAppKey,
+        },
+        host,
+      );
     }
   }
 
@@ -496,6 +507,14 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
       state.rail.hovered = true;
     }
     paint();
+    if (
+      state.area === "workspace" ||
+      state.area === "build" ||
+      state.area === "help" ||
+      state.area === "settings"
+    ) {
+      trackTelemetry(host, "surface_opened", { surface: state.area });
+    }
     if (state.area === "profile" && state.account?.signedIn) {
       void refreshBots();
     }
@@ -1097,10 +1116,12 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
     if (result?.ok) {
       state.build.run = { status: "success", image, error: "" };
       dialogs.notify?.({ title: "Image published", body: image });
+      trackTelemetry(host, "bot_image_built", { ok: 1 });
     } else {
       const error = result?.error || "The build failed.";
       state.build.run = { status: "error", image, error };
       dialogs.notify?.({ title: "Build failed", body: image });
+      trackTelemetry(host, "bot_image_built", { ok: 0 });
     }
     paint();
     if (result?.ok && state.build.botUri === botUri) {
@@ -1159,10 +1180,14 @@ export function renderAppFrame(outlet, { host, dialogs, navigateTo = navigate })
       async onConfig(next) {
         state.config = next;
         applyAppearance(document, state.config?.appearance);
-        applyTelemetry(document, {
-          telemetryEnabled: state.config.telemetryEnabled,
-          measurementId: state.config.measurementId,
-        });
+        applyTelemetry(
+          document,
+          {
+            telemetryEnabled: state.config.telemetryEnabled,
+            aptabaseAppKey: state.config.aptabaseAppKey,
+          },
+          host,
+        );
         paintFooter();
       },
       async onApiDebugChange(enabled) {

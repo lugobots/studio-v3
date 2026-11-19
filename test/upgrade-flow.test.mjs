@@ -5,11 +5,17 @@ import { offerUpgrade, runAcceptedUpgrade } from "../src/renderer/lib/upgrade-fl
 
 test("offerUpgrade declines without opening the busy dialog", async () => {
   const dialogs = createDialogController();
+  const tracks = [];
   const pending = offerUpgrade(
     {
       updates: {
         apply: async () => {
           throw new Error("should not apply");
+        },
+      },
+      telemetry: {
+        track(name) {
+          tracks.push(name);
         },
       },
     },
@@ -20,6 +26,29 @@ test("offerUpgrade declines without opening the busy dialog", async () => {
   const result = await pending;
   assert.deepEqual(result, { ok: false, declined: true });
   assert.equal(dialogs.snapshot().blocking, null);
+  assert.deepEqual(tracks, []);
+});
+
+test("offerUpgrade tracks update_accepted when confirmed", async () => {
+  const dialogs = createDialogController();
+  const tracks = [];
+  const pending = offerUpgrade(
+    {
+      updates: {
+        apply: async () => ({ ok: true }),
+      },
+      telemetry: {
+        track(name) {
+          tracks.push(name);
+        },
+      },
+    },
+    dialogs,
+  );
+  dialogs.answer(true);
+  const result = await pending;
+  assert.equal(result.ok, true);
+  assert.deepEqual(tracks, ["update_accepted"]);
 });
 
 test("runAcceptedUpgrade shows busy progress then clears it", async () => {

@@ -1,38 +1,36 @@
-export function shouldLoadTelemetry({ enabled, measurementId }) {
-  return Boolean(enabled) && typeof measurementId === "string" && measurementId.length > 0;
+/**
+ * Renderer-side telemetry helpers.
+ * Collection is owned by the main-process Aptabase facade; this module only
+ * gates UI sync and forwards events through `host.telemetry.track`.
+ */
+
+export function shouldCollectTelemetry({ enabled, aptabaseAppKey }) {
+  return Boolean(enabled) && typeof aptabaseAppKey === "string" && aptabaseAppKey.length > 0;
 }
 
-export function applyTelemetry(documentRef, config) {
-  const id = config.measurementId || "";
-  if (!documentRef || typeof documentRef.getElementById !== "function") {
+/** @deprecated Alias kept for older call sites; use shouldCollectTelemetry. */
+export function shouldLoadTelemetry({ enabled, measurementId, aptabaseAppKey }) {
+  const key = aptabaseAppKey != null ? aptabaseAppKey : measurementId;
+  return shouldCollectTelemetry({ enabled, aptabaseAppKey: key });
+}
+
+/**
+ * Sync collector preference with main (no GA script injection).
+ * Returns whether collection is currently allowed given config.
+ */
+export function applyTelemetry(_documentRef, config, host) {
+  const enabled = config?.telemetryEnabled !== false;
+  const aptabaseAppKey = config?.aptabaseAppKey || "";
+  if (host?.telemetry && typeof host.telemetry.setEnabled === "function") {
+    void host.telemetry.setEnabled(enabled);
+  }
+  return shouldCollectTelemetry({ enabled, aptabaseAppKey });
+}
+
+export function trackTelemetry(host, name, props) {
+  if (!host?.telemetry || typeof host.telemetry.track !== "function") {
     return false;
   }
-  const script = documentRef.getElementById("studio-ga4");
-  if (!shouldLoadTelemetry({ enabled: config.telemetryEnabled, measurementId: id })) {
-    if (id) {
-      documentRef.defaultView[`ga-disable-${id}`] = true;
-    }
-    script?.remove();
-    return false;
-  }
-
-  documentRef.defaultView[`ga-disable-${id}`] = false;
-  if (script) {
-    return true;
-  }
-
-  const tag = documentRef.createElement("script");
-  tag.id = "studio-ga4";
-  tag.async = true;
-  tag.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(id)}`;
-  documentRef.head.append(tag);
-
-  const view = documentRef.defaultView;
-  view.dataLayer = view.dataLayer || [];
-  view.gtag = function gtag() {
-    view.dataLayer.push(arguments);
-  };
-  view.gtag("js", new Date());
-  view.gtag("config", id);
+  void host.telemetry.track(name, props);
   return true;
 }

@@ -39,7 +39,11 @@ function view(record) {
     opponent_project_path: opponent.opponent_project_path,
     effective_opponent_source: opponent.effective_source,
     effective_opponent_project_path: opponent.effective_project_path,
-    measurementId: process.env.STUDIO_GA_MEASUREMENT_ID || "",
+    aptabaseAppKey:
+      process.env.STUDIO_APTABASE_APP_KEY ||
+      process.env.APTABASE_APP_KEY ||
+      process.env.APPTBASE_API_KEY ||
+      "",
     appVersion: pkg.version,
     apiVersion,
     studio_api_version: apiVersion,
@@ -95,7 +99,16 @@ async function set(patch) {
   next.app_version = pkg.version;
   next.app_path = app.getAppPath();
   store.write(file, next);
-  return view({ exists: true, data: next });
+  const viewed = view({ exists: true, data: next });
+  if (patch && Object.prototype.hasOwnProperty.call(patch, "telemetry_enabled")) {
+    try {
+      const telemetry = require("../telemetry");
+      telemetry.setEnabled(viewed.telemetryEnabled);
+    } catch {
+      // Telemetry sync is best-effort; preference still persisted.
+    }
+  }
+  return viewed;
 }
 
 async function getMatch() {

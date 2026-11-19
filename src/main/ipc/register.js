@@ -4,6 +4,7 @@ const updates = require("./updates");
 const notifications = require("./notifications");
 const session = require("./session");
 const account = require("./account");
+const telemetry = require("./telemetry");
 
 function registerIpc() {
   docker.register();
@@ -12,6 +13,7 @@ function registerIpc() {
   notifications.register();
   session.register();
   account.register();
+  telemetry.register();
 }
 
 module.exports = { registerIpc };

@@ -28,6 +28,10 @@ Checklist for making `lugobots/studio-v3` safe to publish from as a public repo.
 
 Never commit private signing material. Public Linux key: `docs/keys/studio-v3-release.asc` (fingerprint in `docs/signing.md`).
 
+### Telemetry App Key (optional for local; required for production analytics)
+
+Shipped Studio builds that should report anonymous usage to Aptabase must receive `STUDIO_APTABASE_APP_KEY` in the process environment (or equivalent bake-in at pack time). Without it, the collector never initializes and no events are sent even when Privacy telemetry is on. Do not commit the App Key into the public repo; inject it from CI secrets or the packaging host.
+
 ### Docker Hub image publish (Environment `build`)
 
 On every GitHub version tag `v*`, **Build release** builds Electron artifacts **and** publishes `lugobots/studio-v3-api:<github-tag>` (and `:latest`) to Docker Hub. The Hub tag and the image `VERSION` build-arg MUST be the same string as the GitHub tag (for example `v0.2.0`), not a stripped `0.2.0`.

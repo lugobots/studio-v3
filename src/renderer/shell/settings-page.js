@@ -110,7 +110,7 @@ export function renderSettingsPage(document, { config, host, dialogs, onConfig, 
   privacy.append(
     helper(
       document,
-      "When enabled, Studio may send anonymous product usage and feature events so we can improve the tool. No bot source code is included.",
+      "When enabled, Studio may send anonymous product usage, feature events, and crash or error signals so we can improve the tool. No bot source code is included.",
     ),
   );
   const plea = document.createElement("aside");

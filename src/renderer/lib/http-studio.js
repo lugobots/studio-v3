@@ -174,6 +174,7 @@ export function createHttpStudio({
             clampLogs,
             DEFAULT_LOGS,
           ),
+          aptabaseAppKey: "",
           measurementId: "",
           appVersion: "web",
           app_version: "web",
@@ -469,6 +470,17 @@ export function createHttpStudio({
       },
       async botTags() {
         return { ok: false, error: "Doorway sign-in requires the desktop app", tags: [] };
+      },
+    },
+    telemetry: {
+      async track() {
+        return false;
+      },
+      async setEnabled() {
+        return { enabled: false, initialized: false, collecting: false };
+      },
+      async snapshot() {
+        return { enabled: false, initialized: false, collecting: false, appVersion: "web" };
       },
     },
   };

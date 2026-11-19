@@ -4,7 +4,11 @@ import { createDialogController } from "../src/renderer/lib/dialog-controller.js
 import { menuFor } from "../src/renderer/shell/model.js";
 import { renderAppFrame } from "../src/renderer/shell/frame.js";
 import { installDocument } from "./dom-stub.mjs";
-import { applyTelemetry, shouldLoadTelemetry } from "../src/renderer/lib/telemetry.js";
+import {
+  applyTelemetry,
+  shouldCollectTelemetry,
+  shouldLoadTelemetry,
+} from "../src/renderer/lib/telemetry.js";
 import { createHttpStudio } from "../src/renderer/lib/http-studio.js";
 import http from "node:http";
 
@@ -129,24 +133,27 @@ test("area rail shows labels when open and icons only when closed; lateral stays
   installed.restore();
 });
 
-test("telemetry loads only with an id and an on switch", () => {
-  assert.equal(shouldLoadTelemetry({ enabled: true, measurementId: "" }), false);
-  assert.equal(shouldLoadTelemetry({ enabled: false, measurementId: "G-TEST" }), false);
-  const view = {};
-  const nodes = new Map();
-  const documentRef = {
-    defaultView: view,
-    head: { append(node) { nodes.set(node.id, node); } },
-    getElementById(id) { return nodes.get(id) || null; },
-    createElement() {
-      return { remove() { nodes.delete(this.id); } };
+test("telemetry collects only with an app key and an on switch", () => {
+  assert.equal(shouldCollectTelemetry({ enabled: true, aptabaseAppKey: "" }), false);
+  assert.equal(shouldCollectTelemetry({ enabled: false, aptabaseAppKey: "A-TEST" }), false);
+  assert.equal(shouldLoadTelemetry({ enabled: true, aptabaseAppKey: "A-TEST" }), true);
+  const calls = [];
+  const host = {
+    telemetry: {
+      setEnabled(enabled) {
+        calls.push(enabled);
+      },
     },
   };
-  assert.equal(applyTelemetry(documentRef, { telemetryEnabled: true, measurementId: "G-TEST" }), true);
-  assert.equal(view.dataLayer.length > 0, true);
-  assert.equal(applyTelemetry(documentRef, { telemetryEnabled: false, measurementId: "G-TEST" }), false);
-  assert.equal(view["ga-disable-G-TEST"], true);
-  assert.equal(nodes.size, 0);
+  assert.equal(
+    applyTelemetry(null, { telemetryEnabled: true, aptabaseAppKey: "A-TEST" }, host),
+    true,
+  );
+  assert.equal(
+    applyTelemetry(null, { telemetryEnabled: false, aptabaseAppKey: "A-TEST" }, host),
+    false,
+  );
+  assert.deepEqual(calls, [true, false]);
 });
 
 test("web adapter reaches server, match and publish and refuses local upgrade", async () => {
@@ -880,6 +887,15 @@ test("settings API debug preference persists and arms only the api source", asyn
   assert.equal(
     outlet.querySelectorAll("label").some((node) => /Google Analytics/i.test(node.textContent)),
     false,
+  );
+  assert.equal(
+    outlet.querySelectorAll("label").some((node) => /Aptabase/i.test(node.textContent)),
+    false,
+  );
+  assert.ok(
+    [...outlet.querySelectorAll(".settings-helper")].some((node) =>
+      /crash or error/i.test(node.textContent || ""),
+    ),
   );
   assert.ok(outlet.querySelector(".settings-plea"));
   assert.ok(outlet.querySelector('input[aria-label="Game server tag"]'));

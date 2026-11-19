@@ -105,4 +105,9 @@ contextBridge.exposeInMainWorld("studio", {
     botTags: (payload) => ipcRenderer.invoke(CHANNELS.account.botTags, payload),
     openExternal: (url) => ipcRenderer.invoke(CHANNELS.account.openExternal, url),
   },
+  telemetry: {
+    track: (name, props) => ipcRenderer.invoke(CHANNELS.telemetry.track, name, props),
+    setEnabled: (enabled) => ipcRenderer.invoke(CHANNELS.telemetry.setEnabled, enabled),
+    snapshot: () => ipcRenderer.invoke(CHANNELS.telemetry.snapshot),
+  },
 });

@@ -182,6 +182,11 @@ async function signIn({
       }
       const session = sessionFromTokenResponse(tokens, profile);
       saveSession(session);
+      try {
+        require("../telemetry").track("login");
+      } catch {
+        // Telemetry must not block sign-in.
+      }
       return { ok: true, ...publicStatus(session) };
     } catch (error) {
       callback.close();
@@ -203,6 +208,11 @@ async function signOut({ fetchImpl = global.fetch } = {}) {
     }
   }
   clearSession();
+  try {
+    require("../telemetry").track("logout");
+  } catch {
+    // Telemetry must not block sign-out.
+  }
   return { ok: true, signedIn: false, profile: null };
 }
 
