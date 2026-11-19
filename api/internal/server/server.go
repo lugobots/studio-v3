@@ -174,7 +174,17 @@ func (a *api) handlePublish(w http.ResponseWriter, r *http.Request) {
 	if botURI == "" {
 		botURI = r.PostFormValue("botUri")
 	}
-	result, err := a.publish.Publish(r.Context(), projectRoot(), botURI, r.PostFormValue("tag"))
+	username := strings.TrimSpace(r.PostFormValue("username"))
+	password := r.PostFormValue("password")
+	var result publish.Result
+	var err error
+	if username != "" && password != "" {
+		// OTP path: write Basic auth after build, consume OTP on push only.
+		result, err = a.publish.Publish(r.Context(), projectRoot(), botURI, r.PostFormValue("tag"),
+			publish.PublishCredentials{Username: username, Password: password})
+	} else {
+		result, err = a.publish.Publish(r.Context(), projectRoot(), botURI, r.PostFormValue("tag"))
+	}
 	if err != nil {
 		writeJSON(w, publishErrorStatus(err), map[string]string{"error": err.Error()})
 		return

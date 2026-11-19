@@ -743,12 +743,14 @@ async function publish({ botUri, tag } = {}) {
     return ready;
   }
   const { publishWithOtpLogin } = require("./publish-registry");
-  // Always mint+login with Doorway OTP immediately before push (no website password).
-  // One silent remint+re-login retry when the registry rejects stored Docker credentials.
+  const account = require("../account");
+  // Mint Doorway OTP and pass it to publish (API writes Docker config after build).
+  // Do not docker-login first: that consumes the single-use OTP before push re-auths.
+  // One silent remint + retry when the registry rejects credentials during push.
   return publishWithOtpLogin({
     botUri,
     tag,
-    loginWithOtp: () => registryAuthLoginWithOtp(),
+    mintCredentials: () => account.mintRegistryLoginCredentials(),
     publishBot: (payload) => studioApi.publishBot(payload),
     actionResult,
   });

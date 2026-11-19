@@ -226,8 +226,14 @@ async function prepareLogs(fetchImpl = global.fetch) {
   return request("/init/prepare-logs", { method: "GET" }, fetchImpl);
 }
 
-async function publishBot({ botUri, tag }, fetchImpl) {
+async function publishBot({ botUri, tag, username, password } = {}, fetchImpl) {
   const body = new URLSearchParams({ bot_uri: botUri, tag });
+  // Optional registry Basic credentials (Doorway OTP). When present the API
+  // writes them after build so push is the only Porteiro authenticate.
+  if (typeof username === "string" && username && typeof password === "string" && password) {
+    body.set("username", username);
+    body.set("password", password);
+  }
   return request(
     "/bot/publish",
     { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body },

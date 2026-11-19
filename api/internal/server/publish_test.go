@@ -135,6 +135,44 @@ func TestPublishAcceptsCamelCaseBotURI(t *testing.T) {
 	}
 }
 
+func TestPublishWithOTPCredentialsSkipsDockerLogin(t *testing.T) {
+	project := t.TempDir()
+	writeDockerfile(t, project)
+	cfg := t.TempDir()
+	runner := &fakeRunner{}
+	mux := publishMux(t, project, runner, cfg)
+
+	rec := postForm(mux, http.MethodPost, "/api/bot/publish", url.Values{
+		"bot_uri":  {"acme/bot"},
+		"tag":      {"v9"},
+		"username": {"ada@example.com"},
+		"password": {"otp-plain"},
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	if len(runner.calls) != 2 {
+		t.Fatalf("calls = %#v, want build+push only", runner.calls)
+	}
+	for _, c := range runner.calls {
+		joined := strings.Join(c.Args, " ")
+		if strings.Contains(joined, "login") {
+			t.Fatalf("OTP publish must not docker login: %#v", runner.calls)
+		}
+	}
+	auth := base64.StdEncoding.EncodeToString([]byte("ada@example.com:otp-plain"))
+	raw, err := os.ReadFile(filepath.Join(cfg, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), auth) {
+		t.Fatalf("config missing auth entry: %s", raw)
+	}
+	if strings.Contains(rec.Body.String(), "otp-plain") {
+		t.Fatalf("password leaked into response: %s", rec.Body.String())
+	}
+}
+
 func TestPublishMissingDockerfileIsError(t *testing.T) {
 	project := t.TempDir()
 	runner := &fakeRunner{}

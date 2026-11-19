@@ -24,17 +24,17 @@ test("isRegistryAuthFailure recognizes docker/registry auth shapes", () => {
   assert.equal(isRegistryAuthFailure(null), false);
 });
 
-test("publishWithOtpLogin mints OTP login then pushes without a website password", async () => {
+test("publishWithOtpLogin mints OTP then publishes with email+otp (no docker login)", async () => {
   const calls = [];
   const result = await publishWithOtpLogin({
     botUri: "ada/alpha",
     tag: "v1",
-    loginWithOtp: async () => {
-      calls.push({ type: "login" });
-      return { ok: true, loggedIn: true, username: "ada@example.com" };
+    mintCredentials: async () => {
+      calls.push({ type: "mint" });
+      return { ok: true, email: "ada@example.com", otp: "otp-plain-1", expires_in: 60 };
     },
     publishBot: async (payload) => {
-      calls.push({ type: "publish", payload });
+      calls.push({ type: "publish", payload: { ...payload } });
       return { status: "OK", image: "repo.lugobots.ai/ada/alpha:v1" };
     },
     actionResult,
@@ -43,21 +43,26 @@ test("publishWithOtpLogin mints OTP login then pushes without a website password
   assert.equal(result.ok, true);
   assert.equal(result.body.image, "repo.lugobots.ai/ada/alpha:v1");
   assert.deepEqual(calls, [
-    { type: "login" },
-    { type: "publish", payload: { botUri: "ada/alpha", tag: "v1" } },
+    { type: "mint" },
+    {
+      type: "publish",
+      payload: {
+        botUri: "ada/alpha",
+        tag: "v1",
+        username: "ada@example.com",
+        password: "otp-plain-1",
+      },
+    },
   ]);
-  // Orchestration never accepts or forwards a website password.
-  assert.equal(JSON.stringify(calls).includes("password"), false);
-  assert.equal(JSON.stringify(result).includes("password"), false);
 });
 
-test("publishWithOtpLogin returns OTP login failure and never publishes", async () => {
+test("publishWithOtpLogin returns OTP mint failure and never publishes", async () => {
   const calls = [];
   const result = await publishWithOtpLogin({
     botUri: "ada/alpha",
     tag: "v1",
-    loginWithOtp: async () => {
-      calls.push("login");
+    mintCredentials: async () => {
+      calls.push("mint");
       return { ok: false, error: "not_signed_in", status: 401 };
     },
     publishBot: async () => {
@@ -68,22 +73,29 @@ test("publishWithOtpLogin returns OTP login failure and never publishes", async 
   });
 
   assert.deepEqual(result, { ok: false, error: "not_signed_in", status: 401 });
-  assert.deepEqual(calls, ["login"]);
+  assert.deepEqual(calls, ["mint"]);
 });
 
-test("publishWithOtpLogin silently remints, re-logins, and retries once on auth failure", async () => {
+test("publishWithOtpLogin silently remints and retries once on auth failure", async () => {
   const calls = [];
   let publishAttempts = 0;
+  let mintAttempts = 0;
   const result = await publishWithOtpLogin({
     botUri: "ada/alpha",
     tag: "v2",
-    loginWithOtp: async () => {
-      calls.push("login");
-      return { ok: true, loggedIn: true, username: "ada@example.com" };
+    mintCredentials: async () => {
+      mintAttempts += 1;
+      calls.push(`mint:${mintAttempts}`);
+      return {
+        ok: true,
+        email: "ada@example.com",
+        otp: `otp-${mintAttempts}`,
+        expires_in: 60,
+      };
     },
     publishBot: async (payload) => {
       publishAttempts += 1;
-      calls.push(`publish:${payload.tag}:${publishAttempts}`);
+      calls.push(`publish:${payload.tag}:${publishAttempts}:${payload.password}`);
       if (publishAttempts === 1) {
         throw authError(
           "docker push failed: exit status 1: unauthorized: authentication required",
@@ -96,8 +108,12 @@ test("publishWithOtpLogin silently remints, re-logins, and retries once on auth 
 
   assert.equal(result.ok, true);
   assert.equal(result.body.image, "repo.lugobots.ai/ada/alpha:v2");
-  assert.deepEqual(calls, ["login", "publish:v2:1", "login", "publish:v2:2"]);
-  assert.equal(JSON.stringify(calls).includes("password"), false);
+  assert.deepEqual(calls, [
+    "mint:1",
+    "publish:v2:1:otp-1",
+    "mint:2",
+    "publish:v2:2:otp-2",
+  ]);
 });
 
 test("publishWithOtpLogin does not retry non-auth publish failures", async () => {
@@ -105,9 +121,9 @@ test("publishWithOtpLogin does not retry non-auth publish failures", async () =>
   const result = await publishWithOtpLogin({
     botUri: "ada/alpha",
     tag: "v3",
-    loginWithOtp: async () => {
-      calls.push("login");
-      return { ok: true };
+    mintCredentials: async () => {
+      calls.push("mint");
+      return { ok: true, email: "ada@example.com", otp: "otp" };
     },
     publishBot: async () => {
       calls.push("publish");
@@ -120,7 +136,7 @@ test("publishWithOtpLogin does not retry non-auth publish failures", async () =>
     ok: false,
     error: "missing .lugo/Dockerfile in the bot project",
   });
-  assert.deepEqual(calls, ["login", "publish"]);
+  assert.deepEqual(calls, ["mint", "publish"]);
 });
 
 test("publishWithOtpLogin surfaces second push failure after one recovery attempt", async () => {
@@ -128,9 +144,9 @@ test("publishWithOtpLogin surfaces second push failure after one recovery attemp
   const result = await publishWithOtpLogin({
     botUri: "ada/alpha",
     tag: "v4",
-    loginWithOtp: async () => {
-      calls.push("login");
-      return { ok: true };
+    mintCredentials: async () => {
+      calls.push("mint");
+      return { ok: true, email: "ada@example.com", otp: "otp" };
     },
     publishBot: async () => {
       calls.push("publish");
@@ -143,20 +159,20 @@ test("publishWithOtpLogin surfaces second push failure after one recovery attemp
     ok: false,
     error: "denied: requested access to the resource is denied",
   });
-  assert.deepEqual(calls, ["login", "publish", "login", "publish"]);
+  assert.deepEqual(calls, ["mint", "publish", "mint", "publish"]);
 });
 
-test("publishWithOtpLogin returns relogin failure without a second push", async () => {
+test("publishWithOtpLogin returns remint failure without a second push", async () => {
   const calls = [];
-  let logins = 0;
+  let mints = 0;
   const result = await publishWithOtpLogin({
     botUri: "ada/alpha",
     tag: "v5",
-    loginWithOtp: async () => {
-      logins += 1;
-      calls.push(`login:${logins}`);
-      if (logins === 1) {
-        return { ok: true };
+    mintCredentials: async () => {
+      mints += 1;
+      calls.push(`mint:${mints}`);
+      if (mints === 1) {
+        return { ok: true, email: "ada@example.com", otp: "otp" };
       }
       return { ok: false, error: "registry_otp_failed" };
     },
@@ -168,5 +184,5 @@ test("publishWithOtpLogin returns relogin failure without a second push", async 
   });
 
   assert.deepEqual(result, { ok: false, error: "registry_otp_failed" });
-  assert.deepEqual(calls, ["login:1", "publish", "login:2"]);
+  assert.deepEqual(calls, ["mint:1", "publish", "mint:2"]);
 });

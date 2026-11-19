@@ -54,6 +54,79 @@ func (b *blockingRunner) Run(ctx context.Context, dir, stdin, name string, args 
 	return nil, nil
 }
 
+func TestWriteCredentialsStoresAuthWithoutDockerLogin(t *testing.T) {
+	cfg := t.TempDir()
+	svc := &Service{
+		Runner: ExecRunner{},
+		ConfigDir: func() string { return cfg },
+	}
+	if err := svc.WriteCredentials("ada@example.com", "otp-plain"); err != nil {
+		t.Fatal(err)
+	}
+	status := svc.Status()
+	if !status.LoggedIn || status.Username != "ada@example.com" {
+		t.Fatalf("status = %#v", status)
+	}
+	raw, err := os.ReadFile(filepath.Join(cfg, "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "otp-plain") {
+		t.Fatalf("password must be base64 in config, got %s", raw)
+	}
+}
+
+func TestPublishWithCredentialsWritesAuthAfterBuildBeforePush(t *testing.T) {
+	project := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(project, ".lugo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, ".lugo", "Dockerfile"), []byte("FROM scratch\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := t.TempDir()
+	var calls []string
+	runner := runnerFunc(func(ctx context.Context, dir, stdin, name string, args ...string) ([]byte, error) {
+		calls = append(calls, strings.Join(args, " "))
+		return nil, nil
+	})
+	svc := &Service{
+		Runner:    runner,
+		ConfigDir: func() string { return cfg },
+	}
+	_, err := svc.Publish(context.Background(), project, "acme/bot", "v1", PublishCredentials{
+		Username: "ada@example.com",
+		Password: "otp-plain",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 2 {
+		t.Fatalf("calls = %#v, want build then push", calls)
+	}
+	if !strings.HasPrefix(calls[0], "build ") {
+		t.Fatalf("first call = %q", calls[0])
+	}
+	if !strings.HasPrefix(calls[1], "push ") {
+		t.Fatalf("second call = %q", calls[1])
+	}
+	for _, c := range calls {
+		if strings.Contains(c, "login") {
+			t.Fatalf("must not docker login when OTP credentials are provided: %#v", calls)
+		}
+	}
+	status := svc.Status()
+	if !status.LoggedIn || status.Username != "ada@example.com" {
+		t.Fatalf("status after publish = %#v", status)
+	}
+}
+
+type runnerFunc func(ctx context.Context, dir, stdin, name string, args ...string) ([]byte, error)
+
+func (f runnerFunc) Run(ctx context.Context, dir, stdin, name string, args ...string) ([]byte, error) {
+	return f(ctx, dir, stdin, name, args...)
+}
+
 func TestPublishRejectsConcurrentRuns(t *testing.T) {
 	project := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(project, ".lugo"), 0o755); err != nil {

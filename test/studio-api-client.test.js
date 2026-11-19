@@ -284,6 +284,16 @@ test("publishBot posts bot_uri and tag and returns the real publish response", a
   assert.equal(calls[0].method, "POST");
   assert.equal(calls[0].body, "bot_uri=me%2Fbot&tag=v1");
 
+  const withOtp = await studioApi.publishBot(
+    { botUri: "me/bot", tag: "v1", username: "ada@example.com", password: "otp-plain" },
+    fetchImpl,
+  );
+  assert.equal(withOtp.status, "OK");
+  assert.equal(
+    calls[1].body,
+    "bot_uri=me%2Fbot&tag=v1&username=ada%40example.com&password=otp-plain",
+  );
+
   const missing = async () => respond(400, { error: "missing .lugo/Dockerfile in the bot project" });
   await assert.rejects(
     studioApi.publishBot({ botUri: "me/bot", tag: "v1" }, missing),

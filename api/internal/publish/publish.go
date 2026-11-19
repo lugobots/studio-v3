@@ -131,8 +131,18 @@ func PushArgs(image string) []string {
 	return []string{"push", image}
 }
 
+// PublishCredentials are optional registry Basic credentials for a publish.
+// When set, they are written to Docker config after build and before push so a
+// single-use OTP is consumed by `docker push` only (not by a prior `docker login`).
+type PublishCredentials struct {
+	Username string
+	Password string
+}
+
 // Publish builds .lugo/Dockerfile in projectRoot and pushes the tagged image.
-func (s *Service) Publish(ctx context.Context, projectRoot, botURI, tag string) (Result, error) {
+// When creds are non-empty, auth is written locally after a successful build and
+// immediately before push (no registry round-trip until push).
+func (s *Service) Publish(ctx context.Context, projectRoot, botURI, tag string, creds ...PublishCredentials) (Result, error) {
 	uri, err := NormalizeBotURI(botURI)
 	if err != nil {
 		return Result{}, err
@@ -154,10 +164,62 @@ func (s *Service) Publish(ctx context.Context, projectRoot, botURI, tag string) 
 	if out, err := s.runner().Run(ctx, projectRoot, "", "docker", BuildArgs(image)...); err != nil {
 		return Result{}, commandError("docker build", out, err)
 	}
+	if len(creds) > 0 {
+		c := creds[0]
+		if err := s.WriteCredentials(c.Username, c.Password); err != nil {
+			return Result{}, err
+		}
+	}
 	if out, err := s.runner().Run(ctx, projectRoot, "", "docker", PushArgs(image)...); err != nil {
 		return Result{}, commandError("docker push", out, err)
 	}
 	return Result{Image: image}, nil
+}
+
+// WriteCredentials stores username:password for RegistryHost in Docker config.json
+// without contacting the registry. Used so single-use OTPs are not consumed by
+// `docker login` before `docker push` re-authenticates.
+func (s *Service) WriteCredentials(username, password string) error {
+	username = strings.TrimSpace(username)
+	if username == "" || password == "" {
+		return fmt.Errorf("%w: username and password are required", ErrInvalidInput)
+	}
+	dir := s.configDir()
+	if dir == "" {
+		return fmt.Errorf("%w: docker config directory unavailable", ErrInvalidInput)
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("docker config dir: %w", err)
+	}
+	path := filepath.Join(dir, "config.json")
+	cfg := struct {
+		Auths map[string]struct {
+			Auth string `json:"auth"`
+		} `json:"auths"`
+	}{
+		Auths: map[string]struct {
+			Auth string `json:"auth"`
+		}{},
+	}
+	if data, err := os.ReadFile(path); err == nil && len(data) > 0 {
+		_ = json.Unmarshal(data, &cfg)
+		if cfg.Auths == nil {
+			cfg.Auths = map[string]struct {
+				Auth string `json:"auth"`
+			}{}
+		}
+	}
+	cfg.Auths[RegistryHost] = struct {
+		Auth string `json:"auth"`
+	}{Auth: base64.StdEncoding.EncodeToString([]byte(username + ":" + password))}
+	out, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode docker config: %w", err)
+	}
+	if err := os.WriteFile(path, append(out, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write docker config: %w", err)
+	}
+	return nil
 }
 
 // Login runs `docker login repo.lugobots.ai` with the password on stdin.
